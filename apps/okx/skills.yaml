@@ -1,0 +1,12 @@
+# OKX — skill content for the DIME Terminal app of the same id.
+#
+# The credential surface (hosts, routes, delivery, signing scheme) is NOT
+# here. It lives in dime-terminal, beside the code that enforces it.
+
+schema_version: 1
+
+id: okx
+version: 1.0.0
+
+skills:
+  - okx-api

@@ -1,0 +1,29 @@
+name: app version check
+
+# An app's version is what DIME Terminal records at install and compares to
+# offer an update, so content that changes without a bump reaches nobody. This
+# enforces the bump, and that it is a single clean forward step.
+on:
+  pull_request:
+    paths:
+      - 'apps/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The merge base is what the version is compared against.
+          fetch-depth: 0
+
+      # Pure stdlib: checkout plus one python3 invocation, no install step.
+      - name: Check app version increments
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/check_version_increment.py
