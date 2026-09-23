@@ -6,7 +6,6 @@
 schema_version: 1
 
 id: okx
-version: 1.0.0
 
 skills:
   - okx-api

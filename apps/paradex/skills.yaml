@@ -6,7 +6,6 @@
 schema_version: 1
 
 id: paradex
-version: 1.0.0
 
 skills:
   - paradex-api

@@ -48,23 +48,34 @@ carries the venue's identity, so the skill file does not need to claim it.
 
 ## Versioning
 
-`version:` in `apps/<id>/skills.yaml` is the app's version. DIME Terminal
-records it when a user installs, and compares it to offer an update, so a
-content change that does not bump it reaches nobody.
+**The version is not here.** An app's version lives with its manifest in
+dime-terminal (`bundles/<id>/app.yaml`), because that is what a user installs
+and what the install is recorded against — a version in this repo would be a
+second number, and the two would drift.
 
-It is the only version. A skill's frontmatter carries no version of its own,
-because a second number is one that drifts and nothing reads.
+What makes a change here reach anyone is the **pin bump** in dime-terminal's
+`go.mod`. That side's catalogue test hashes the skill files it embeds, so a
+pin bump that changes this text and does not bump the app's version fails
+there, in the pull request that does the bumping.
 
-CI requires a bump whenever anything under `apps/<id>/` changes, and requires
-it to be one clean step — `1.0.0` → `1.0.1`, `1.1.0` or `2.0.0`. A jump of two,
-a multi-component change, and a decrease all fail.
+Neither file carries a version in a skill's frontmatter, for the same reason.
+
+## What CI checks here
+
+`scripts/check_structure.py` checks the shape dime-terminal refuses to start
+on, so a mistake fails in this repo rather than in someone else's deploy: the
+manifest's `id` matches its directory, every listed skill has a directory with
+a `SKILL.md`, every directory is listed, each frontmatter `name` matches its
+directory and carries a description, and the file count and sizes are inside
+the consumer's limits.
 
 ## Adding a skill
 
 1. `apps/<id>/skills/<venue>-<surface>/SKILL.md`, frontmatter `name` matching
    the directory.
-2. Add the name to `skills:` in that app's `skills.yaml`, and bump `version:`.
-3. Open a pull request.
+2. Add the name to `skills:` in that app's `skills.yaml`.
+3. Open a pull request. Merging it changes nothing on its own — the change
+   ships when dime-terminal bumps its pin, and bumps the app's version there.
 
 Write for an agent that does not know whether a proxy is in front of it: say
 what to sign and where the signature goes, not who produces it. That is what
