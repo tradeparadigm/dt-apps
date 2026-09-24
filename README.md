@@ -58,10 +58,12 @@ that made the mistake:
   type;
 - every environment and credential type carries what the reader requires of it
   — `id`, `label`, `host`; `id`, `label`, `slug`, `secret_label`, `summary` —
-  and their ids are unique. These were checked only on the reading side until
-  review found the split: a manifest missing a `secret_label` went green here
-  and was dropped from the live catalogue on the next refresh, which is the
-  failure this repository exists to move left;
+  with ids that are well formed as well as present and unique, and
+  `detail_fields` that carry a usable key and a label. These were checked only
+  on the reading side until review found the split: a manifest missing a
+  `secret_label` went green here and was dropped from the live catalogue on the
+  next refresh, which is the failure this repository exists to move left;
+- a credential type narrows itself to no more endpoints than the API accepts;
 - hosts are lowercase, because the proxy matches them case-sensitively and an
   uppercase letter is a rule that can never fire;
 - delivery modes, signing schemes and encodings are ones the proxy has a case

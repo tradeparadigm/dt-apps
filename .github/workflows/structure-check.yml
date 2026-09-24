@@ -18,6 +18,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Pure stdlib: checkout plus one python3 invocation, no install step.
+      # PyYAML, and the install step is the point. The checker used to scan
+      # with regexes to stay stdlib-only, and review found what that costs:
+      # `summary: >-` with no body read as the literal ">-" and passed the
+      # required-field check, while the consumer's parser resolves it to "" and
+      # refuses the app. A checker whose job is to agree with a YAML reader has
+      # to be one.
+      - name: Install the YAML parser
+        run: python3 -m pip install --quiet pyyaml
       - name: Check app structure
         run: python3 scripts/check_structure.py
