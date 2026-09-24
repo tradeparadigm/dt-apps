@@ -64,6 +64,16 @@ that made the mistake:
   `secret_label` went green here and was dropped from the live catalogue on the
   next refresh, which is the failure this repository exists to move left;
 - a credential type narrows itself to no more endpoints than the API accepts;
+- every key is one the consumer knows, because its decoder runs with
+  `KnownFields` and an unknown key refuses the whole app rather than being
+  ignored — a misspelled key silently means the default, and every default is
+  wider than what the author wrote;
+- a delivery carries only the fields its mode uses. The consumer compares what
+  a manifest declared against what canonicalising it produced and refuses a
+  difference, because a field silently dropped is a line a reviewer approved
+  that does not run;
+- no two apps claim the same skill name. openclaw resolves a collision by
+  precedence rather than erroring, so one of them would simply never load;
 - hosts are lowercase, because the proxy matches them case-sensitively and an
   uppercase letter is a rule that can never fire;
 - delivery modes, signing schemes and encodings are ones the proxy has a case

@@ -26,9 +26,18 @@ What is checked, in each case because the consumer refuses the app without it:
     one used to merge here and vanish from the live catalogue.
   * Hosts are lowercase. The proxy matches them case-sensitively, so an
     uppercase letter is a rule that can never fire.
+  * Every key is one the consumer knows. Its decoder runs with KnownFields,
+    so an unknown key — a typo, a field from a newer schema — refuses the
+    whole app rather than being ignored.
   * A credential type names a delivery mode, and a signing scheme and encoding,
     that the proxy actually has a case for. A manifest may describe an app; it
     cannot invent a capability.
+  * A delivery carries only the fields its mode uses. The consumer compares
+    what a manifest declared against what canonicalising it produced and
+    refuses a difference, because a field silently dropped is a line a reviewer
+    approved that does not run — `mode: inject` beside `match_body: true`
+    reads as a credential that scans the body and is stored as one that does
+    not.
   * A credential type narrows itself to no more endpoints than the API accepts.
   * detail_fields carry a key the API can write into public metadata, and a
     label, because the label is what the enrolment form shows.
@@ -46,6 +55,14 @@ What is checked, in each case because the consumer refuses the app without it:
     deletes a working skill off every agent that installed it.
   * Every directory under skills/ holds a SKILL.md whose frontmatter `name`
     equals the directory, with a non-empty description.
+  * No two apps claim the same skill name. openclaw resolves a collision by
+    precedence rather than erroring, so one app's skill would simply never
+    load and nothing would say so. The consumer has a backstop — it keeps the
+    app that already held the name and refuses the newcomer — but that
+    incumbency lives in a process's memory, so a replica that started after
+    the collision has no record of who was first and refuses both. The only
+    place this can be settled for everyone is here, in the pull request that
+    introduces it.
 
 The manifest names NO skills. The directory is the content, the id is the
 join, and there is nothing for two files to disagree about.
@@ -85,6 +102,38 @@ ENCODINGS = {"hex", "base64", "felt-pair"}
 # binance is refused from the live catalogue, isolated to itself by design.
 MAX_ROUTES = 64
 
+# Every key the consumer's structs declare. Its YAML decoder runs with
+# KnownFields(true), so anything outside these refuses the app outright — a
+# misspelled key silently means the default, and every default is WIDER than
+# what the author wrote.
+KNOWN = {
+    "manifest": {
+        "schema_version", "id", "version", "name", "blurb", "description",
+        "environments", "exclusive_credential_types", "credential_types",
+    },
+    "environment": {"id", "label", "host"},
+    "credential_type": {
+        "id", "label", "slug", "secret_label", "detail_fields", "routes",
+        "delivery", "summary",
+    },
+    "detail_field": {"key", "label", "placeholder"},
+    "delivery": {
+        "mode", "header", "query_param", "formatter", "scheme", "encoding",
+        "match_headers", "match_body", "match_path", "match_query",
+    },
+    "route": {"path", "methods"},
+}
+
+# Which delivery fields each mode actually uses. The consumer canonicalises a
+# delivery and refuses any difference from what was declared, so a field its
+# mode does not read is not ignored — it refuses the app.
+DELIVERY_FIELDS = {
+    "inject": {"mode", "header", "query_param", "formatter"},
+    "replace": {"mode", "match_headers", "match_body", "match_path", "match_query"},
+    "sign": {"mode", "scheme", "encoding", "match_headers", "match_body",
+             "match_path", "match_query"},
+}
+
 # The manifest format this checker understands, matching the consumer's.
 SCHEMA_VERSION = 1
 
@@ -103,6 +152,17 @@ def check_links(failures: list[str]) -> None:
     for p in APPS.rglob("*"):
         if p.is_symlink():
             failures.append(f"{p}: is a symlink; this repo holds only regular files")
+
+
+def check_known(man: str, where: str, row: object, kind: str, failures: list[str]) -> None:
+    """No key the consumer's decoder would refuse."""
+    if not isinstance(row, dict):
+        return
+    for key in sorted(set(row) - KNOWN[kind]):
+        failures.append(
+            f"{man}: {where}.{key} is not a field the consumer knows — its decoder "
+            "runs with KnownFields, so an unknown key refuses the whole app"
+        )
 
 
 def require(man: str, where: str, row: object, fields: tuple[str, ...],
@@ -135,6 +195,7 @@ def check_environments(man: str, envs: object, failures: list[str]) -> None:
         failures.append(f"{man}: at least one environment is required")
         return
     for i, env in enumerate(envs):
+        check_known(man, f"environments[{i}]", env, "environment", failures)
         row = require(man, f"environments[{i}]", env, ("id", "label", "host"), failures)
         if not row:
             continue
@@ -152,6 +213,7 @@ def check_credential_types(man: str, types: object, failures: list[str]) -> None
         failures.append(f"{man}: at least one credential type is required")
         return
     for i, ct in enumerate(types):
+        check_known(man, f"credential_types[{i}]", ct, "credential_type", failures)
         row = require(man, f"credential_types[{i}]", ct,
                       ("id", "label", "slug", "secret_label", "summary"), failures)
         if not row:
@@ -164,12 +226,16 @@ def check_credential_types(man: str, types: object, failures: list[str]) -> None
             failures.append(f"{man}: {where}.slug {slug!r} cannot be a credential label")
 
         routes = row.get("routes") or []
+        for j, r in enumerate(routes):
+            check_known(man, f"{where}.routes[{j}]", r, "route", failures)
         if len(routes) > MAX_ROUTES:
             failures.append(
                 f"{man}: {where} narrows to {len(routes)} endpoints, and the API accepts {MAX_ROUTES}"
             )
 
-        for j, f in enumerate(row.get("detail_fields") or []):
+        details = row.get("detail_fields") or []
+        for j, f in enumerate(details):
+            check_known(man, f"{where}.detail_fields[{j}]", f, "detail_field", failures)
             fld = require(man, f"{where}.detail_fields[{j}]", f, ("key", "label"), failures)
             key = fld.get("key") if fld else None
             if isinstance(key, str) and not DETAIL_KEY_RE.match(key):
@@ -177,14 +243,37 @@ def check_credential_types(man: str, types: object, failures: list[str]) -> None
                     f"{man}: {where}.detail_fields[{j}].key {key!r} must be lowercase letters, "
                     "digits and inner underscores"
                 )
+        # A key is what the agent reads the value back by, so two fields
+        # sharing one is a field the agent can never see.
+        check_unique(man, f"{where}.detail_fields.key",
+                     [d.get("key") for d in details if isinstance(d, dict)], failures)
 
         delivery = row.get("delivery") or {}
         if not isinstance(delivery, dict):
             failures.append(f"{man}: {where}.delivery is not a mapping")
             continue
+        check_known(man, f"{where}.delivery", delivery, "delivery", failures)
         mode = delivery.get("mode")
         if mode not in MODES:
             failures.append(f"{man}: {where}.delivery.mode {mode!r} is not one of {sorted(MODES)}")
+        else:
+            # Present AND meaningful: a false match_body or an empty header is
+            # what the consumer's canonical form would hold anyway.
+            for field in sorted(set(delivery) - DELIVERY_FIELDS[mode]):
+                if delivery.get(field) in (None, "", False, [], {}):
+                    continue
+                failures.append(
+                    f"{man}: {where}.delivery.{field} is not used by mode {mode!r}, and the "
+                    "consumer refuses a delivery that declares more than it canonicalises to"
+                )
+            if mode == "inject":
+                has_header = bool(str(delivery.get("header") or "").strip())
+                has_param = bool(str(delivery.get("query_param") or "").strip())
+                if has_header == has_param:
+                    failures.append(
+                        f"{man}: {where}.delivery must name exactly one of header or query_param "
+                        "for mode 'inject' — that is where the secret goes"
+                    )
         if mode == "sign":
             if delivery.get("scheme") not in SCHEMES:
                 failures.append(
@@ -208,6 +297,8 @@ def check_manifest(app: str, text: str, failures: list[str]) -> None:
     if not isinstance(doc, dict):
         failures.append(f"{man}: is not a mapping")
         return
+
+    check_known(man, "manifest", doc, "manifest", failures)
 
     if doc.get("schema_version") != SCHEMA_VERSION:
         failures.append(f"{man}: schema_version is {doc.get('schema_version')!r}, this checker reads {SCHEMA_VERSION}")
@@ -250,6 +341,7 @@ def main() -> int:
         print("no apps found", file=sys.stderr)
         return 1
 
+    claims: dict[str, str] = {}
     for app in apps:
         man = app / MANIFEST
         if not man.is_file():
@@ -274,6 +366,13 @@ def main() -> int:
             )
 
         for name in on_disk:
+            if name in claims:
+                failures.append(
+                    f"{app}: skill name {name!r} is already claimed by {claims[name]!r} — "
+                    "openclaw resolves a collision by precedence, so one of them would "
+                    "silently never load"
+                )
+            claims[name] = app.name
             if not NAME_RE.match(name):
                 failures.append(f"{app}: {name!r} is not a usable skill name")
             d = skills_dir / name
