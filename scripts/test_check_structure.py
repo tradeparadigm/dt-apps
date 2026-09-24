@@ -148,6 +148,24 @@ class TestBranding(unittest.TestCase):
                 code, out = check(append(empty))
                 self.assertEqual(code, 0, f"empty {field} refused:\n{out}")
 
+    # YAML is typed and Go's decoder coerces, so a field's TYPE can differ
+    # here from the string the consumer sees: `path: 0` is falsy in Python
+    # and the non-empty "0" in Go. Vary the type, not just the emptiness.
+    def test_a_scalar_is_read_as_the_string_the_consumer_sees(self):
+        # The consumer sees the non-empty "0", so this is a whole icon whose
+        # path happens to be a digit — accepted there, and now accepted here.
+        # It was refused as half an icon while `not 0` decided the question.
+        self.accepts("icon:\n  path: 0\n  view_box: '0 0 1 1'\n")
+        # And "0" is not a colour, rather than an absent tint.
+        self.refuses("tint: 0\n", "hex colour")
+        self.refuses("developer: X\ndeveloper_url: 0\n", "https URL")
+
+    def test_a_mapping_where_a_string_belongs_is_refused(self):
+        self.refuses("tint:\n  r: 1\n", "hex colour")
+        self.refuses(
+            "icon:\n  path:\n    d: M0 0\n  view_box: '0 0 1 1'\n", "must be strings"
+        )
+
     def test_an_overlong_icon_path_is_refused(self):
         self.refuses(
             "icon:\n  path: " + "M0 0" * 3000 + "\n  view_box: 0 0 24 24\n",

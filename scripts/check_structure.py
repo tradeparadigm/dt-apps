@@ -355,6 +355,24 @@ def check_credential_types(man: str, types: object, failures: list[str]) -> None
     check_unique(man, "credential_types.slug", [c.get("slug") for c in types if isinstance(c, dict)], failures)
 
 
+def as_text(value: object) -> str | None:
+    """The string the consumer will see for a field it declares as a string.
+
+    YAML is typed and Go's decoder coerces: `path: 0` arrives here as the int
+    0 and arrives there as "0". Comparing Python truthiness instead of that
+    string is how the two disagree — 0 is falsy here and non-empty there. None
+    for a value Go could not decode into a string at all, which refuses the
+    app on its side too.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (str, int, float)):
+        return str(value)
+    return None
+
+
 def check_presentation(man: str, doc: dict, failures: list[str]) -> None:
     """The optional branding, which is optional but not unchecked.
 
@@ -365,16 +383,18 @@ def check_presentation(man: str, doc: dict, failures: list[str]) -> None:
     # Empty is absent, because that is how the consumer reads it: its checks
     # are `!= ""`, so a manifest with `tint: ""` loads there and refusing it
     # here would block one that is fine. Same reasoning as the empty icon.
-    tint = doc.get("tint")
-    if tint != "" and tint is not None and (not isinstance(tint, str) or not TINT_RE.match(tint)):
-        failures.append(f"{man}: tint {tint!r} must be a six-digit hex colour like #5f74ff")
+    tint = as_text(doc.get("tint"))
+    if tint is None or (tint != "" and not TINT_RE.match(tint)):
+        failures.append(f"{man}: tint {doc.get('tint')!r} must be a six-digit hex colour like #5f74ff")
 
-    url = doc.get("developer_url")
-    if url is not None and url != "":
-        parsed = urlparse(url) if isinstance(url, str) else None
-        if parsed is None or parsed.scheme != "https" or not parsed.netloc:
+    url = as_text(doc.get("developer_url"))
+    if url is None:
+        failures.append(f"{man}: developer_url {doc.get('developer_url')!r} must be an https URL")
+    elif url != "":
+        parsed = urlparse(url)
+        if parsed.scheme != "https" or not parsed.netloc:
             failures.append(f"{man}: developer_url {url!r} must be an https URL")
-        elif not str(doc.get("developer") or "").strip():
+        elif not (as_text(doc.get("developer")) or "").strip():
             failures.append(f"{man}: developer_url without developer: the link needs something to sit on")
 
     icon = doc.get("icon")
@@ -384,22 +404,25 @@ def check_presentation(man: str, doc: dict, failures: list[str]) -> None:
         failures.append(f"{man}: icon is not a mapping")
         return
     check_known(man, "icon", icon, "icon", failures)
-    path, box = icon.get("path"), icon.get("view_box")
-    # Neither is "no icon", which the consumer accepts, and the message below
-    # says so. Only one of the two is half an icon.
-    if not path and not box:
+    path, box = as_text(icon.get("path")), as_text(icon.get("view_box"))
+    if path is None or box is None:
+        failures.append(f"{man}: icon.path and icon.view_box must be strings")
         return
-    if not path or not box:
+    # Neither is "no icon", which the consumer accepts. Only one of the two is
+    # half an icon.
+    if path == "" and box == "":
+        return
+    if path == "" or box == "":
         failures.append(f"{man}: icon needs both path and view_box, or neither")
         return
-    if not isinstance(path, str) or not ICON_PATH_RE.match(path):
+    if not ICON_PATH_RE.match(path):
         failures.append(
             f"{man}: icon.path may hold only SVG path commands, numbers and separators — "
             "it is geometry, not a document"
         )
     elif len(path) > MAX_ICON_PATH:
         failures.append(f"{man}: icon.path is {len(path)} bytes, limit {MAX_ICON_PATH}")
-    if not isinstance(box, str) or not VIEW_BOX_RE.match(box):
+    if not VIEW_BOX_RE.match(box):
         failures.append(f"{man}: icon.view_box {box!r} must be four numbers")
 
 
