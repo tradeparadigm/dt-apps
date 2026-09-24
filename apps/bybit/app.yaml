@@ -1,0 +1,117 @@
+# Bybit (v5 unified API).
+#
+# The first bundle written against the format rather than derived from it, so
+# it is also the test of whether the format generalises. It needed no code
+# change: hmac-sha256 with hex output already ships, and the signature goes in
+# a header, which is the substitution the proxy has always done.
+#
+# WHAT MADE BYBIT DIFFERENT from Paradex, and it is the one thing worth
+# reading before changing anything here: Bybit's signature covers the API KEY
+# ITSELF. The signed string is
+#
+#     timestamp + api_key + recv_window + (query string | request body)
+#
+# so the agent cannot form the payload without knowing the api key. That rules
+# out holding the api key as a sealed credential the agent never sees — there
+# is no arrangement in which the agent does not know it — so it is carried as
+# a PUBLIC DETAIL and the agent writes the X-BAPI-API-KEY header itself.
+#
+# That is a deliberate choice and not a shortcut. The api key alone cannot
+# place an order, read a balance or move a coin: every private Bybit endpoint
+# also demands X-BAPI-SIGN, and producing one needs the secret, which stays
+# sealed and never reaches the agent. Sealing an identifier the signing scheme
+# requires the holder to know would be theatre, and theatre that breaks the
+# venue.
+
+schema_version: 1
+
+id: bybit
+version: 1.0.0
+name: Bybit
+blurb: Trade spot, perpetuals and options on Bybit with a secret your agent never holds.
+
+description: |
+  Bybit is a centralised exchange offering spot, perpetual futures, futures and
+  options through one unified v5 API.
+
+  This app installs a skill teaching your agent Bybit's v5 request signing —
+  which is unusual enough that it will not get there from Bybit's own
+  documentation alone — and adds Bybit to the credentials form so you can enrol
+  your API secret without filling in the signing details by hand.
+
+  You paste two things from Bybit's API management page: the **API key**, which
+  is an identifier and is stored as ordinary metadata, and the **API secret**,
+  which is sealed and never reaches your agent. Every private request is signed
+  by the credential proxy using the secret; your agent only ever says what it
+  wants signed.
+
+  **Private WebSocket streams are not covered.** Bybit authenticates those with
+  a signature sent in a frame after the connection is open, and the proxy signs
+  HTTP requests, not WebSocket frames. Public market-data streams work
+  normally. See the skill for what to do instead.
+
+
+environments:
+  - id: mainnet
+    label: Mainnet
+    host: api.bybit.com
+  - id: testnet
+    label: Testnet
+    host: api-testnet.bybit.com
+  - id: demo
+    label: Demo trading
+    host: api-demo.bybit.com
+
+# One credential type, so exclusivity would not bind either way. Stated
+# explicitly rather than left to the default because the next person to add a
+# second type needs to make this decision deliberately: the secret's routes
+# already demand its placeholder on every private endpoint, so a second
+# credential covering those same routes would break this one.
+exclusive_credential_types: true
+
+credential_types:
+  - id: secret
+    label: API secret (signing)
+    slug: secret
+    secret_label: API secret
+    # The api key is public metadata, not a second credential — see the header
+    # comment. The agent reads it from here and writes X-BAPI-API-KEY itself.
+    detail_fields:
+      - key: api_key
+        label: API key
+        placeholder: "XXXXXXXXXXXXXXXXXX"
+    # Every private v5 endpoint, grouped by the prefixes Bybit itself uses.
+    # Bybit splits public from private cleanly — market data is /v5/market/*
+    # and nothing else is public — so a prefix per private family covers the
+    # whole authenticated surface without touching a single public read.
+    #
+    # THE RULE THAT MATCHES IS THE RULE THAT REQUIRES THE PLACEHOLDER, so this
+    # list is the exact set of paths on which a request WITHOUT an
+    # X-BAPI-SIGN placeholder is refused by the proxy. /v5/market/* is
+    # deliberately absent: a ticker or a kline needs no signature, and listing
+    # it here would refuse every public read the agent makes.
+    #
+    # No method narrowing. Each family carries both reads and writes — GET
+    # /v5/order/realtime lists open orders, POST /v5/order/create places one —
+    # and both are signed, so narrowing by method would only create a gap.
+    routes:
+      - path: /v5/order/*
+      - path: /v5/position/*
+      - path: /v5/execution/*
+      - path: /v5/account/*
+      - path: /v5/asset/*
+      - path: /v5/user/*
+      - path: /v5/spot-margin-trade/*
+    # match_headers rather than the default of scanning every header: the
+    # signature has exactly one home on Bybit and naming it keeps the scan
+    # off headers that have no business being rewritten.
+    delivery:
+      mode: sign
+      scheme: hmac-sha256
+      encoding: hex
+      match_headers: [X-BAPI-SIGN]
+    summary: >-
+      Sets: signing credential, HMAC-SHA256, hex, substituted into the
+      X-BAPI-SIGN header, on every path under /v5/order, /v5/position,
+      /v5/execution, /v5/account, /v5/asset, /v5/user and
+      /v5/spot-margin-trade.
