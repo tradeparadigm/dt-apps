@@ -1,0 +1,30 @@
+schema_version: 1
+id: example
+version: 1.0.0
+name: Example
+blurb: A manifest the checker accepts, which the tests then break one field at a time.
+description: |
+  Nothing ships this. It exists so every rule in check_structure.py has a
+  tree to be tested against, including the ones no real app uses yet.
+environments:
+  - id: mainnet
+    label: Mainnet
+    host: api.example.com
+exclusive_credential_types: true
+credential_types:
+  - id: api-key
+    label: API key
+    slug: key
+    secret_label: API key
+    detail_fields:
+      - key: account
+        label: Account
+        placeholder: "0xabc"
+    routes:
+      - path: /v1/orders
+        methods: [GET, POST]
+    delivery:
+      mode: inject
+      header: X-Api-Key
+    summary: >-
+      Sets X-Api-Key on GET and POST /v1/orders, and on nothing else.

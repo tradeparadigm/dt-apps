@@ -1,12 +1,13 @@
 name: app structure check
 
-# DIME Terminal refuses to start on a malformed app, so a mistake here fails
-# someone else's deploy. Check the shape where it is made.
+# A malformed app is dropped by the server rather than failing it, so a mistake
+# here goes missing from the catalogue with nothing to say why. Check it where
+# it is made.
 on:
   pull_request:
     paths:
       - 'apps/**'
-      - 'scripts/check_structure.py'
+      - 'scripts/**'
       - '.github/workflows/structure-check.yml'
 
 concurrency:
@@ -26,5 +27,8 @@ jobs:
       # to be one.
       - name: Install the YAML parser
         run: python3 -m pip install --quiet pyyaml
+      - name: Test the checker
+        run: python3 scripts/test_check_structure.py
+
       - name: Check app structure
         run: python3 scripts/check_structure.py

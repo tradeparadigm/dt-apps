@@ -32,6 +32,10 @@ What is checked, in each case because the consumer refuses the app without it:
     already upper case and without duplicates. The consumer canonicalises and
     refuses any difference, so `get` and a repeated path are both refusals
     rather than tidy-ups.
+  * Optional branding — developer, developer_url, tint, icon — is safe to put
+    on a page. The store takes pull requests from outside this team, so a tint
+    is a hex colour and an icon is ONE SVG PATH rather than a file: a path is
+    geometry, and cannot execute, fetch, or escape the box it is drawn into.
   * Every key is one the consumer knows. Its decoder runs with KnownFields,
     so an unknown key — a typo, a field from a newer schema — refuses the
     whole app rather than being ignored.
@@ -79,6 +83,7 @@ Exit 0 = all good, 1 = at least one violation.
 from __future__ import annotations
 
 import re
+from urllib.parse import urlparse
 import sys
 from pathlib import Path
 
@@ -87,6 +92,20 @@ import yaml
 APPS = Path("apps")
 MANIFEST = "app.yaml"
 ENTRYPOINT = "SKILL.md"
+
+# Mirrored from pkg/apps: tintPattern, iconPathPattern, viewBoxPattern and
+# maxIconPathBytes. The icon is a path and not a file on purpose — see the
+# docstring.
+TINT_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+# Go's RE2 \s is exactly [\t\n\f\r ]. Python's is wider — it also matches the
+# vertical tab and a pile of Unicode spaces — and wider here means a manifest
+# passes this check and is then dropped by the consumer.
+_WS = r"[\t\n\f\r ]"
+ICON_PATH_RE = re.compile(r"^[MmZzLlHhVvCcSsQqTtAa0-9eE,.\t\n\f\r +-]+$")
+VIEW_BOX_RE = re.compile(
+    rf"^-?[0-9.]+{_WS}+-?[0-9.]+{_WS}+-?[0-9.]+{_WS}+-?[0-9.]+$"
+)
+MAX_ICON_PATH = 8 * 1024
 
 # Mirrored from web-api/services/credentials.go: hostPattern, pathPattern,
 # knownHTTPMethods, maxAllowedMethodsPerCredential. A manifest goes through the
@@ -125,7 +144,9 @@ KNOWN = {
     "manifest": {
         "schema_version", "id", "version", "name", "blurb", "description",
         "environments", "exclusive_credential_types", "credential_types",
+        "developer", "developer_url", "tint", "icon",
     },
+    "icon": {"path", "view_box"},
     "environment": {"id", "label", "host"},
     "credential_type": {
         "id", "label", "slug", "secret_label", "detail_fields", "routes",
@@ -334,6 +355,86 @@ def check_credential_types(man: str, types: object, failures: list[str]) -> None
     check_unique(man, "credential_types.slug", [c.get("slug") for c in types if isinstance(c, dict)], failures)
 
 
+def as_text(value: object) -> str | None:
+    """The string the consumer will see for a field it declares as a string.
+
+    YAML is typed and Go's decoder coerces: `path: 0` arrives here as the int
+    0 and arrives there as "0". Comparing Python truthiness instead of that
+    string is how the two disagree — 0 is falsy here and non-empty there. None
+    for a value Go could not decode into a string at all, which refuses the
+    app on its side too.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (str, int, float)):
+        return str(value)
+    return None
+
+
+# KNOWN LIMIT, left in rather than fixed. as_text round-trips a numeric
+# through Python's parsed value, and the consumer never parses it at all —
+# yaml.v3 keeps the literal text when the target field is a string. They
+# differ only where parsing loses something, which in practice means a float
+# that overflows: 1.0e+400 is "inf" here and "1.0e+400" there. Closing it
+# means reading the scalar's raw text, which needs a custom loader, and
+# nothing anyone would write as an icon path or a colour reaches it.
+
+
+def check_presentation(man: str, doc: dict, failures: list[str]) -> None:
+    """The optional branding, which is optional but not unchecked.
+
+    Half an icon is refused rather than defaulted: a path with no view box
+    draws at the wrong scale and a view box with no path draws nothing, which
+    both look deliberate.
+    """
+    # Empty is absent, because that is how the consumer reads it: its checks
+    # are `!= ""`, so a manifest with `tint: ""` loads there and refusing it
+    # here would block one that is fine. Same reasoning as the empty icon.
+    tint = as_text(doc.get("tint"))
+    if tint is None or (tint != "" and not TINT_RE.match(tint)):
+        failures.append(f"{man}: tint {doc.get('tint')!r} must be a six-digit hex colour like #5f74ff")
+
+    url = as_text(doc.get("developer_url"))
+    if url is None:
+        failures.append(f"{man}: developer_url {doc.get('developer_url')!r} must be an https URL")
+    elif url != "":
+        parsed = urlparse(url)
+        if parsed.scheme != "https" or not parsed.netloc:
+            failures.append(f"{man}: developer_url {url!r} must be an https URL")
+        elif not (as_text(doc.get("developer")) or "").strip():
+            failures.append(f"{man}: developer_url without developer: the link needs something to sit on")
+
+    icon = doc.get("icon")
+    if icon is None:
+        return
+    if not isinstance(icon, dict):
+        failures.append(f"{man}: icon is not a mapping")
+        return
+    check_known(man, "icon", icon, "icon", failures)
+    path, box = as_text(icon.get("path")), as_text(icon.get("view_box"))
+    if path is None or box is None:
+        failures.append(f"{man}: icon.path and icon.view_box must be strings")
+        return
+    # Neither is "no icon", which the consumer accepts. Only one of the two is
+    # half an icon.
+    if path == "" and box == "":
+        return
+    if path == "" or box == "":
+        failures.append(f"{man}: icon needs both path and view_box, or neither")
+        return
+    if not ICON_PATH_RE.match(path):
+        failures.append(
+            f"{man}: icon.path may hold only SVG path commands, numbers and separators — "
+            "it is geometry, not a document"
+        )
+    elif len(path) > MAX_ICON_PATH:
+        failures.append(f"{man}: icon.path is {len(path)} bytes, limit {MAX_ICON_PATH}")
+    if not VIEW_BOX_RE.match(box):
+        failures.append(f"{man}: icon.view_box {box!r} must be four numbers")
+
+
 def check_manifest(app: str, text: str, failures: list[str]) -> None:
     man = f"{APPS}/{app}/{MANIFEST}"
     try:
@@ -363,6 +464,7 @@ def check_manifest(app: str, text: str, failures: list[str]) -> None:
             f"{man}: manifests do not name skills. The directory beside this file is the content"
         )
 
+    check_presentation(man, doc, failures)
     check_environments(man, doc.get("environments"), failures)
     check_credential_types(man, doc.get("credential_types"), failures)
 
