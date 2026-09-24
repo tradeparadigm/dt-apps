@@ -373,6 +373,15 @@ def as_text(value: object) -> str | None:
     return None
 
 
+# KNOWN LIMIT, left in rather than fixed. as_text round-trips a numeric
+# through Python's parsed value, and the consumer never parses it at all —
+# yaml.v3 keeps the literal text when the target field is a string. They
+# differ only where parsing loses something, which in practice means a float
+# that overflows: 1.0e+400 is "inf" here and "1.0e+400" there. Closing it
+# means reading the scalar's raw text, which needs a custom loader, and
+# nothing anyone would write as an icon path or a colour reaches it.
+
+
 def check_presentation(man: str, doc: dict, failures: list[str]) -> None:
     """The optional branding, which is optional but not unchecked.
 
