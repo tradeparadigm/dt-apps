@@ -56,6 +56,12 @@ that made the mistake:
 - the manifest's `id` matches its directory, and carries what the catalogue
   renders — version, name, blurb, description, an environment, a credential
   type;
+- every environment and credential type carries what the reader requires of it
+  — `id`, `label`, `host`; `id`, `label`, `slug`, `secret_label`, `summary` —
+  and their ids are unique. These were checked only on the reading side until
+  review found the split: a manifest missing a `secret_label` went green here
+  and was dropped from the live catalogue on the next refresh, which is the
+  failure this repository exists to move left;
 - hosts are lowercase, because the proxy matches them case-sensitively and an
   uppercase letter is a rule that can never fire;
 - delivery modes, signing schemes and encodings are ones the proxy has a case

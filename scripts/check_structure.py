@@ -10,6 +10,11 @@ made the mistake:
   * apps/<id>/app.yaml exists, and its `id` matches the directory.
   * The manifest carries what the catalogue needs: version, name, blurb,
     description, at least one environment and one credential type.
+  * Every environment and credential type carries what the consumer requires
+    of it, and their ids are unique. These used to be checked only on the
+    reading side, so a manifest missing a secret_label or a summary went green
+    here and was dropped from the LIVE catalogue on the next refresh — which is
+    exactly the failure this repo exists to move left.
   * Hosts are lowercase. The proxy matches them case-sensitively, so an
     uppercase letter is a rule that can never fire.
   * A credential type names a delivery mode, and a signing scheme and
@@ -68,6 +73,79 @@ MAX_FILE_BYTES = 512 * 1024
 MAX_FILES = 32
 
 
+def entries(text: str, section: str) -> list[dict[str, str]]:
+    """Every mapping under a top-level `section:` list, as scalar key/value.
+
+    Enough structure to check per-entry required fields, and no more: nested
+    lists inside an entry (detail_fields, routes) are skipped rather than
+    parsed, because nothing here needs to look inside them. Still not a YAML
+    parser, for the reason block_values gives — this is a check on shape, and
+    anything it cannot see is caught on the reading side.
+    """
+    out: list[dict[str, str]] = []
+    depth: int | None = None
+    inside = False
+    skipping = False
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if re.match(rf"^{section}\s*:", line):
+            inside = True
+            continue
+        if inside and not line[:1].isspace():
+            break  # the next top-level key ends the section
+        if not inside:
+            continue
+
+        indent = len(line) - len(line.lstrip())
+        item = re.match(r"^(\s*)-\s+(\S.*)$", line)
+        if item is not None and (depth is None or len(item.group(1)) == depth):
+            depth = len(item.group(1))
+            out.append({})
+            skipping = False
+            line, indent = item.group(1) + "  " + item.group(2), depth + 2
+
+        if not out:
+            continue
+        kv = re.match(r"^\s*([a-z_]+)\s*:\s*(.*)$", line)
+        if kv is None:
+            continue
+        # A key whose value is empty opens a nested block; skip until the
+        # indentation comes back.
+        if skipping and indent > skipping:
+            continue
+        skipping = False
+        key, value = kv.group(1), kv.group(2).strip().strip("\"'")
+        if value == "":
+            skipping = indent
+            continue
+        out[-1][key] = value
+    return out
+
+
+def check_collection(man: str, kind: str, rows: list[dict[str, str]],
+                     required: tuple[str, ...], unique: tuple[str, ...],
+                     failures: list[str]) -> None:
+    """Required fields and uniqueness for one list of mappings."""
+    if not rows:
+        failures.append(f"{man}: at least one {kind} is required")
+        return
+    seen: dict[str, set[str]] = {k: set() for k in unique}
+    for i, row in enumerate(rows):
+        for field in required:
+            if not row.get(field):
+                failures.append(
+                    f"{man}: {kind}s[{i}].{field} is required — the consumer refuses the app without it"
+                )
+        for field in unique:
+            value = row.get(field)
+            if value is None:
+                continue
+            if value in seen[field]:
+                failures.append(f"{man}: {kind}s[{i}].{field} {value!r} is listed twice")
+            seen[field].add(value)
+
+
 def manifest_field(text: str, key: str) -> str | None:
     m = re.search(rf"^{key}\s*:\s*(\S+)", text, re.MULTILINE)
     return m.group(1) if m else None
@@ -116,6 +194,16 @@ def check_manifest(app: str, text: str, failures: list[str]) -> None:
         failures.append(
             f"{man}: manifests do not name skills. The directory beside this file is the content"
         )
+
+    # The consumer's App.validate refuses an app missing any of these, and a
+    # dropped app is a line in a log nobody reads — so they are checked in the
+    # pull request that makes the mistake.
+    check_collection(man, "environment", entries(text, "environments"),
+                     required=("id", "label", "host"), unique=("id", "host"),
+                     failures=failures)
+    check_collection(man, "credential_type", entries(text, "credential_types"),
+                     required=("id", "label", "slug", "secret_label", "summary"),
+                     unique=("id", "slug"), failures=failures)
 
     hosts = block_values(text, "host")
     if not hosts:
