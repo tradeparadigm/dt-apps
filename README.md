@@ -72,6 +72,11 @@ that made the mistake:
   a manifest declared against what canonicalising it produced and refuses a
   difference, because a field silently dropped is a line a reviewer approved
   that does not run;
+- optional branding — `developer`, `developer_url`, `tint`, `icon` — is safe to
+  put on a page. A tint is a six-digit hex because it lands in a style
+  attribute, and an icon is **one SVG path** rather than a file: a path is
+  geometry, so it cannot execute, fetch, or escape the box it is drawn into.
+  Half an icon is refused rather than defaulted;
 - no two apps claim the same skill name. openclaw resolves a collision by
   precedence rather than erroring, so one of them would simply never load;
 - hosts are bare lowercase hostnames — no scheme, port, path or underscore —

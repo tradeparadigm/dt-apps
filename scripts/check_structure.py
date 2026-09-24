@@ -32,6 +32,10 @@ What is checked, in each case because the consumer refuses the app without it:
     already upper case and without duplicates. The consumer canonicalises and
     refuses any difference, so `get` and a repeated path are both refusals
     rather than tidy-ups.
+  * Optional branding — developer, developer_url, tint, icon — is safe to put
+    on a page. The store takes pull requests from outside this team, so a tint
+    is a hex colour and an icon is ONE SVG PATH rather than a file: a path is
+    geometry, and cannot execute, fetch, or escape the box it is drawn into.
   * Every key is one the consumer knows. Its decoder runs with KnownFields,
     so an unknown key — a typo, a field from a newer schema — refuses the
     whole app rather than being ignored.
@@ -88,6 +92,14 @@ APPS = Path("apps")
 MANIFEST = "app.yaml"
 ENTRYPOINT = "SKILL.md"
 
+# Mirrored from pkg/apps: tintPattern, iconPathPattern, viewBoxPattern and
+# maxIconPathBytes. The icon is a path and not a file on purpose — see the
+# docstring.
+TINT_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+ICON_PATH_RE = re.compile(r"^[MmZzLlHhVvCcSsQqTtAa0-9eE,.\s+-]+$")
+VIEW_BOX_RE = re.compile(r"^-?[0-9.]+\s+-?[0-9.]+\s+-?[0-9.]+\s+-?[0-9.]+$")
+MAX_ICON_PATH = 8 * 1024
+
 # Mirrored from web-api/services/credentials.go: hostPattern, pathPattern,
 # knownHTTPMethods, maxAllowedMethodsPerCredential. A manifest goes through the
 # same canonicalisation a typed-in credential does, and the consumer refuses
@@ -125,7 +137,9 @@ KNOWN = {
     "manifest": {
         "schema_version", "id", "version", "name", "blurb", "description",
         "environments", "exclusive_credential_types", "credential_types",
+        "developer", "developer_url", "tint", "icon",
     },
+    "icon": {"path", "view_box"},
     "environment": {"id", "label", "host"},
     "credential_type": {
         "id", "label", "slug", "secret_label", "detail_fields", "routes",
@@ -334,6 +348,46 @@ def check_credential_types(man: str, types: object, failures: list[str]) -> None
     check_unique(man, "credential_types.slug", [c.get("slug") for c in types if isinstance(c, dict)], failures)
 
 
+def check_presentation(man: str, doc: dict, failures: list[str]) -> None:
+    """The optional branding, which is optional but not unchecked.
+
+    Half an icon is refused rather than defaulted: a path with no view box
+    draws at the wrong scale and a view box with no path draws nothing, which
+    both look deliberate.
+    """
+    tint = doc.get("tint")
+    if tint is not None and (not isinstance(tint, str) or not TINT_RE.match(tint)):
+        failures.append(f"{man}: tint {tint!r} must be a six-digit hex colour like #5f74ff")
+
+    url = doc.get("developer_url")
+    if url is not None:
+        if not isinstance(url, str) or not url.startswith("https://") or len(url) < len("https://x"):
+            failures.append(f"{man}: developer_url {url!r} must be an https URL")
+        elif not str(doc.get("developer") or "").strip():
+            failures.append(f"{man}: developer_url without developer: the link needs something to sit on")
+
+    icon = doc.get("icon")
+    if icon is None:
+        return
+    if not isinstance(icon, dict):
+        failures.append(f"{man}: icon is not a mapping")
+        return
+    check_known(man, "icon", icon, "icon", failures)
+    path, box = icon.get("path"), icon.get("view_box")
+    if not path or not box:
+        failures.append(f"{man}: icon needs both path and view_box, or neither")
+        return
+    if not isinstance(path, str) or not ICON_PATH_RE.match(path):
+        failures.append(
+            f"{man}: icon.path may hold only SVG path commands, numbers and separators — "
+            "it is geometry, not a document"
+        )
+    elif len(path) > MAX_ICON_PATH:
+        failures.append(f"{man}: icon.path is {len(path)} bytes, limit {MAX_ICON_PATH}")
+    if not isinstance(box, str) or not VIEW_BOX_RE.match(box):
+        failures.append(f"{man}: icon.view_box {box!r} must be four numbers")
+
+
 def check_manifest(app: str, text: str, failures: list[str]) -> None:
     man = f"{APPS}/{app}/{MANIFEST}"
     try:
@@ -363,6 +417,7 @@ def check_manifest(app: str, text: str, failures: list[str]) -> None:
             f"{man}: manifests do not name skills. The directory beside this file is the content"
         )
 
+    check_presentation(man, doc, failures)
     check_environments(man, doc.get("environments"), failures)
     check_credential_types(man, doc.get("credential_types"), failures)
 
