@@ -1,0 +1,106 @@
+# Deribit (v2 API).
+#
+# The venue that needs NO SIGNING AT ALL, which is what makes it worth having
+# in the catalogue beside Bybit and OKX. Deribit issues an OAuth2 client
+# credential pair and exchanges it for a short-lived bearer token; the durable
+# secret is presented exactly once, to one endpoint, and everything afterwards
+# runs on the token the exchange hands back.
+#
+# So this is a plain `replace`: the agent writes the placeholder where the
+# client secret goes, the proxy swaps it, Deribit returns an access token, and
+# the agent uses that token directly. One route, one credential, no scheme, no
+# encoding.
+#
+# WHAT THE AGENT ENDS UP HOLDING, stated plainly because it differs from Bybit
+# and OKX. Deribit's access token is a real bearer credential and the agent
+# does hold it. What it does NOT hold is the client secret that mints tokens:
+# that stays sealed, so a token that leaks expires (900 seconds by default) and
+# cannot be renewed into a fresh one without going back through the proxy. This
+# is the same posture as Paradex's JWT flow, and it is Deribit's auth design
+# rather than a compromise on ours.
+#
+# MATCH_QUERY IS ON, which is opt-in everywhere else in this system because a
+# secret substituted into a URL is a secret in somebody's access log. It is
+# switched on here because Deribit's HTTP auth endpoint takes its parameters in
+# the query string and there is no other way to reach it. The exposure is
+# bounded and worth naming: the secret is in the URL of ONE request, on ONE
+# path, on the leg between the proxy and Deribit — never in the agent's own
+# logs, which only ever saw the placeholder.
+
+schema_version: 1
+
+id: deribit
+version: 1.0.0
+name: Deribit
+blurb: Trade options and futures on Deribit with a client secret your agent never holds.
+
+description: |
+  Deribit is a crypto derivatives exchange, best known for BTC and ETH options
+  alongside perpetuals and dated futures.
+
+  Deribit does not sign requests. It issues an **API client id** and a **client
+  secret**, and you exchange those for a short-lived access token that
+  authenticates everything else. This app adds the client secret to the
+  credentials form and installs a skill teaching your agent the exchange.
+
+  Your agent never sees the client secret. It calls Deribit's auth endpoint with
+  a placeholder where the secret goes, the credential proxy swaps in the real
+  value, and Deribit returns an access token the agent then uses directly. That
+  token expires — by default after 15 minutes — and minting a new one always
+  goes back through the proxy.
+
+  The **client id** is not a secret and is stored as ordinary metadata, because
+  your agent has to send it alongside the placeholder.
+
+
+environments:
+  - id: mainnet
+    label: Mainnet
+    host: www.deribit.com
+  - id: testnet
+    label: Testnet
+    host: test.deribit.com
+
+# One credential type. See paradex/app.yaml for why a second type covering the
+# same route would break this one rather than sit beside it.
+exclusive_credential_types: true
+
+credential_types:
+  - id: client-secret
+    label: API client secret
+    slug: secret
+    secret_label: Client secret
+    # The client id identifies the key pair and authenticates nothing on its
+    # own — Deribit's auth call needs both, and the agent has to send this one
+    # in the same query string as the placeholder.
+    detail_fields:
+      - key: client_id
+        label: Client id
+        placeholder: "AbCdEfGh"
+    # EXACTLY ONE PATH, which is unusually narrow and is the point. The secret
+    # is presented to the token endpoint and nowhere else; every other private
+    # Deribit call carries the bearer token the agent already has. Narrowing to
+    # this one route means a request to any other Deribit path is forwarded
+    # untouched, with nothing demanded of it.
+    #
+    # THE CONSEQUENCE WORTH KNOWING: the rule that matches is also the rule
+    # that requires the placeholder, so EVERY GET to /api/v2/public/auth must
+    # carry it. Deribit's refresh_token grant hits this same path without a
+    # client secret, and the proxy refuses it. That is why the skill says to
+    # re-authenticate rather than refresh — a fresh client_credentials exchange
+    # costs one request and always works.
+    #
+    # GET only. Deribit's JSON-RPC-over-HTTP interface takes auth parameters in
+    # the query string, which is what match_query below scans; a POST form of
+    # this call is not what the skill instructs and listing the method would
+    # demand the placeholder on a shape nothing sends.
+    routes:
+      - path: /api/v2/public/auth
+        methods: [GET]
+    delivery:
+      mode: replace
+      match_query: true
+    summary: >-
+      Sets: the placeholder is swapped for the client secret in the query
+      string, on GET /api/v2/public/auth only. No other Deribit path is
+      touched.

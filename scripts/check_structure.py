@@ -1,18 +1,30 @@
 #!/usr/bin/env python3
 """Check every app in this repo is shaped the way DIME Terminal reads it.
 
-The consumer refuses to start on any of these, which means a mistake here
-fails someone else's deploy rather than this repo's CI. So they are checked
-where they are made:
+THIS REPO IS THE STORE. DIME Terminal fetches it at run time, so a malformed
+app here is not caught by anyone's build — it is dropped from a live
+catalogue with a line in a log nobody reads. The checks that used to happen
+at someone else's deploy therefore happen here, against the pull request that
+made the mistake:
 
-  * apps/<id>/skills.yaml exists, and its `id` matches the directory.
-  * Every name in `skills:` has a directory beside it holding a SKILL.md.
-  * Every skill directory is listed. An unlisted one is published by nobody
-    and is the silent half of a rename.
-  * A SKILL.md's frontmatter `name` equals its directory name, and it has a
-    non-empty `description` — the consumer compares both.
-  * Names are lowercase letters, digits and hyphens: they become path
-    segments on an agent's disk.
+  * apps/<id>/app.yaml exists, and its `id` matches the directory.
+  * The manifest carries what the catalogue needs: version, name, blurb,
+    description, at least one environment and one credential type.
+  * Hosts are lowercase. The proxy matches them case-sensitively, so an
+    uppercase letter is a rule that can never fire.
+  * A credential type names a delivery mode, and a signing scheme and
+    encoding, that the proxy actually has a case for. A manifest may describe
+    an app; it cannot invent a capability.
+  * Ids and slugs match the patterns the API validates labels against, so a
+    template cannot produce a credential nobody can enrol.
+  * Every directory under skills/ holds a SKILL.md whose frontmatter `name`
+    equals the directory, with a non-empty description.
+  * One skill per app, for now: the agent's publish path writes an app's
+    files under <skills>/apps/<id>/ and discovers a skill by SKILL.md at that
+    root, so a second has nowhere to go yet.
+
+The manifest names NO skills. The directory is the content, the id is the
+join, and there is nothing for two files to disagree about.
 
 Stdlib only, so the workflow is checkout plus one python3 invocation.
 
@@ -26,8 +38,21 @@ import sys
 from pathlib import Path
 
 APPS = Path("apps")
+MANIFEST = "app.yaml"
 ENTRYPOINT = "SKILL.md"
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
+
+# The closed vocabulary, mirrored from pkg/datastore in DIME Terminal. A value
+# outside it is not a feature request: the proxy dispatches on these strings
+# and has no case for anything else, so the credential would be accepted and
+# then never signed.
+MODES = {"inject", "replace", "sign"}
+SCHEMES = {"hmac-sha256", "ecdsa-p256", "stark"}
+ENCODINGS = {"hex", "base64", "felt-pair"}
+
+# The manifest format this checker understands, matching the consumer's.
+SCHEMA_VERSION = 1
 
 # The consumer's own limits (pkg/apps: MaxSkillFileBytes, MaxSkillFiles).
 MAX_FILE_BYTES = 512 * 1024
@@ -37,6 +62,62 @@ MAX_FILES = 32
 def manifest_field(text: str, key: str) -> str | None:
     m = re.search(rf"^{key}\s*:\s*(\S+)", text, re.MULTILINE)
     return m.group(1) if m else None
+
+
+def block_values(text: str, key: str) -> list[str]:
+    """Every `key: value` under any indentation, in order.
+
+    Deliberately a scan and not a YAML parse: stdlib only, and this is a
+    check on shape rather than a second implementation of the consumer's
+    reader. Anything it cannot see is still caught there.
+    """
+    return [m.group(1).strip().strip("\"'") for m in re.finditer(rf"^\s*{key}\s*:\s*(\S.*)$", text, re.MULTILINE)]
+
+
+def check_manifest(app: str, text: str, failures: list[str]) -> None:
+    man = f"{APPS}/{app}/{MANIFEST}"
+
+    schema = manifest_field(text, "schema_version")
+    if schema != str(SCHEMA_VERSION):
+        failures.append(f"{man}: schema_version is {schema!r}, this checker reads {SCHEMA_VERSION}")
+
+    declared_id = manifest_field(text, "id")
+    if declared_id != app:
+        failures.append(f"{man}: id is {declared_id!r}, directory is {app!r}")
+    elif not NAME_RE.match(declared_id):
+        failures.append(f"{man}: id {declared_id!r} must be lowercase letters, digits and hyphens")
+
+    for field in ("version", "name", "blurb", "description"):
+        if not manifest_field(text, field):
+            failures.append(f"{man}: {field} is required — the catalogue renders it")
+
+    if "skill:" in text:
+        failures.append(
+            f"{man}: manifests do not name skills. The directory beside this file is the content"
+        )
+
+    hosts = block_values(text, "host")
+    if not hosts:
+        failures.append(f"{man}: at least one environment is required")
+    for host in hosts:
+        if host != host.lower():
+            failures.append(f"{man}: host {host!r} must be lowercase — the proxy matches case-sensitively")
+
+    modes = block_values(text, "mode")
+    if not modes:
+        failures.append(f"{man}: at least one credential type is required")
+    for mode in modes:
+        if mode not in MODES:
+            failures.append(f"{man}: delivery mode {mode!r} is not one of {sorted(MODES)}")
+    for scheme in block_values(text, "scheme"):
+        if scheme not in SCHEMES:
+            failures.append(f"{man}: signing scheme {scheme!r} is not one of {sorted(SCHEMES)}")
+    for enc in block_values(text, "encoding"):
+        if enc not in ENCODINGS:
+            failures.append(f"{man}: signature encoding {enc!r} is not one of {sorted(ENCODINGS)}")
+    for slug in block_values(text, "slug"):
+        if not SLUG_RE.match(slug):
+            failures.append(f"{man}: slug {slug!r} cannot be a credential label")
 
 
 def listed_skills(text: str) -> list[str]:
@@ -74,23 +155,26 @@ def main() -> int:
         return 1
 
     for app in apps:
-        man = app / "skills.yaml"
+        man = app / MANIFEST
         if not man.is_file():
-            failures.append(f"{app}: no skills.yaml")
+            failures.append(f"{app}: no {MANIFEST}")
             continue
-        text = man.read_text()
-        declared_id = manifest_field(text, "id")
-        if declared_id != app.name:
-            failures.append(f"{man}: id is {declared_id!r}, directory is {app.name!r}")
+        check_manifest(app.name, man.read_text(), failures)
 
-        listed = listed_skills(text)
         skills_dir = app / "skills"
-        on_disk = sorted(p.name for p in skills_dir.iterdir() if p.is_dir()) if skills_dir.is_dir() else []
-
-        for name in sorted(set(listed) - set(on_disk)):
-            failures.append(f"{man}: lists {name!r}, which has no directory")
-        for name in sorted(set(on_disk) - set(listed)):
-            failures.append(f"{app}: {name}/ exists but skills.yaml does not list it")
+        on_disk = (
+            sorted(p.name for p in skills_dir.iterdir() if p.is_dir())
+            if skills_dir.is_dir()
+            else []
+        )
+        if len(on_disk) > 1:
+            # The agent's publish path writes one app's files under
+            # <skills>/apps/<id>/ and finds a skill by SKILL.md at that root.
+            # A second skill is not dropped quietly there; the app is refused
+            # whole, so it is refused here too.
+            failures.append(
+                f"{app}: {len(on_disk)} skills ({', '.join(on_disk)}) — one per app until the agent can take nested paths"
+            )
 
         for name in on_disk:
             if not NAME_RE.match(name):

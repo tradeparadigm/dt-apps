@@ -1,0 +1,181 @@
+# Binance (spot and USD-M futures REST).
+#
+# The first bundle whose signature travels in the QUERY STRING. Binance signs the
+# query as transmitted and verifies over the bytes it received, in order, which
+# needs iron-proxy's order-preserving swapQuery (tradeparadigm/iron-proxy#10).
+
+schema_version: 1
+
+id: binance
+version: 1.0.0
+name: Binance
+blurb: Trade Binance spot and USD-M futures without your agent seeing the API key or secret.
+
+description: |
+  Binance is a centralised exchange. This app covers **spot** trading and
+  **USD-M futures** (USDT- and USDC-margined perpetuals and dated futures).
+
+  You paste two things from Binance's API management page: the **API key** and
+  the **secret key**. Your agent sees neither. The API key is attached to
+  outgoing requests by the credential proxy, and the secret key never leaves the
+  vault: the proxy signs with it and your agent only says what to sign.
+
+  **Spot and USD-M futures are separate hosts**, so enrol the key pair once for
+  each one you want the agent to use. The same Binance key works on both,
+  provided futures trading is enabled on it.
+
+  **Demo is its own pair of environments.** Keys from demo.binance.com only
+  work against the demo hosts, and live keys only work against the live ones.
+
+  **Withdrawals are out of reach by design.** The proxy only signs trading,
+  account and spot-to-futures transfer calls, so no withdrawal endpoint can be
+  signed, whatever permissions the key carries on Binance's side.
+
+
+# One host per product, and demo is a SEPARATE HOST rather than a flag — demo
+# keys are minted at demo.binance.com and are rejected by the live API, so
+# enrolling one against the wrong entry fails at the venue rather than here.
+#
+# api1-4 and api-gcp.binance.com are aliases of the live spot API and are left
+# out: each would be another place to enrol against by mistake.
+environments:
+  - id: spot
+    label: Spot
+    host: api.binance.com
+  - id: usdm
+    label: USD-M futures
+    host: fapi.binance.com
+  - id: spot-demo
+    label: Spot — demo
+    host: demo-api.binance.com
+  - id: usdm-demo
+    label: USD-M futures — demo
+    host: demo-fapi.binance.com
+
+# FALSE: every signed request needs the key and the secret at once, so enrolling
+# one must not displace the other.
+exclusive_credential_types: false
+
+credential_types:
+  # Binance's signature does not cover the API key, so unlike Bybit the key stays
+  # sealed. Its routes are the signed set plus the futures listenKey, which takes
+  # the key alone and is how a private futures stream is opened.
+  #
+  # SPOT HAS NO LISTEN KEY ANY MORE: POST /api/v3/userDataStream answers 410 Gone
+  # (checked against api.binance.com). It is absent here deliberately — a route
+  # for a retired endpoint is a rule that can only ever refuse.
+  - id: api-key
+    label: API key
+    slug: key
+    secret_label: API key
+    delivery:
+      mode: inject
+      header: X-MBX-APIKEY
+    routes:
+      - path: /fapi/v1/listenKey
+      - path: /api/v3/order/*
+      - path: /api/v3/orderList/*
+      - path: /api/v3/sor/*
+      - path: /api/v3/openOrders
+      - path: /api/v3/allOrders
+      - path: /api/v3/openOrderList
+      - path: /api/v3/allOrderList
+      - path: /api/v3/account/*
+      - path: /api/v3/myTrades
+      - path: /api/v3/myPreventedMatches
+      - path: /api/v3/myAllocations
+      - path: /api/v3/rateLimit/order
+      - path: /sapi/v1/asset/*
+      - path: /sapi/v3/asset/*
+      - path: /fapi/v1/order/*
+      - path: /fapi/v1/batchOrders
+      - path: /fapi/v1/openOrder
+      - path: /fapi/v1/openOrders
+      - path: /fapi/v1/allOpenOrders
+      - path: /fapi/v1/allOrders
+      - path: /fapi/v1/countdownCancelAll
+      - path: /fapi/v1/userTrades
+      - path: /fapi/v1/income/*
+      - path: /fapi/v1/leverage
+      - path: /fapi/v1/marginType
+      - path: /fapi/v1/positionMargin/*
+      - path: /fapi/v1/positionSide/*
+      - path: /fapi/v1/multiAssetsMargin
+      - path: /fapi/v1/commissionRate
+      - path: /fapi/v1/leverageBracket
+      - path: /fapi/v1/adlQuantile
+      - path: /fapi/v1/forceOrders
+      - path: /fapi/v1/accountConfig
+      - path: /fapi/v1/symbolConfig
+      - path: /fapi/v1/apiTradingStatus
+      - path: /fapi/v1/rateLimit/order
+      - path: /fapi/v2/account
+      - path: /fapi/v2/balance
+      - path: /fapi/v2/positionRisk
+      - path: /fapi/v3/account
+      - path: /fapi/v3/balance
+      - path: /fapi/v3/positionRisk
+    summary: >-
+      Sets: attached by the proxy as the X-MBX-APIKEY header on every signed
+      spot and USD-M futures path, and on the futures listenKey. Your agent
+      sends nothing.
+
+  # The rule that matches is the rule that requires the placeholder, so this list
+  # is exactly where an unsigned request is refused. Public and signed paths share
+  # /api/v3 and /fapi/v1, which is why the signed ones are listed one by one.
+  - id: secret
+    label: Secret key (signing)
+    slug: secret
+    secret_label: Secret key
+    delivery:
+      mode: sign
+      scheme: hmac-sha256
+      encoding: hex
+      match_query: true
+    routes:
+      - path: /api/v3/order/*
+      - path: /api/v3/orderList/*
+      - path: /api/v3/sor/*
+      - path: /api/v3/openOrders
+      - path: /api/v3/allOrders
+      - path: /api/v3/openOrderList
+      - path: /api/v3/allOrderList
+      - path: /api/v3/account/*
+      - path: /api/v3/myTrades
+      - path: /api/v3/myPreventedMatches
+      - path: /api/v3/myAllocations
+      - path: /api/v3/rateLimit/order
+      - path: /sapi/v1/asset/*
+      - path: /sapi/v3/asset/*
+      - path: /fapi/v1/order/*
+      - path: /fapi/v1/batchOrders
+      - path: /fapi/v1/openOrder
+      - path: /fapi/v1/openOrders
+      - path: /fapi/v1/allOpenOrders
+      - path: /fapi/v1/allOrders
+      - path: /fapi/v1/countdownCancelAll
+      - path: /fapi/v1/userTrades
+      - path: /fapi/v1/income/*
+      - path: /fapi/v1/leverage
+      - path: /fapi/v1/marginType
+      - path: /fapi/v1/positionMargin/*
+      - path: /fapi/v1/positionSide/*
+      - path: /fapi/v1/multiAssetsMargin
+      - path: /fapi/v1/commissionRate
+      - path: /fapi/v1/leverageBracket
+      - path: /fapi/v1/adlQuantile
+      - path: /fapi/v1/forceOrders
+      - path: /fapi/v1/accountConfig
+      - path: /fapi/v1/symbolConfig
+      - path: /fapi/v1/apiTradingStatus
+      - path: /fapi/v1/rateLimit/order
+      - path: /fapi/v2/account
+      - path: /fapi/v2/balance
+      - path: /fapi/v2/positionRisk
+      - path: /fapi/v3/account
+      - path: /fapi/v3/balance
+      - path: /fapi/v3/positionRisk
+    summary: >-
+      Sets: signing credential, HMAC-SHA256, hex, substituted into the
+      signature query parameter, on every signed spot order, account and asset
+      transfer path and every signed USD-M futures path. No withdrawal path.

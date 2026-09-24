@@ -1,0 +1,144 @@
+# OKX (v5 API).
+#
+# The venue that shows the format handling a MULTI-SECRET credential set. OKX
+# authenticates with three separate values — an API key, a passphrase and a
+# secret key — and all three are required on every private call. They are three
+# credential types here rather than one, because they are three different
+# secrets that reach the request three different ways.
+#
+# The important difference from Bybit: OKX's signature covers
+#
+#     timestamp + method + requestPath + body
+#
+# and NOT the API key. So nothing about the signing scheme forces the agent to
+# know the key, and both the key and the passphrase stay sealed and injected by
+# the proxy. The agent sends neither and sees neither. That is the strongest
+# posture any bundle here achieves, and it is OKX's signature design that makes
+# it possible rather than anything clever on our side.
+#
+# ALL THREE TYPES ARE NARROWED TO THE SAME ROUTES, and the inject pair is
+# narrowed even though inject mode never demands a placeholder. Two reasons.
+# A public OKX endpoint has no use for OK-ACCESS-KEY, and a request carrying
+# part of an auth header set is a request a venue may decide to reject; and a
+# reader comparing the three types should see one route list, not two shapes
+# that have to be reasoned about separately.
+
+schema_version: 1
+
+id: okx
+version: 1.0.0
+name: OKX
+blurb: Trade spot, perpetuals and options on OKX without your agent seeing any of the three secrets.
+
+description: |
+  OKX is a centralised exchange offering spot, margin, perpetual swaps, futures
+  and options through one v5 API.
+
+  OKX authenticates with three values rather than one: an **API key**, a
+  **passphrase** you chose when creating the key, and a **secret key**. This app
+  adds all three to the credentials form and installs a skill teaching your
+  agent OKX's signing scheme.
+
+  Your agent sees none of the three. The key and the passphrase are attached to
+  outgoing requests by the credential proxy, and the secret key never leaves the
+  vault — the proxy signs with it and your agent only says what to sign. Enrol
+  all three: a private OKX call with any one missing is rejected.
+
+  **Demo trading shares the same hostname as live trading**, distinguished only
+  by a request header. Your demo API keys and your live API keys are different
+  keys, so enrol one set or the other — not both at once. Two OKX credential
+  sets scoped to the same host will break each other.
+
+  **Private WebSocket streams are not covered.** OKX authenticates those with a
+  signature sent in a frame after the connection opens, and the proxy signs HTTP
+  requests, not WebSocket frames. Public market-data streams work normally.
+
+
+# ONE HOST, deliberately. OKX serves live and demo trading from www.okx.com and
+# separates them with an x-simulated-trading header, not a hostname, so there is
+# no second environment to offer. aws.okx.com is a latency-optimised alias for
+# the same API and is left out on purpose: it would be a second way to enrol
+# against the wrong entry with nothing to tell the two apart in the UI.
+environments:
+  - id: mainnet
+    label: Mainnet
+    host: www.okx.com
+
+# FALSE, and this is the one bundle where that matters. The three types are not
+# alternatives — every private OKX request needs all three at once, so enrolling
+# one must not displace another.
+exclusive_credential_types: false
+
+# The private route families, repeated identically on all three types below.
+# OKX splits public from private by prefix: /api/v5/market/* and
+# /api/v5/public/* are open, and everything here needs the full header set.
+#
+# THE RULE THAT MATCHES IS THE RULE THAT REQUIRES THE PLACEHOLDER, so for the
+# secret this list is exactly the set of paths on which a request without an
+# OK-ACCESS-SIGN placeholder is refused by the proxy. Listing a public path
+# would refuse every unauthenticated read the agent makes.
+credential_types:
+  # First, so it is the one the form offers first: it is also the one a user is
+  # most likely to have to hand.
+  - id: api-key
+    label: API key
+    slug: key
+    secret_label: API key
+    delivery:
+      mode: inject
+      header: OK-ACCESS-KEY
+    routes:
+      - path: /api/v5/trade/*
+      - path: /api/v5/account/*
+      - path: /api/v5/asset/*
+      - path: /api/v5/users/*
+      - path: /api/v5/subaccount/*
+      - path: /api/v5/copytrading/*
+    summary: >-
+      Sets: attached by the proxy as the OK-ACCESS-KEY header on every path
+      under /api/v5/trade, /api/v5/account, /api/v5/asset, /api/v5/users,
+      /api/v5/subaccount and /api/v5/copytrading. Your agent sends nothing.
+
+  # The passphrase is a SECRET, not a detail field, and that is worth being
+  # explicit about because its name invites the opposite assumption. OKX treats
+  # it as the third factor of the credential: possessing the key and the secret
+  # without it authenticates nothing. It is sealed like the other two.
+  - id: passphrase
+    label: Passphrase
+    slug: pass
+    secret_label: Passphrase
+    delivery:
+      mode: inject
+      header: OK-ACCESS-PASSPHRASE
+    routes:
+      - path: /api/v5/trade/*
+      - path: /api/v5/account/*
+      - path: /api/v5/asset/*
+      - path: /api/v5/users/*
+      - path: /api/v5/subaccount/*
+      - path: /api/v5/copytrading/*
+    summary: >-
+      Sets: attached by the proxy as the OK-ACCESS-PASSPHRASE header on the same
+      paths as the API key. Your agent sends nothing.
+
+  # base64 rather than hex, which is the one line of this template that differs
+  # from Bybit's and the one OKX rejects you for getting wrong.
+  - id: secret
+    label: Secret key (signing)
+    slug: secret
+    secret_label: Secret key
+    delivery:
+      mode: sign
+      scheme: hmac-sha256
+      encoding: base64
+      match_headers: [OK-ACCESS-SIGN]
+    routes:
+      - path: /api/v5/trade/*
+      - path: /api/v5/account/*
+      - path: /api/v5/asset/*
+      - path: /api/v5/users/*
+      - path: /api/v5/subaccount/*
+      - path: /api/v5/copytrading/*
+    summary: >-
+      Sets: signing credential, HMAC-SHA256, base64, substituted into the
+      OK-ACCESS-SIGN header, on the same paths as the API key.

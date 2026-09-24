@@ -1,42 +1,35 @@
 # dt-apps
 
-Skill content for DIME Terminal apps.
+The apps DIME Terminal offers. This repository is the store.
 
-An **app** is a venue integration a user installs: a credential they enrol, the
-hosts and routes that credential may be used on, and instructions telling an
-agent how to use it. This repository holds the last of those three. The other
-two live in DIME Terminal itself, beside the code that enforces them.
-
-| | Owned here | Owned in dime-terminal |
-|---|---|---|
-| What a venue knows — endpoints, parameters, instrument naming, error codes | ✅ | |
-| Where a credential may be sent — hosts, routes, delivery mode, signing scheme | | `api/terminal/pkg/apps/bundles/<id>/app.yaml` |
-| How the credential proxy works — placeholders, signing headers, what a 403 means | | the agent's `AGENTS.md`, injected once for every app |
-
-An app id here is an app id there. `binance` is the exception for now: its
-skill is ready and its credential surface is still on a branch, so the content
-ships ahead of anything installable.
-
-The split is deliberate. A pull request here changes what an agent is told; it
-cannot change where anyone's secret is allowed to go.
-
-The skills as first imported do not yet respect the third row: four of the five
-still restate the proxy's placeholder and signing-header rules inline, because
-they were moved verbatim rather than moved and rewritten at once. Thinning them
-back to venue knowledge is a per-skill pass, and it is the same pass that makes
-a skill here replaceable by one the venue writes itself.
-
-## Layout
+An **app** is a venue integration a user installs: a credential they enrol,
+the hosts and routes that credential may be used on, and a skill teaching an
+agent how to use it. All three live here, in one directory per app.
 
 ```
-apps/<id>/skills.yaml                     the app's version and its skill list
-apps/<id>/skills/<skill-name>/SKILL.md    one skill
+apps/<id>/app.yaml                        what the app is, and what its
+                                          credential may reach
+apps/<id>/skills/<skill-name>/SKILL.md    what the agent is taught
 apps/<id>/skills/<skill-name>/...         anything else that skill reads
 ```
 
-`<id>` is the app id DIME Terminal knows the venue by — `bybit`, `okx` — and
-`<skill-name>` is the name in the skill's own frontmatter. They must agree, and
-the directory name must equal the frontmatter `name`.
+**Publishing does not require a release of DIME Terminal.** It reads this
+repository at run time and refreshes on an interval, so a merged pull request
+here is live within that window — an environment follows a ref (`main` on
+testnet, a tag in production), and moving it is a config value rather than a
+build.
+
+## The manifest names no skills
+
+The id is the join and the directory is the content. There is no index to keep
+in step with the filesystem, and "how many skills does this app have" is
+answered by listing a directory.
+
+One skill per app today, for a reason that is not about this file: the agent's
+publish path writes an app's files under `<skills>/apps/<id>/` and discovers a
+skill by `SKILL.md` at that root, so a second has nowhere to go until that path
+takes nested ones. CI refuses a second rather than letting one be silently
+dropped.
 
 ## Naming
 
@@ -48,35 +41,50 @@ carries the venue's identity, so the skill file does not need to claim it.
 
 ## Versioning
 
-**The version is not here.** An app's version lives with its manifest in
-dime-terminal (`bundles/<id>/app.yaml`), because that is what a user installs
-and what the install is recorded against — a version in this repo would be a
-second number, and the two would drift.
+`version:` in `apps/<id>/app.yaml` is the app's version, and it is the only
+one. DIME Terminal records it when a user installs and compares it to offer an
+update, so **a change that does not bump it reaches nobody**: existing installs
+keep the version they have until they take a new one.
 
-What makes a change here reach anyone is the **pin bump** in dime-terminal's
-`go.mod`. That side's catalogue test hashes the skill files it embeds, so a
-pin bump that changes this text and does not bump the app's version fails
-there, in the pull request that does the bumping.
+## What CI checks, and why it is here
 
-Neither file carries a version in a skill's frontmatter, for the same reason.
+DIME Terminal fetches this repository while it is running. A malformed app is
+therefore not caught by anyone's build — it is refused from a live catalogue,
+with a log line nobody reads. So the checks happen against the pull request
+that made the mistake:
 
-## What CI checks here
+- the manifest's `id` matches its directory, and carries what the catalogue
+  renders — version, name, blurb, description, an environment, a credential
+  type;
+- hosts are lowercase, because the proxy matches them case-sensitively and an
+  uppercase letter is a rule that can never fire;
+- delivery modes, signing schemes and encodings are ones the proxy has a case
+  for. **A manifest may describe an app; it cannot invent a capability** — a
+  scheme outside that list would be accepted and then never signed;
+- slugs can be credential labels, so a template cannot produce a credential
+  nobody can enrol;
+- every skill directory holds a `SKILL.md` whose frontmatter `name` matches
+  it, with a description, inside the file-count and size limits.
 
-`scripts/check_structure.py` checks the shape dime-terminal refuses to start
-on, so a mistake fails in this repo rather than in someone else's deploy: the
-manifest's `id` matches its directory, every listed skill has a directory with
-a `SKILL.md`, every directory is listed, each frontmatter `name` matches its
-directory and carries a description, and the file count and sizes are inside
-the consumer's limits.
+A refusal still happens on the reading side too. Nothing here is trusted
+because it passed CI here.
 
-## Adding a skill
+## Adding an app
 
-1. `apps/<id>/skills/<venue>-<surface>/SKILL.md`, frontmatter `name` matching
-   the directory.
-2. Add the name to `skills:` in that app's `skills.yaml`.
-3. Open a pull request. Merging it changes nothing on its own — the change
-   ships when dime-terminal bumps its pin, and bumps the app's version there.
+1. `apps/<id>/app.yaml` — start from a venue whose signing scheme resembles
+   yours; `bybit` for an HMAC in a header, `paradex` for a signing key.
+2. `apps/<id>/skills/<id>-api/SKILL.md`, frontmatter `name` matching the
+   directory.
+3. Open a pull request. Merging publishes it.
 
-Write for an agent that does not know whether a proxy is in front of it: say
-what to sign and where the signature goes, not who produces it. That is what
-makes a skill here replaceable by one the venue writes itself.
+Get the hosts right. That is the field with consequences: it is where a
+decrypted key may be sent.
+
+Write the skill for an agent that does not know whether a proxy is in front of
+it — say what to sign and where the signature goes, not who produces it. That
+is what makes a skill here replaceable by one the venue writes itself.
+
+## What still needs a change to DIME Terminal
+
+A signing scheme or delivery mode the proxy has no case for, or a bump to
+`schema_version`. Everything else is a pull request here.

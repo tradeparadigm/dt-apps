@@ -1,0 +1,156 @@
+# Paradex.
+#
+# The first app bundle, and the one the format was derived from: everything
+# below was a TypeScript constant in
+# ui/terminal/packages/react/src/components/settings/credential-venues.ts, and
+# nothing here says anything that constant did not. If the two disagree, the
+# constant is the one that has been in production.
+#
+# WHAT A TEMPLATE IS, and is not. It fills the ORDINARY credential fields —
+# mode, scheme, encoding, hosts, which parts of the request to scan — and maps
+# its named inputs onto the same public-details map every credential has.
+# Nothing venue-specific reaches the API, the database, the proxy, or the
+# agent's environment. Open Advanced in the form after picking this and you are
+# looking at the general form with these values in it.
+
+schema_version: 1
+
+id: paradex
+version: 1.0.0
+name: Paradex
+blurb: Trade perpetual futures on Paradex with a key your agent never holds.
+
+# Shown on the app's detail page, above the skill. Markdown.
+description: |
+  Paradex is a Starknet-based perpetual futures exchange.
+
+  This app installs a skill that teaches your agent how to authenticate to
+  Paradex through the credential proxy, and adds Paradex to the credentials
+  form so you can enrol either of the two credentials Paradex issues without
+  filling in the signing details by hand.
+
+  You can hold the read-only token or the signing key, but not both at once —
+  see "One credential at a time" below.
+
+
+# The hosts this app's credentials may be used on, offered to the user as named
+# environments. A credential enrolled from this template is scoped to exactly
+# one of them.
+environments:
+  - id: mainnet
+    label: Mainnet
+    host: api.prod.paradex.trade
+  - id: testnet
+    label: Testnet
+    host: api.testnet.paradex.trade
+  - id: nightly
+    label: Nightly
+    host: api.nightly.paradex.trade
+
+# ONE CREDENTIAL PER ENVIRONMENT, whichever type. Enrolling one replaces the
+# other rather than sitting alongside it.
+#
+# Not tidiness. A credential's rule is also what REQUIRES its placeholder, so a
+# second credential covering the same host makes the first one's routes refuse
+# requests the agent was entitled to make — including ones carrying a token it
+# minted itself with the signing key. The two do not coexist; they break each
+# other.
+exclusive_credential_types: true
+
+# A venue is not one secret. Paradex hands out a read-only JWT and a Starknet
+# private key, and they differ in every way that matters here: what the proxy
+# does with them (forward a string versus sign with a key), what the agent must
+# send, and what the user must paste.
+credential_types:
+  # DEFAULT, and deliberately first: it needs nothing of the agent beyond
+  # writing a placeholder into a header, so it is the one that works end to end
+  # with no skill at all.
+  - id: jwt
+    label: Readonly Token
+    # Becomes the trailing component of the enrolled name, e.g. `jwt` in
+    # `paradex-testnet-jwt`. Lowercase, digits and hyphens: it becomes part of
+    # a label the API validates against ^[a-z0-9][a-z0-9-]{0,31}$.
+    slug: jwt
+    secret_label: Readonly Token
+    # Each entry maps to a key in the credential's public details, and THAT
+    # MAPPING IS THE CONTRACT the skill depends on — so it lives here, in one
+    # place, rather than being implied by whatever the user happened to type.
+    detail_fields:
+      - key: account
+        label: Account address
+        placeholder: "0x1a2b…"
+    # No route narrowing. The token is accepted on every private endpoint and
+    # ignored on the public ones, so the agent can write the placeholder on
+    # every request to this venue — which is also what it MUST do, since an
+    # in-scope request without the placeholder is refused.
+    delivery:
+      mode: replace
+    summary: >-
+      Sets: the placeholder is swapped for the token in any request header, on
+      every endpoint.
+
+  # The signing key. Both public details are needed and neither is secret: the
+  # account address is not derivable from the key alone, and the public key is
+  # what the auth URL is addressed to. Without them the key enrols, the proxy
+  # signs correctly, and the agent still cannot form the request.
+  - id: priv-key
+    label: Private key (signing)
+    slug: priv-key
+    secret_label: Private key
+    detail_fields:
+      - key: public_key
+        label: Public key
+        placeholder: "0x4f3c…"
+      - key: account
+        label: Account address
+        placeholder: "0x1a2b…"
+    # Only the endpoints that take a STARK signature, each with the method that
+    # takes it.
+    #
+    # BEST EFFORT, AND DELIBERATELY SO. Narrowing is what stops a credential
+    # demanding its placeholder on endpoints that do not want it — but the rule
+    # that matches is also the rule that REQUIRES the placeholder, so a route
+    # listed here that does not actually need this credential turns into a 403,
+    # and one omitted that does need it silently stops applying.
+    #
+    # /v1/auth/* AND NOT /v1/auth: Paradex authenticates a subkey at
+    # POST /v1/auth/<public_key>, and a pattern without a trailing /* goes
+    # through path.Match, whose * does not cross a '/'. Exact /v1/auth
+    # therefore never matched the real call — the proxy substituted nothing and
+    # the request reached Paradex carrying a placeholder instead of a
+    # signature. The /* form is a plain prefix and covers the bare /v1/auth
+    # too, so it is a strict superset of what was here.
+    #
+    # /v1/orders EXACT, and deliberately not /v1/orders/*. POST /v1/orders
+    # carries the order signature in its JSON body, so without it a signing
+    # credential cannot place an order at all — which is most of the reason to
+    # hold one. Exact rather than a prefix keeps it to the collection, so
+    # GET /v1/orders/<id> and DELETE /v1/orders/<id> stay unmatched and need
+    # nothing.
+    #
+    # POST on each, which is what makes listing open orders possible at all:
+    # the GET on that same path matches no rule, is forwarded untouched, and
+    # needs neither the payload header nor the placeholder. A path-only
+    # narrowing would have demanded a signature for a read that never wanted
+    # one.
+    #
+    # Not /v1/vaults: public on GET, signed only on POST, and nothing in the
+    # trading path needs it.
+    routes:
+      - path: /v1/auth/*
+        methods: [POST]
+      - path: /v1/onboarding
+        methods: [POST]
+      - path: /v1/orders
+        methods: [POST]
+    # match_body as well as headers: the auth signature rides in a header and
+    # an order's rides in the JSON body, and one credential serves both.
+    delivery:
+      mode: sign
+      scheme: stark
+      encoding: felt-pair
+      match_body: true
+    summary: >-
+      Sets: signing credential, STARK curve, (r,s) pair, substituted into any
+      request header and the request body, on POST to /v1/auth/*,
+      /v1/onboarding and /v1/orders.
