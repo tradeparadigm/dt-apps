@@ -15,27 +15,23 @@ concurrency:
 
 jobs:
   # The check runs the server's own loader, so there is one set of rules
-  # rather than a copy here that drifts from it. That needs a token to read
-  # the private repository, which a pull request from a fork does not get.
+  # rather than a copy here that drifts from it. Reading the private
+  # repository needs a token, and a pull request from a fork does not get one.
+  # Failing is the point: an unchecked manifest is the thing this prevents.
   can-check:
     runs-on: ubuntu-latest
-    outputs:
-      token: ${{ steps.check.outputs.token }}
     steps:
-      - id: check
-        env:
+      - env:
           DIME_TERMINAL_TOKEN: ${{ secrets.DIME_TERMINAL_TOKEN }}
         run: |
-          if [ -n "$DIME_TERMINAL_TOKEN" ]; then
-            echo "token=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "token=false" >> "$GITHUB_OUTPUT"
-            echo "::error::DIME_TERMINAL_TOKEN is not set, so the loader cannot be fetched and this pull request is unchecked."
+          if [ -z "$DIME_TERMINAL_TOKEN" ]; then
+            echo "DIME_TERMINAL_TOKEN is not set, so the loader cannot be" >&2
+            echo "fetched and this pull request cannot be checked." >&2
+            exit 1
           fi
 
   structure-check:
     needs: can-check
-    if: needs.can-check.outputs.token == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
