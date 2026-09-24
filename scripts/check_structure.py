@@ -19,6 +19,11 @@ made the mistake:
     template cannot produce a credential nobody can enrol.
   * Every directory under skills/ holds a SKILL.md whose frontmatter `name`
     equals the directory, with a non-empty description.
+  * Nothing is a symlink. DIME Terminal reads this repo as a tarball and
+    refuses a link outright, because a link is a file whose contents are a
+    path: followed, it names something outside the tree; skipped, it empties
+    a skill directory and the app loads as one that teaches nothing, which
+    deletes its skill off every agent that installed it.
   * One skill per app, for now: the agent's publish path writes an app's
     files under <skills>/apps/<id>/ and discovers a skill by SKILL.md at that
     root, so a second has nowhere to go yet.
@@ -72,6 +77,18 @@ def block_values(text: str, key: str) -> list[str]:
     reader. Anything it cannot see is still caught there.
     """
     return [m.group(1).strip().strip("\"'") for m in re.finditer(rf"^\s*{key}\s*:\s*(\S.*)$", text, re.MULTILINE)]
+
+
+def check_links(failures: list[str]) -> None:
+    """Refuse a symlink anywhere under apps/.
+
+    The consumer refuses the whole archive on one, so a link here does not
+    break one app — it takes the catalogue offline for every deployment until
+    it is removed.
+    """
+    for p in APPS.rglob("*"):
+        if p.is_symlink():
+            failures.append(f"{p}: is a symlink; this repo holds only regular files")
 
 
 def check_manifest(app: str, text: str, failures: list[str]) -> None:
@@ -149,6 +166,7 @@ def frontmatter(md: str) -> dict[str, str]:
 
 def main() -> int:
     failures: list[str] = []
+    check_links(failures)
     apps = sorted(p for p in APPS.iterdir() if p.is_dir()) if APPS.is_dir() else []
     if not apps:
         print("no apps found", file=sys.stderr)
