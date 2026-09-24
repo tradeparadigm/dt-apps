@@ -124,6 +124,30 @@ class TestBranding(unittest.TestCase):
     def test_an_empty_icon_is_no_icon(self):
         self.accepts("icon: {}\n")
 
+    # The consumer's checks are `!= ""`, so an explicitly empty field loads
+    # there as absent. Refusing it here blocks a manifest that is fine.
+    def test_an_empty_tint_is_no_tint(self):
+        self.accepts("tint: ''\n")
+
+    def test_an_empty_developer_url_is_no_url(self):
+        self.accepts("developer_url: ''\n")
+
+    # Three rounds of review found this one field at a time: tint, then the
+    # icon, then developer_url. The consumer's guards are all `!= ""`, so
+    # every optional field has to read empty as absent, and enumerating them
+    # is what stops a fourth.
+    def test_every_optional_field_reads_empty_as_absent(self):
+        for field, empty in (
+            ("developer", "developer: ''\n"),
+            ("developer_url", "developer_url: ''\n"),
+            ("tint", "tint: ''\n"),
+            ("icon", "icon: {}\n"),
+            ("icon.path and icon.view_box", "icon:\n  path: ''\n  view_box: ''\n"),
+        ):
+            with self.subTest(field=field):
+                code, out = check(append(empty))
+                self.assertEqual(code, 0, f"empty {field} refused:\n{out}")
+
     def test_an_overlong_icon_path_is_refused(self):
         self.refuses(
             "icon:\n  path: " + "M0 0" * 3000 + "\n  view_box: 0 0 24 24\n",

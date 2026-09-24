@@ -362,12 +362,15 @@ def check_presentation(man: str, doc: dict, failures: list[str]) -> None:
     draws at the wrong scale and a view box with no path draws nothing, which
     both look deliberate.
     """
+    # Empty is absent, because that is how the consumer reads it: its checks
+    # are `!= ""`, so a manifest with `tint: ""` loads there and refusing it
+    # here would block one that is fine. Same reasoning as the empty icon.
     tint = doc.get("tint")
-    if tint is not None and (not isinstance(tint, str) or not TINT_RE.match(tint)):
+    if tint != "" and tint is not None and (not isinstance(tint, str) or not TINT_RE.match(tint)):
         failures.append(f"{man}: tint {tint!r} must be a six-digit hex colour like #5f74ff")
 
     url = doc.get("developer_url")
-    if url is not None:
+    if url is not None and url != "":
         parsed = urlparse(url) if isinstance(url, str) else None
         if parsed is None or parsed.scheme != "https" or not parsed.netloc:
             failures.append(f"{man}: developer_url {url!r} must be an https URL")
