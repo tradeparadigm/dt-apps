@@ -74,8 +74,12 @@ that made the mistake:
   that does not run;
 - no two apps claim the same skill name. openclaw resolves a collision by
   precedence rather than erroring, so one of them would simply never load;
-- hosts are lowercase, because the proxy matches them case-sensitively and an
-  uppercase letter is a rule that can never fire;
+- hosts are bare lowercase hostnames — no scheme, port, path or underscore —
+  because the proxy matches them case-sensitively and the enrolment path
+  refuses anything that is not a hostname outright;
+- routes carry a path the API accepts and methods from the closed set, already
+  upper case and without duplicates: the consumer canonicalises and refuses any
+  difference, so `get` and a repeated path are refusals rather than tidy-ups;
 - delivery modes, signing schemes and encodings are ones the proxy has a case
   for. **A manifest may describe an app; it cannot invent a capability** — a
   scheme outside that list would be accepted and then never signed;

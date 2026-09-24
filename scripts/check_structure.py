@@ -24,8 +24,14 @@ What is checked, in each case because the consumer refuses the app without it:
     ids are well formed as well as present, and ids, hosts and slugs are
     unique. These live in the consumer's App.validate, and a manifest missing
     one used to merge here and vanish from the live catalogue.
-  * Hosts are lowercase. The proxy matches them case-sensitively, so an
-    uppercase letter is a rule that can never fire.
+  * Hosts are bare lowercase hostnames — no scheme, port, path or underscore.
+    The proxy matches them case-sensitively, so an uppercase letter is a rule
+    that can never fire, and the enrolment path refuses anything that is not a
+    hostname outright.
+  * Routes carry a path the API accepts and methods from the closed set,
+    already upper case and without duplicates. The consumer canonicalises and
+    refuses any difference, so `get` and a repeated path are both refusals
+    rather than tidy-ups.
   * Every key is one the consumer knows. Its decoder runs with KnownFields,
     so an unknown key — a typo, a field from a newer schema — refuses the
     whole app rather than being ignored.
@@ -81,6 +87,15 @@ import yaml
 APPS = Path("apps")
 MANIFEST = "app.yaml"
 ENTRYPOINT = "SKILL.md"
+
+# Mirrored from web-api/services/credentials.go: hostPattern, pathPattern,
+# knownHTTPMethods, maxAllowedMethodsPerCredential. A manifest goes through the
+# same canonicalisation a typed-in credential does, and the consumer refuses
+# any difference between what was declared and what canonicalising produced.
+HOST_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
+PATH_RE = re.compile(r"^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$")
+METHODS = {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE"}
+MAX_METHODS = 8
 
 # Mirrored from pkg/apps: idPattern, slugPattern, detailKeyPattern.
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
@@ -204,6 +219,11 @@ def check_environments(man: str, envs: object, failures: list[str]) -> None:
             failures.append(f"{man}: environments[{i}].id {eid!r} must be lowercase letters, digits and hyphens")
         if isinstance(host, str) and host != host.lower():
             failures.append(f"{man}: environments[{i}].host {host!r} must be lowercase — the proxy matches case-sensitively")
+        elif isinstance(host, str) and not HOST_RE.match(host):
+            failures.append(
+                f"{man}: environments[{i}].host {host!r} is not a bare hostname — no scheme, "
+                "port, path or underscore, and it must carry a dot"
+            )
     check_unique(man, "environments.id", [e.get("id") for e in envs if isinstance(e, dict)], failures)
     check_unique(man, "environments.host", [e.get("host") for e in envs if isinstance(e, dict)], failures)
 
@@ -228,6 +248,33 @@ def check_credential_types(man: str, types: object, failures: list[str]) -> None
         routes = row.get("routes") or []
         for j, r in enumerate(routes):
             check_known(man, f"{where}.routes[{j}]", r, "route", failures)
+            if not isinstance(r, dict):
+                failures.append(f"{man}: {where}.routes[{j}] is not a mapping")
+                continue
+            path = r.get("path")
+            if not isinstance(path, str) or not PATH_RE.match(path):
+                failures.append(
+                    f"{man}: {where}.routes[{j}].path {path!r} is not a path the API accepts — "
+                    "it starts with / and carries no query string"
+                )
+            methods = r.get("methods") or []
+            if not isinstance(methods, list):
+                failures.append(f"{man}: {where}.routes[{j}].methods is not a list")
+                continue
+            if len(methods) > MAX_METHODS:
+                failures.append(f"{man}: {where}.routes[{j}].methods lists {len(methods)}, limit {MAX_METHODS}")
+            for m in methods:
+                if m not in METHODS:
+                    # Upper case is not a tidy-up: the proxy compares a method
+                    # verbatim, so a lower-case entry is a rule that can never
+                    # match — and a signing rule that never matches sends the
+                    # request out UNSIGNED rather than refusing it.
+                    failures.append(
+                        f"{man}: {where}.routes[{j}].methods {m!r} is not one of {sorted(METHODS)}"
+                    )
+            check_unique(man, f"{where}.routes[{j}].methods", methods, failures)
+        check_unique(man, f"{where}.routes.path",
+                     [r.get("path") for r in routes if isinstance(r, dict)], failures)
         if len(routes) > MAX_ROUTES:
             failures.append(
                 f"{man}: {where} narrows to {len(routes)} endpoints, and the API accepts {MAX_ROUTES}"
