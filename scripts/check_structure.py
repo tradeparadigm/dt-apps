@@ -83,6 +83,7 @@ Exit 0 = all good, 1 = at least one violation.
 from __future__ import annotations
 
 import re
+from urllib.parse import urlparse
 import sys
 from pathlib import Path
 
@@ -96,8 +97,14 @@ ENTRYPOINT = "SKILL.md"
 # maxIconPathBytes. The icon is a path and not a file on purpose — see the
 # docstring.
 TINT_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
-ICON_PATH_RE = re.compile(r"^[MmZzLlHhVvCcSsQqTtAa0-9eE,.\s+-]+$")
-VIEW_BOX_RE = re.compile(r"^-?[0-9.]+\s+-?[0-9.]+\s+-?[0-9.]+\s+-?[0-9.]+$")
+# Go's RE2 \s is exactly [\t\n\f\r ]. Python's is wider — it also matches the
+# vertical tab and a pile of Unicode spaces — and wider here means a manifest
+# passes this check and is then dropped by the consumer.
+_WS = r"[\t\n\f\r ]"
+ICON_PATH_RE = re.compile(r"^[MmZzLlHhVvCcSsQqTtAa0-9eE,.\t\n\f\r +-]+$")
+VIEW_BOX_RE = re.compile(
+    rf"^-?[0-9.]+{_WS}+-?[0-9.]+{_WS}+-?[0-9.]+{_WS}+-?[0-9.]+$"
+)
 MAX_ICON_PATH = 8 * 1024
 
 # Mirrored from web-api/services/credentials.go: hostPattern, pathPattern,
@@ -361,7 +368,8 @@ def check_presentation(man: str, doc: dict, failures: list[str]) -> None:
 
     url = doc.get("developer_url")
     if url is not None:
-        if not isinstance(url, str) or not url.startswith("https://") or len(url) < len("https://x"):
+        parsed = urlparse(url) if isinstance(url, str) else None
+        if parsed is None or parsed.scheme != "https" or not parsed.netloc:
             failures.append(f"{man}: developer_url {url!r} must be an https URL")
         elif not str(doc.get("developer") or "").strip():
             failures.append(f"{man}: developer_url without developer: the link needs something to sit on")
@@ -374,6 +382,10 @@ def check_presentation(man: str, doc: dict, failures: list[str]) -> None:
         return
     check_known(man, "icon", icon, "icon", failures)
     path, box = icon.get("path"), icon.get("view_box")
+    # Neither is "no icon", which the consumer accepts, and the message below
+    # says so. Only one of the two is half an icon.
+    if not path and not box:
+        return
     if not path or not box:
         failures.append(f"{man}: icon needs both path and view_box, or neither")
         return
