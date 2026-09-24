@@ -24,9 +24,13 @@ made the mistake:
     path: followed, it names something outside the tree; skipped, it empties
     a skill directory and the app loads as one that teaches nothing, which
     deletes its skill off every agent that installed it.
-  * One skill per app, for now: the agent's publish path writes an app's
+  * EXACTLY one skill per app. Not "at most one": the agent's publish path writes an app's
     files under <skills>/apps/<id>/ and discovers a skill by SKILL.md at that
-    root, so a second has nowhere to go yet.
+    root, so a second has nowhere to go yet. Zero is refused for a different
+    reason: a publish is a full replacement, an app contributing no files is
+    dropped from the set, and so an app that ships no skill is byte-identical
+    to one whose files did not survive the fetch — which deletes a working
+    skill off every agent that installed it.
 
 The manifest names NO skills. The directory is the content, the id is the
 join, and there is nothing for two files to disagree about.
@@ -185,6 +189,11 @@ def main() -> int:
             if skills_dir.is_dir()
             else []
         )
+        if not on_disk:
+            failures.append(
+                f"{app}: no skills/ — an app must ship exactly one, or it is indistinguishable "
+                "from one whose files went missing, and that reads as an uninstall"
+            )
         if len(on_disk) > 1:
             # The agent's publish path writes one app's files under
             # <skills>/apps/<id>/ and finds a skill by SKILL.md at that root.
