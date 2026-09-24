@@ -1,12 +1,12 @@
 name: app structure check
 
-# DIME Terminal refuses to start on a malformed app, so a mistake here fails
-# someone else's deploy. Check the shape where it is made.
+# A malformed app is dropped by the server rather than failing it, so a
+# mistake here goes missing from the catalogue with nothing to say why.
+# Check it where it is made.
 on:
   pull_request:
     paths:
       - 'apps/**'
-      - 'scripts/check_structure.py'
       - '.github/workflows/structure-check.yml'
 
 concurrency:
@@ -14,17 +14,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The check runs the server's own loader, so there is one set of rules
+  # rather than a copy here that drifts from it. That needs a token to read
+  # the private repository, which a pull request from a fork does not get.
+  can-check:
+    runs-on: ubuntu-latest
+    outputs:
+      token: ${{ steps.check.outputs.token }}
+    steps:
+      - id: check
+        env:
+          DIME_TERMINAL_TOKEN: ${{ secrets.DIME_TERMINAL_TOKEN }}
+        run: |
+          if [ -n "$DIME_TERMINAL_TOKEN" ]; then
+            echo "token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "token=false" >> "$GITHUB_OUTPUT"
+            echo "::error::DIME_TERMINAL_TOKEN is not set, so the loader cannot be fetched and this pull request is unchecked."
+          fi
+
   structure-check:
+    needs: can-check
+    if: needs.can-check.outputs.token == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # PyYAML, and the install step is the point. The checker used to scan
-      # with regexes to stay stdlib-only, and review found what that costs:
-      # `summary: >-` with no body read as the literal ">-" and passed the
-      # required-field check, while the consumer's parser resolves it to "" and
-      # refuses the app. A checker whose job is to agree with a YAML reader has
-      # to be one.
-      - name: Install the YAML parser
-        run: python3 -m pip install --quiet pyyaml
-      - name: Check app structure
-        run: python3 scripts/check_structure.py
+        with:
+          path: store
+
+      - uses: actions/checkout@v4
+        with:
+          repository: tradeparadigm/dime-terminal
+          token: ${{ secrets.DIME_TERMINAL_TOKEN }}
+          path: dime-terminal
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: dime-terminal/api/terminal/go.sum
+
+      - name: Would this load?
+        working-directory: dime-terminal/api/terminal
+        run: go run ./tools/check-store "$GITHUB_WORKSPACE/store"
