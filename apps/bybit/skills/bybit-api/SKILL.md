@@ -135,7 +135,9 @@ byte-exactness dies.
 ```sh
 node <<'EOF'
 (async () => {
-  const V = Object.keys(process.env).find(k => k.startsWith('CRED_BYBIT') && !k.endsWith('_META'));
+  // Picked by VALUE, not by name: an empty CRED_BYBIT can sit beside the real
+  // one, and matching on the name alone selects it depending on env order.
+  const V = Object.keys(process.env).find(k => (process.env[k] || '').startsWith('sign-bybit'));
   const KEY = JSON.parse(process.env[V + '_META']).api_key;
   const HDR = 'X-Dime-Sign-' + V.replace(/^CRED_/, '').toLowerCase().replaceAll('_', '-');
   const HOST = /TESTNET/.test(V) ? 'api-testnet.bybit.com'
