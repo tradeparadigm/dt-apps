@@ -32,11 +32,17 @@ one file serves every call:
 METHOD=POST TARGET=/v5/order/create BODY='{...}' node <the helper>
 ```
 
-`ACCOUNT.md` beside it holds facts about that account — which credential
-variable, which products the key may trade, lot sizes already looked up.
-Nothing an agent CONCLUDED about the venue goes in either file: that belongs
-in the skill, as a pull request here, or you get one account quietly behaving
-differently from every other with nothing to diff.
+Nothing else goes in that folder. Caching a derived artifact is safe because
+the filename invalidates it; caching FACTS is not, because facts about an
+account are one call away and change without warning, and nothing keys them.
+Anything an agent concludes about the venue belongs in the skill as a pull
+request here, or one account quietly behaves differently from every other with
+nothing to diff.
+
+The cost to accept: a cached helper is a bug frozen in place. Two defects in
+this one — a duplicated query string, an ambiguous credential pick — were
+caught only because an agent re-derived it and noticed. That is the argument
+for "delete and re-derive, never patch", not against the cache.
 
 `AGENTS.md` in dime-terminal states this for every app, so a skill only needs
 to name its own file and version.
