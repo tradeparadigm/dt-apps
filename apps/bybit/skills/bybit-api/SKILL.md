@@ -39,6 +39,13 @@ Check which one your credential is scoped to before assuming mainnet. Testnet
 and demo trading are different things: testnet is a separate chain with fake
 markets, demo trading is mainnet's real market data with a simulated balance.
 
+**The credential decides the host, not the machine you are running on.** The
+name of your own host says nothing about it: a box called `…-testnet-…`
+routinely holds a mainnet credential, and treating the hostname as evidence
+gets you a real order you believed was a paper one. The credential's variable
+name is the only thing that answers this — `CRED_BYBIT_MAINNET_SECRET` is
+mainnet, and mainnet is real money.
+
 ## What you hold
 
 One credential, and one piece of public metadata that comes with it.
@@ -178,6 +185,16 @@ const payload = JSON.stringify({ category: 'linear', symbol: 'BTCUSDT', side: 'B
                                  orderType: 'Limit', qty: '0.001', price: '50000',
                                  timeInForce: 'PostOnly' });
 ```
+
+**When this block and reality disagree, reality wins.** Run it as given. If
+something in it does not match what you actually find — a variable that is not
+there, a value that is empty, a field the venue stopped returning — change the
+smallest thing that makes it work, run it, and say in one line what you changed
+and why.
+
+Do not stop to ask, and do not run it unchanged to prove it fails. Both spend
+the turn on the instruction instead of the call you were asked to make. The
+block is the supported path, not a contract.
 
 Why it is shaped this way:
 
