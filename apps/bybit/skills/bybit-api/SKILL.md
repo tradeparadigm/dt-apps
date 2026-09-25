@@ -133,69 +133,83 @@ body **once**, into a string, sign that string, and send that same string.
 
 ### The request
 
-One block. Change the three lines between the markers and run it. Everything
-else is the same for every Bybit call you will ever make, so do not rewrite it,
-and do not build the request out of `curl` — a JSON body inside shell quoting
-cannot survive an apostrophe or a computed value, and that is exactly where
-byte-exactness dies.
+**Check for the helper before you build anything**, then call it for every
+request. Do not paste a block per call, and do not build the request out of
+`curl` — a JSON body inside shell quoting cannot survive an apostrophe or a
+computed value, which is exactly where byte-exactness dies.
 
 ```sh
-node <<'EOF'
-(async () => {
-  // Picked by VALUE, not by name: an empty CRED_BYBIT can sit beside the real
-  // one, and matching on the name alone selects it depending on env order.
-  const V = Object.keys(process.env).find(k => (process.env[k] || '').startsWith('sign-bybit'));
-  const KEY = JSON.parse(process.env[V + '_META']).api_key;
-  const HDR = 'X-Dime-Sign-' + V.replace(/^CRED_/, '').toLowerCase().replaceAll('_', '-');
-  const HOST = /TESTNET/.test(V) ? 'api-testnet.bybit.com'
-             : /DEMO/.test(V)    ? 'api-demo.bybit.com'
-             :                     'api.bybit.com';
+ls ~/.openclaw/workspace/tools/bybit/bybit-1.0.5.mjs
+```
 
-  // ---- change these two ----
-  const method = 'GET';
-  const target = '/v5/position/list?category=linear&settleCoin=USDT';
-  // GET: put the query on `target`. POST: leave `target` bare and set `body`.
-  const body   = '';
-  // --------------------------
+If that file is there, an earlier chat already wrote it — skip to the calls
+below. If it is not, run this. The `rm` clears any version an older skill
+left, so there is nothing to compare and no way to end up with two:
 
-  // The query lives in exactly one place. Putting it on `target` AND in the
-  // signed payload is the mistake this shape exists to prevent: it produced
-  // "category=linear&symbol=BTCUSDT?category=linear&symbol=BTCUSDT" and a
-  // signature error that blamed the bytes.
-  const [path, query = ''] = target.split('?');
-  const get = method === 'GET';
-  const payload = get ? query : body;
+```sh
+mkdir -p ~/.openclaw/workspace/tools/bybit
+rm -f ~/.openclaw/workspace/tools/bybit/bybit-*.mjs
+cat > ~/.openclaw/workspace/tools/bybit/bybit-1.0.5.mjs <<'EOF'
+const all = Object.keys(process.env).filter(k => (process.env[k] || '').startsWith('sign-bybit'));
+const V = process.env.BYBIT_CRED || all[0];
+if (!V) { console.error('no Bybit sign- credential in the environment'); process.exit(2); }
+if (all.length > 1 && !process.env.BYBIT_CRED) {
+  console.error('several Bybit credentials: ' + all.join(', ') + ' — re-run with BYBIT_CRED=<the one you want>');
+  process.exit(2);
+}
+const KEY = JSON.parse(process.env[V + '_META']).api_key;
+const HDR = 'X-Dime-Sign-' + V.replace(/^CRED_/, '').toLowerCase().replaceAll('_', '-');
+const HOST = /TESTNET/.test(V) ? 'api-testnet.bybit.com'
+           : /DEMO/.test(V)    ? 'api-demo.bybit.com'
+           :                     'api.bybit.com';
 
-  const ts = Date.now().toString();
-  const res = await fetch(`https://${HOST}${path}` + (query ? '?' + query : ''), {
-    method,
-    headers: {
-      'X-BAPI-API-KEY': KEY,
-      'X-BAPI-TIMESTAMP': ts,
-      'X-BAPI-RECV-WINDOW': '5000',
-      'X-BAPI-SIGN': process.env[V],
-      [HDR]: Buffer.from(ts + KEY + '5000' + payload).toString('base64'),
-      ...(get ? {} : { 'Content-Type': 'application/json' }),
-    },
-    ...(get ? {} : { body }),
-  });
-  console.log(res.status, await res.text());
-})();
+const method = (process.env.METHOD || 'GET').toUpperCase();
+const body = process.env.BODY || '';
+// The query lives on TARGET and nowhere else. Sending it on the URL and again
+// in the signed bytes is the mistake this shape exists to prevent.
+const [path, query = ''] = (process.env.TARGET || '').split('?');
+const get = method === 'GET';
+const payload = get ? query : body;
+
+const ts = Date.now().toString();
+const res = await fetch(`https://${HOST}${path}` + (query ? '?' + query : ''), {
+  method,
+  headers: {
+    'X-BAPI-API-KEY': KEY,
+    'X-BAPI-TIMESTAMP': ts,
+    'X-BAPI-RECV-WINDOW': '5000',
+    'X-BAPI-SIGN': process.env[V],
+    [HDR]: Buffer.from(ts + KEY + '5000' + payload).toString('base64'),
+    ...(get ? {} : { 'Content-Type': 'application/json' }),
+  },
+  ...(get ? {} : { body }),
+});
+console.log(res.status, await res.text());
 EOF
 ```
 
-To place an order instead, those two lines become:
+Every call after that is one line:
 
-```js
-const method = 'POST';
-const target = '/v5/order/create';
-const body   = JSON.stringify({ category: 'linear', symbol: 'BTCUSDT', side: 'Buy',
-                                orderType: 'Limit', qty: '0.001', price: '50000',
-                                timeInForce: 'PostOnly' });
+```sh
+METHOD=GET TARGET='/v5/account/wallet-balance?accountType=UNIFIED' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.5.mjs
+
+METHOD=GET TARGET='/v5/position/list?category=linear&settleCoin=USDT' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.5.mjs
+
+METHOD=POST TARGET=/v5/order/create \
+  BODY='{"category":"linear","symbol":"BTCUSDT","side":"Buy","orderType":"Limit","qty":"0.001","price":"50000","timeInForce":"PostOnly"}' \
+  node ~/.openclaw/workspace/tools/bybit/bybit-1.0.5.mjs
 ```
 
-A POST carries no query string, so `target` stays bare and everything goes in
-`body`.
+`TARGET` carries the path and, on a GET, its query. A POST leaves `TARGET`
+bare and puts everything in `BODY`. If the account holds more than one Bybit
+credential the script refuses and lists them; pick with
+`BYBIT_CRED=CRED_BYBIT_MAINNET_SECRET`.
+
+Public market data needs none of this — no key, no timestamp, no signature:
+
+```sh
+curl -sS 'https://api.bybit.com/v5/market/tickers?category=linear&symbol=BTCUSDT'
+```
 
 **When this block and reality disagree, reality wins.** Run it as given. If
 something in it does not match what you actually find — a variable that is not
