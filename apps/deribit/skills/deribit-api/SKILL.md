@@ -260,7 +260,9 @@ Re-run the HTTP exchange and re-subscribe when the token expires.
   called `/api/v2/public/auth` without the placeholder in the query string.
   Most likely you tried the `refresh_token` grant; use `client_credentials`.
 - **`13004 invalid_credentials`** — the enrolled client secret does not match
-  the `client_id` you sent, or the key was revoked on Deribit's side.
+  the `client_id` you sent, or you sent a masked value for `client_id` instead
+  of the one in `_META`, or the key was revoked on Deribit's side. Print the
+  `client_id` you actually sent before assuming the secret is wrong.
 - **`13009 unauthorized`** — the access token expired or was not sent. Re-run
   step 1.
 - **`11044 not_open_order`** — the order was already filled or cancelled.

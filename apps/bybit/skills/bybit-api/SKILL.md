@@ -51,6 +51,13 @@ One credential, and one piece of public metadata that comes with it.
   the key pair and cannot authenticate anything on its own. You send it in a
   header yourself.
 
+**Send the api key verbatim.** It goes in `X-BAPI-API-KEY` and it is also the
+second field of the signed string, so it has to be the real value in both. The
+habit of masking a credential in a command you are about to show someone —
+`***`, `<redacted>`, `$KEY` left unexpanded — breaks the call here, and Bybit
+reports it as a signature problem rather than a key problem. Mask it when you
+QUOTE the command afterwards, never in the request.
+
 The exact variable names depend on the label chosen at enrolment; read them
 from the environment rather than assuming.
 
@@ -425,7 +432,9 @@ real limitation, not something to work around by asking for the secret.
 - **`retCode: 10002`, `invalid request, please check your timestamp`** — your
   timestamp is outside `recv_window`. Use milliseconds, not seconds.
 - **`retCode: 10003`, `API key is invalid`** — the `api_key` in `_META` does not
-  match the enrolled secret, or the key was revoked on Bybit's side.
+  match the enrolled secret, or the key was revoked on Bybit's side, or you sent
+  a masked value in `X-BAPI-API-KEY`. Print the header you actually sent before
+  you start re-deriving the signature.
 - **`retCode: 110043`, leverage not modified** and similar — Bybit returns many
   non-zero `retCode`s that are informational. Read `retMsg` before treating one
   as fatal.
@@ -436,9 +445,11 @@ real limitation, not something to work around by asking for the secret.
   the answer: it names the placeholder to use and lists exactly where it looked
   for it. Read it and retry. The request never reached Bybit.
 - **HTTP 401 with an EMPTY body**, `server: Openresty`, CloudFront headers, is
-  BYBIT rejecting your signature at its edge before it writes a JSON body. The
-  proxy did its job; your signed bytes do not match what you sent. Check the
-  timestamp discipline above first.
+  BYBIT rejecting the request at its edge before it writes a JSON body. Either
+  the signed bytes do not match what you sent, or `X-BAPI-API-KEY` is not a real
+  key. The same bad key answers 10003 on some endpoints and an empty 401 on
+  others, so check the key header before you re-derive the signature; after
+  that, the timestamp discipline above.
 - **HTTP 200 with a non-zero `retCode`** is Bybit's application layer — the
   request authenticated and the venue disagreed with its contents.
 
