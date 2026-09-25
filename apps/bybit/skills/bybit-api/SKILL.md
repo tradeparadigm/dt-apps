@@ -124,68 +124,69 @@ key order, added whitespace, a float rendered differently — the signature is
 over a string Bybit never sees and you get `10004 error sign!`. Serialise the
 body **once**, into a string, sign that string, and send that same string.
 
-### Copy one of these and run it
+### The request
 
-These work as written. Take one, change the path and the parameters, send it.
-Do not rebuild the request from the description above, and do not write
-yourself a client — every line here is the way it is because the obvious
-alternative fails on some machines, and you find out only when a signature is
-rejected.
-
-Once per session, derive everything from the credential's variable NAME. No
-secret is printed — only the name, which is what decides the header:
+One block. Change the three lines between the markers and run it. Everything
+else is the same for every Bybit call you will ever make, so do not rewrite it,
+and do not build the request out of `curl` — a JSON body inside shell quoting
+cannot survive an apostrophe or a computed value, and that is exactly where
+byte-exactness dies.
 
 ```sh
-VAR=$(node -p "Object.keys(process.env).find(k => k.startsWith('CRED_BYBIT') && !k.endsWith('_META'))")
-KEY=$(node -e "process.stdout.write(JSON.parse(process.env[process.argv[1] + '_META']).api_key)" "$VAR")
-SIGN_HEADER="X-Dime-Sign-$(printf '%s' "${VAR#CRED_}" | tr 'A-Z_' 'a-z-')"
-PLACEHOLDER=$(printenv "$VAR")
-HOST=api.bybit.com    # api-testnet.bybit.com or api-demo.bybit.com if VAR says so
+node <<'EOF'
+(async () => {
+  const V = Object.keys(process.env).find(k => k.startsWith('CRED_BYBIT') && !k.endsWith('_META'));
+  const KEY = JSON.parse(process.env[V + '_META']).api_key;
+  const HDR = 'X-Dime-Sign-' + V.replace(/^CRED_/, '').toLowerCase().replaceAll('_', '-');
+  const HOST = /TESTNET/.test(V) ? 'api-testnet.bybit.com'
+             : /DEMO/.test(V)    ? 'api-demo.bybit.com'
+             :                     'api.bybit.com';
+
+  // ---- change these three ----
+  const method  = 'GET';
+  const path    = '/v5/position/list';
+  const payload = 'category=linear&settleCoin=USDT';   // GET: query string. POST: JSON.stringify(...)
+  // ----------------------------
+
+  const ts = Date.now().toString();
+  const get = method === 'GET';
+  const res = await fetch(`https://${HOST}${path}` + (get && payload ? '?' + payload : ''), {
+    method,
+    headers: {
+      'X-BAPI-API-KEY': KEY,
+      'X-BAPI-TIMESTAMP': ts,
+      'X-BAPI-RECV-WINDOW': '5000',
+      'X-BAPI-SIGN': process.env[V],
+      [HDR]: Buffer.from(ts + KEY + '5000' + payload).toString('base64'),
+      ...(get ? {} : { 'Content-Type': 'application/json' }),
+    },
+    ...(get ? {} : { body: payload }),
+  });
+  console.log(res.status, await res.text());
+})();
+EOF
 ```
 
-A signed GET — read your USDT perpetual positions:
+To place an order instead, those three lines become:
 
-```sh
-Q='category=linear&settleCoin=USDT'
-TS=$(node -p 'Date.now()')
-B64=$(printf '%s' "${TS}${KEY}5000${Q}" | base64 | tr -d '\n')
-curl -sS -w '\nHTTP %{http_code}\n' "https://$HOST/v5/position/list?$Q" \
-  -H "X-BAPI-API-KEY: $KEY" \
-  -H "X-BAPI-TIMESTAMP: $TS" \
-  -H "X-BAPI-RECV-WINDOW: 5000" \
-  -H "X-BAPI-SIGN: $PLACEHOLDER" \
-  -H "$SIGN_HEADER: $B64"
+```js
+const method  = 'POST';
+const path    = '/v5/order/create';
+const payload = JSON.stringify({ category: 'linear', symbol: 'BTCUSDT', side: 'Buy',
+                                 orderType: 'Limit', qty: '0.001', price: '50000',
+                                 timeInForce: 'PostOnly' });
 ```
 
-A signed POST — place an order:
+Why it is shaped this way:
 
-```sh
-BODY='{"category":"linear","symbol":"BTCUSDT","side":"Buy","orderType":"Limit","qty":"0.001","price":"50000","timeInForce":"PostOnly"}'
-TS=$(node -p 'Date.now()')
-B64=$(printf '%s' "${TS}${KEY}5000${BODY}" | base64 | tr -d '\n')
-curl -sS -w '\nHTTP %{http_code}\n' "https://$HOST/v5/order/create" \
-  -H 'Content-Type: application/json' \
-  -H "X-BAPI-API-KEY: $KEY" \
-  -H "X-BAPI-TIMESTAMP: $TS" \
-  -H "X-BAPI-RECV-WINDOW: 5000" \
-  -H "X-BAPI-SIGN: $PLACEHOLDER" \
-  -H "$SIGN_HEADER: $B64" \
-  --data "$BODY"
-```
-
-Why each awkward bit is there:
-
-- `$Q` and `$BODY` each appear twice — once signed, once sent. That is the
-  byte-exactness this page is about. Inline either one and you have two
-  serialisations that can differ.
-- `node -p 'Date.now()'`, not `date +%s%3N`. `%3N` is GNU-only and prints a
-  literal `3N` on BSD and macOS, giving a timestamp Bybit rejects.
-- `base64 | tr -d '\n'`, not `base64 -w0`. The `-w` flag is GNU-only.
-- `$SIGN_HEADER` is built from the variable name, never by splitting the
-  placeholder — see the warning in `AGENTS.md`.
-- `-w '\nHTTP %{http_code}\n'` prints the status. Without it `-sS` gives you
-  the body only, and you cannot tell an empty-bodied 401 from a 200 that
-  returned nothing.
+- `payload` is built once and used twice — signed, then sent. Nothing
+  re-serialises it in between, which is the failure this whole page is about.
+- The credential is read from the environment by the block itself, so the api
+  key is never something you type, quote or mask.
+- `HDR` comes from the variable name, never from splitting the placeholder —
+  see the warning in `AGENTS.md`.
+- `res.status` is printed. An empty-bodied 401 and a 200 with an empty result
+  are indistinguishable otherwise.
 
 The proxy computes HMAC-SHA256 over your bytes with the secret, writes the hex
 digest into `X-BAPI-SIGN` in place of the placeholder, strips the
