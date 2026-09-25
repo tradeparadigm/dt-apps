@@ -126,15 +126,20 @@ DETAIL_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9_]{0,62}[a-z0-9]$|^[a-z0-9]$")
 # and has no case for anything else, so the credential would be accepted and
 # then never signed.
 MODES = {"inject", "replace", "sign"}
-SCHEMES = {"hmac-sha256", "ecdsa-p256", "stark"}
+# Mirrors datastore.ValidSignScheme, which mirrors the proxy's signer
+# registry. A scheme missing here blocks an app the server would have loaded;
+# one missing there takes a customer's whole proxy config out of service. The
+# lists have to be added to together, and nothing enforces that from this
+# repository — see README, "Where this disagrees with the server".
+SCHEMES = {"hmac-sha256", "ecdsa-p256", "stark", "secp256k1"}
 ENCODINGS = {"hex", "base64", "felt-pair"}
 
-# maxAllowedRoutesPerCredential in web-api/services/credentials.go. Routes
-# SUBTRACT — more of them narrow a credential rather than widening it — so this
-# is a readability and config-size bound, not a grant boundary. It reads 64
-# from dime-terminal#233; until that lands the consumer still says 20 and
-# binance is refused from the live catalogue, isolated to itself by design.
-MAX_ROUTES = 64
+# datastore.MaxAllowedRoutes and MaxAllowedHosts. Both are set where the
+# number stops being possible for a key that belongs to one venue rather than
+# where it stops being convenient: routes only ever NARROW a credential, so a
+# limit on them caps how precisely an owner may scope their own key.
+MAX_ROUTES = 1000
+MAX_HOSTS = 100
 
 # Every key the consumer's structs declare. Its YAML decoder runs with
 # KnownFields(true), so anything outside these refuses the app outright — a
@@ -230,6 +235,12 @@ def check_environments(man: str, envs: object, failures: list[str]) -> None:
     if not isinstance(envs, list) or not envs:
         failures.append(f"{man}: at least one environment is required")
         return
+    # Each environment is a host a credential may be scoped to, and the server
+    # caps how many one credential carries.
+    if len(envs) > MAX_HOSTS:
+        failures.append(
+            f"{man}: {len(envs)} environments, and a credential may name {MAX_HOSTS} hosts"
+        )
     for i, env in enumerate(envs):
         check_known(man, f"environments[{i}]", env, "environment", failures)
         row = require(man, f"environments[{i}]", env, ("id", "label", "host"), failures)
