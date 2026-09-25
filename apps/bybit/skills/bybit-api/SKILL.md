@@ -133,13 +133,23 @@ body **once**, into a string, sign that string, and send that same string.
 
 ### The request
 
-**Write this file once, at the start of the task, then call it for every
-request.** Do not paste it per call and do not build the request out of `curl`
-— a JSON body inside shell quoting cannot survive an apostrophe or a computed
-value, which is exactly where byte-exactness dies.
+**Check for the helper before you build anything**, then call it for every
+request. Do not paste a block per call, and do not build the request out of
+`curl` — a JSON body inside shell quoting cannot survive an apostrophe or a
+computed value, which is exactly where byte-exactness dies.
 
 ```sh
-cat > /tmp/bybit.mjs <<'EOF'
+ls ~/.openclaw/workspace/tools/bybit/bybit-1.0.5.mjs
+```
+
+If that file is there, an earlier chat already wrote it — skip to the calls
+below. If it is missing, or only an older version is present, write it now and
+delete any older one: the version in the name is the skill version it came
+from, and a bump means this file changed.
+
+```sh
+mkdir -p ~/.openclaw/workspace/tools/bybit
+cat > ~/.openclaw/workspace/tools/bybit/bybit-1.0.5.mjs <<'EOF'
 const all = Object.keys(process.env).filter(k => (process.env[k] || '').startsWith('sign-bybit'));
 const V = process.env.BYBIT_CRED || all[0];
 if (!V) { console.error('no Bybit sign- credential in the environment'); process.exit(2); }
@@ -181,13 +191,13 @@ EOF
 Every call after that is one line:
 
 ```sh
-METHOD=GET TARGET='/v5/account/wallet-balance?accountType=UNIFIED' node /tmp/bybit.mjs
+METHOD=GET TARGET='/v5/account/wallet-balance?accountType=UNIFIED' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.5.mjs
 
-METHOD=GET TARGET='/v5/position/list?category=linear&settleCoin=USDT' node /tmp/bybit.mjs
+METHOD=GET TARGET='/v5/position/list?category=linear&settleCoin=USDT' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.5.mjs
 
 METHOD=POST TARGET=/v5/order/create \
   BODY='{"category":"linear","symbol":"BTCUSDT","side":"Buy","orderType":"Limit","qty":"0.001","price":"50000","timeInForce":"PostOnly"}' \
-  node /tmp/bybit.mjs
+  node ~/.openclaw/workspace/tools/bybit/bybit-1.0.5.mjs
 ```
 
 `TARGET` carries the path and, on a GET, its query. A POST leaves `TARGET`

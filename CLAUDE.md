@@ -3,6 +3,44 @@
 The README says what an app is and what the manifest means. This is the part
 the checker cannot catch.
 
+## Give the agent a helper to cache, not a block to retype
+
+Building a signed request from a description costs an agent real time, and it
+pays that cost again in every chat. Left to itself it writes a throwaway
+script each time — we watched one do it three separate ways in an afternoon.
+
+So a skill whose venue needs signing hands over a helper the agent keeps:
+
+```
+~/.openclaw/workspace/tools/<app-id>/<app-id>-<skill-version>.mjs
+```
+
+The workspace persists across chats. The skills directory does NOT — a publish
+replaces it wholesale — so nothing an agent writes there survives an update.
+
+The skill version is in the FILENAME, and that is the whole staleness
+mechanism. Bump `version:` and the name no longer matches, so the agent writes
+the new one and deletes the old without needing to work out whether its cached
+copy is still right. There is no cache-invalidation logic to get wrong because
+there is no cache invalidation.
+
+Tell the agent to check for the file first, to delete and re-derive rather
+than patch when it breaks, and to take its parameters from the environment so
+one file serves every call:
+
+```sh
+METHOD=POST TARGET=/v5/order/create BODY='{...}' node <the helper>
+```
+
+`ACCOUNT.md` beside it holds facts about that account — which credential
+variable, which products the key may trade, lot sizes already looked up.
+Nothing an agent CONCLUDED about the venue goes in either file: that belongs
+in the skill, as a pull request here, or you get one account quietly behaving
+differently from every other with nothing to diff.
+
+`AGENTS.md` in dime-terminal states this for every app, so a skill only needs
+to name its own file and version.
+
 ## Anything an agent must run verbatim needs an escape hatch
 
 A skill that says "run this exactly" and then hands over a line that is wrong
