@@ -111,6 +111,30 @@ Write the skill for an agent that does not know whether a proxy is in front of
 it — say what to sign and where the signature goes, not who produces it. That
 is what makes a skill here replaceable by one the venue writes itself.
 
+## Where this disagrees with the server
+
+`scripts/check_structure.py` is a second implementation of rules the server
+already has, in another language in another repository. Nothing enforces that
+the two agree, and they have drifted seven times so far — a `developer_url`
+accepted here and refused there, a whitespace class wider in Python than in
+Go, an empty field read as absent on one side only, and a signing scheme the
+server had learned and this had not.
+
+Drift in either direction costs something. Laxer here and an app merges and
+then goes missing from the catalogue, because the server drops what it cannot
+load rather than failing. Stricter here and a legitimate app is blocked for
+no reason.
+
+So when you change a rule, change the comment that names its counterpart, and
+add a case to `scripts/test_check_structure.py` — the branding rules and the
+signing branch both went unexercised until a real app tripped them.
+
+The fix is to stop having two. The server's loader is a parser for a public
+schema describing public APIs; nothing in it is private. Once it lives in a
+module this repository can import, CI runs the loader itself and disagreement
+stops being possible. Until then, this file is the copy and the server is the
+original.
+
 ## What still needs a change to DIME Terminal
 
 A signing scheme or delivery mode the proxy has no case for, or a bump to

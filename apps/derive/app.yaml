@@ -1,0 +1,80 @@
+# Derive (v2, formerly Lyra).
+#
+# The venue that shows an ETHEREUM WALLET KEY as the credential. Derive has no
+# API key and no shared secret: every private call is authenticated by a
+# secp256k1 signature the caller produces, and the venue recovers the signing
+# address from it rather than being told who signed.
+#
+# ONE KEY, TWO DIGESTS, and the skill teaches both. A private REST call signs
+# the millisecond timestamp under EIP-191; an order or transfer signs an
+# EIP-712 action hash. The proxy sees neither shape — the agent computes the
+# keccak digest and hands over 32 bytes, which is Derive's own model rather
+# than something invented here: their signing library calls unsafe_sign_hash
+# on exactly that.
+#
+# A WILDCARD ROUTE, WHICH IS USUALLY THE WRONG ANSWER. The rule that matches a
+# request is also the rule that REQUIRES its placeholder, so a wildcard over a
+# venue's whole API turns its public endpoints into refusals. Derive is the
+# case where it is right: public and private are separate path prefixes, and
+# nothing under /private is callable unsigned — verified against the live API,
+# where /public/get_time answers 200 with no headers and /private/get_account
+# answers 401. Enumerating the eighty-odd private endpoints would add no
+# narrowing and would need a pull request here every time Derive adds one.
+schema_version: 1
+id: derive
+version: 1.0.0
+name: Derive
+blurb: Trade onchain options and perps on Derive with a wallet key your agent never holds.
+description: |
+  Derive is an onchain derivatives exchange — options, perpetuals and spot,
+  settled on its own L2.
+
+  Authentication is a signature rather than a secret. Your wallet key stays
+  sealed in the credential proxy; the agent builds the digest Derive expects,
+  asks the proxy to sign it, and sends the result. The key is never in the
+  agent's context, its logs, or its transcript.
+
+  Your **owner address** and the **signer address** are not secrets and are
+  stored as ordinary details, because the agent has to send them alongside
+  every signed action. Where they differ, the signer is a session key you
+  registered against the owner account.
+developer: Derive
+developer_url: https://www.derive.xyz
+tint: "#e8fc6c"
+environments:
+  - id: mainnet
+    label: Mainnet
+    host: api.lyra.finance
+  - id: testnet
+    label: Testnet
+    host: api-demo.lyra.finance
+exclusive_credential_types: true
+credential_types:
+  - id: wallet-key
+    label: Wallet key (signing)
+    slug: wallet-key
+    secret_label: Wallet private key
+    detail_fields:
+      - key: owner
+        label: Owner address
+        placeholder: "0x1a2b…"
+      - key: signer
+        label: Signer address
+        placeholder: "0x1a2b… (the owner address, unless you use a session key)"
+      - key: subaccount_id
+        label: Subaccount id
+        placeholder: "12345"
+    routes:
+      - path: /private/*
+        methods: [POST]
+    delivery:
+      mode: sign
+      scheme: secp256k1
+      encoding: hex
+      match_headers:
+        - X-LyraSignature
+      match_body: true
+    summary: >-
+      Sets: signing credential, secp256k1, r||s||v as hex, substituted into
+      the X-LyraSignature header and the request body, on POST to /private/*
+      only. No public endpoint is touched.

@@ -179,6 +179,75 @@ class TestBranding(unittest.TestCase):
         )
 
 
+# Nothing in the fixture signs, which is how a scheme the server accepts sat
+# refused here until a real app tried to use it. These swap the fixture's
+# inject delivery for a signing one.
+class TestSigning(unittest.TestCase):
+    INJECT = (
+        "    delivery:\n"
+        "      mode: inject\n"
+        "      header: X-Api-Key\n"
+    )
+
+    def sign(self, scheme, encoding="hex"):
+        block = (
+            "    delivery:\n"
+            "      mode: sign\n"
+            f"      scheme: {scheme}\n"
+            f"      encoding: {encoding}\n"
+            "      match_body: true\n"
+        )
+        return lambda src: src.replace(self.INJECT, block)
+
+    def test_every_scheme_the_server_dispatches_on(self):
+        # Mirrors datastore.ValidSignScheme. A name here the server refuses is
+        # an app that merges and vanishes; one there that is missing here is a
+        # legitimate app blocked.
+        for scheme in ("hmac-sha256", "ecdsa-p256", "stark", "secp256k1"):
+            with self.subTest(scheme=scheme):
+                code, out = check(self.sign(scheme))
+                self.assertEqual(code, 0, out)
+
+    def test_every_encoding_the_server_writes_back(self):
+        for encoding in ("hex", "base64", "felt-pair"):
+            with self.subTest(encoding=encoding):
+                code, out = check(self.sign("stark", encoding))
+                self.assertEqual(code, 0, out)
+
+    def test_a_scheme_the_server_does_not_know_is_refused(self):
+        code, out = check(self.sign("ed25519"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("ed25519", out)
+
+    def test_an_encoding_the_server_does_not_know_is_refused(self):
+        code, out = check(self.sign("stark", "der"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("der", out)
+
+
+class TestScopeCaps(unittest.TestCase):
+    """Set where the number stops being possible, mirroring the server."""
+
+    def envs(self, n):
+        rows = "".join(
+            f"  - id: env{i}\n    label: Env {i}\n    host: h{i}.example.com\n"
+            for i in range(n)
+        )
+        return lambda src: src.replace(
+            "environments:\n  - id: mainnet\n    label: Mainnet\n    host: api.example.com\n",
+            "environments:\n" + rows,
+        )
+
+    def test_a_hundred_hosts_is_fine(self):
+        code, out = check(self.envs(100))
+        self.assertEqual(code, 0, out)
+
+    def test_one_host_over_is_refused(self):
+        code, out = check(self.envs(101))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("101 environments", out)
+
+
 class TestManifest(unittest.TestCase):
     def test_an_unknown_top_level_field_is_refused(self):
         code, out = check(append("not_a_field: 1\n"))
