@@ -143,12 +143,12 @@ ls ~/.openclaw/workspace/tools/bybit/bybit-1.0.5.mjs
 ```
 
 If that file is there, an earlier chat already wrote it — skip to the calls
-below. If it is missing, or only an older version is present, write it now and
-delete any older one: the version in the name is the skill version it came
-from, and a bump means this file changed.
+below. If it is not, run this. The `rm` clears any version an older skill
+left, so there is nothing to compare and no way to end up with two:
 
 ```sh
 mkdir -p ~/.openclaw/workspace/tools/bybit
+rm -f ~/.openclaw/workspace/tools/bybit/bybit-*.mjs
 cat > ~/.openclaw/workspace/tools/bybit/bybit-1.0.5.mjs <<'EOF'
 const all = Object.keys(process.env).filter(k => (process.env[k] || '').startsWith('sign-bybit'));
 const V = process.env.BYBIT_CRED || all[0];
