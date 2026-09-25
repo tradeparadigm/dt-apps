@@ -139,7 +139,7 @@ request. Do not paste a block per call, and do not build the request out of
 computed value, which is exactly where byte-exactness dies.
 
 ```sh
-ls ~/.openclaw/workspace/tools/bybit/bybit-1.0.5.mjs
+ls ~/.openclaw/workspace/tools/bybit/bybit-1.0.6.mjs
 ```
 
 If that file is there, an earlier chat already wrote it — skip to the calls
@@ -149,7 +149,7 @@ left, so there is nothing to compare and no way to end up with two:
 ```sh
 mkdir -p ~/.openclaw/workspace/tools/bybit
 rm -f ~/.openclaw/workspace/tools/bybit/bybit-*.mjs
-cat > ~/.openclaw/workspace/tools/bybit/bybit-1.0.5.mjs <<'EOF'
+cat > ~/.openclaw/workspace/tools/bybit/bybit-1.0.6.mjs <<'EOF'
 const all = Object.keys(process.env).filter(k => (process.env[k] || '').startsWith('sign-bybit'));
 const V = process.env.BYBIT_CRED || all[0];
 if (!V) { console.error('no Bybit sign- credential in the environment'); process.exit(2); }
@@ -191,13 +191,13 @@ EOF
 Every call after that is one line:
 
 ```sh
-METHOD=GET TARGET='/v5/account/wallet-balance?accountType=UNIFIED' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.5.mjs
+METHOD=GET TARGET='/v5/account/wallet-balance?accountType=UNIFIED' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.6.mjs
 
-METHOD=GET TARGET='/v5/position/list?category=linear&settleCoin=USDT' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.5.mjs
+METHOD=GET TARGET='/v5/position/list?category=linear&settleCoin=USDT' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.6.mjs
 
 METHOD=POST TARGET=/v5/order/create \
   BODY='{"category":"linear","symbol":"BTCUSDT","side":"Buy","orderType":"Limit","qty":"0.001","price":"50000","timeInForce":"PostOnly"}' \
-  node ~/.openclaw/workspace/tools/bybit/bybit-1.0.5.mjs
+  node ~/.openclaw/workspace/tools/bybit/bybit-1.0.6.mjs
 ```
 
 `TARGET` carries the path and, on a GET, its query. A POST leaves `TARGET`
@@ -258,16 +258,35 @@ call is not harmless here: the proxy is not watching those paths, so your
 placeholder would go to Bybit verbatim.
 
 **There is a third kind, and it is the one that will waste your time.** Bybit
-has authenticated families outside that list — `/v5/spot-lever-token/*` is one
-— and this credential CANNOT sign them. The proxy substitutes only on a path
-one of its rules matches, so on any other path your placeholder travels to
-Bybit as literal text and Bybit rejects it. Your signing was fine. Re-deriving
-it will not help, and neither will retrying.
+adds authenticated families over time, and this credential can sign only the
+paths above. On any other path the proxy substitutes nothing, so your
+placeholder travels to Bybit as literal text and is rejected. Your signing was
+fine; re-deriving it will not help, and neither will retrying.
 
-Check the path against the list above BEFORE you conclude anything about your
-signature. If the call is one the user needs, say so plainly: the credential's
+Check the path against the list BEFORE you conclude anything about your
+signature. If the user needs that call, say so plainly: the credential's
 allowed routes have to be widened where it was enrolled, which is their action
 and not something you can work around.
+
+### Telling an unsignable path from one that does not exist
+
+Both look like a failure you did not cause, and they need opposite answers, so
+do not guess between them. Three calls settle it — the same request unsigned,
+then signed, then a path you know is signable as a control:
+
+```sh
+curl -sS -w '\nHTTP %{http_code}\n' 'https://api.bybit.com/v5/<the path in question>'
+METHOD=GET TARGET='/v5/<the path in question>' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.6.mjs
+METHOD=GET TARGET='/v5/account/wallet-balance?accountType=UNIFIED' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.6.mjs
+```
+
+- **Same answer signed and unsigned, while the control returns 200** — the
+  path does not exist. Bybit's router dropped it before any auth check. A bare
+  `404` with an empty body is this. Check the endpoint name; nothing about the
+  credential will fix it.
+- **Unsigned and signed differ, and the signed one is rejected** — the path
+  exists and is authenticated, and the credential cannot sign it. This is the
+  routes problem above.
 
 ## Market data (public, unsigned)
 
@@ -528,11 +547,14 @@ real limitation, not something to work around by asking for the secret.
 - **`retCode: 10004`, `error sign!`** — the string you signed is not the string
   Bybit reconstructed. Almost always the body was re-serialised after signing,
   or the query string order changed, or `recv_window` in the header differs from
-  the one you concatenated. **Check the path first**: on a private family
-  outside the signed list — `/v5/spot-lever-token/*` and friends — the proxy
-  never substituted at all and Bybit is comparing against the literal
-  placeholder. Nothing about your signing is wrong and no amount of redoing it
-  will help.
+  the one you concatenated. **Check the path first**: on a family outside the
+  signed list the proxy never substituted at all, and Bybit is comparing
+  against the literal placeholder. Nothing about your signing is wrong and no
+  amount of redoing it will help.
+- **HTTP 404 with an empty body** — the path does not exist. Bybit's router
+  dropped the request before any auth check, so this says nothing about your
+  credential. Confirm it with the three calls under "Telling an unsignable path
+  from one that does not exist" rather than assuming either way.
 - **`retCode: 10002`, `invalid request, please check your timestamp`** — your
   timestamp is outside `recv_window`. Use milliseconds, not seconds.
 - **`retCode: 10003`, `API key is invalid`** — the `api_key` in `_META` does not
