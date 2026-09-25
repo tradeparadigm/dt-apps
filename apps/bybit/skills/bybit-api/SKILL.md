@@ -124,25 +124,71 @@ key order, added whitespace, a float rendered differently — the signature is
 over a string Bybit never sees and you get `10004 error sign!`. Serialise the
 body **once**, into a string, sign that string, and send that same string.
 
-### Worked example
+### The request
 
-Read your USDT perpetual positions.
+One block. Change the three lines between the markers and run it. Everything
+else is the same for every Bybit call you will ever make, so do not rewrite it,
+and do not build the request out of `curl` — a JSON body inside shell quoting
+cannot survive an apostrophe or a computed value, and that is exactly where
+byte-exactness dies.
 
+```sh
+node <<'EOF'
+(async () => {
+  // Picked by VALUE, not by name: an empty CRED_BYBIT can sit beside the real
+  // one, and matching on the name alone selects it depending on env order.
+  const V = Object.keys(process.env).find(k => (process.env[k] || '').startsWith('sign-bybit'));
+  const KEY = JSON.parse(process.env[V + '_META']).api_key;
+  const HDR = 'X-Dime-Sign-' + V.replace(/^CRED_/, '').toLowerCase().replaceAll('_', '-');
+  const HOST = /TESTNET/.test(V) ? 'api-testnet.bybit.com'
+             : /DEMO/.test(V)    ? 'api-demo.bybit.com'
+             :                     'api.bybit.com';
+
+  // ---- change these three ----
+  const method  = 'GET';
+  const path    = '/v5/position/list';
+  const payload = 'category=linear&settleCoin=USDT';   // GET: query string. POST: JSON.stringify(...)
+  // ----------------------------
+
+  const ts = Date.now().toString();
+  const get = method === 'GET';
+  const res = await fetch(`https://${HOST}${path}` + (get && payload ? '?' + payload : ''), {
+    method,
+    headers: {
+      'X-BAPI-API-KEY': KEY,
+      'X-BAPI-TIMESTAMP': ts,
+      'X-BAPI-RECV-WINDOW': '5000',
+      'X-BAPI-SIGN': process.env[V],
+      [HDR]: Buffer.from(ts + KEY + '5000' + payload).toString('base64'),
+      ...(get ? {} : { 'Content-Type': 'application/json' }),
+    },
+    ...(get ? {} : { body: payload }),
+  });
+  console.log(res.status, await res.text());
+})();
+EOF
 ```
-GET /v5/position/list?category=linear&settleCoin=USDT
+
+To place an order instead, those three lines become:
+
+```js
+const method  = 'POST';
+const path    = '/v5/order/create';
+const payload = JSON.stringify({ category: 'linear', symbol: 'BTCUSDT', side: 'Buy',
+                                 orderType: 'Limit', qty: '0.001', price: '50000',
+                                 timeInForce: 'PostOnly' });
 ```
 
-1. Take a millisecond timestamp: `1735689600000`.
-2. Build the signed string — timestamp, then api key, then recv window, then
-   the query string:
+Why it is shaped this way:
 
-   ```
-   1735689600000<api_key>5000category=linear&settleCoin=USDT
-   ```
-
-3. Base64-encode those bytes and send them in `X-Dime-Sign-<label>`, where
-   `<label>` is the credential's label.
-4. Put the `sign-` placeholder in `X-BAPI-SIGN`.
+- `payload` is built once and used twice — signed, then sent. Nothing
+  re-serialises it in between, which is the failure this whole page is about.
+- The credential is read from the environment by the block itself, so the api
+  key is never something you type, quote or mask.
+- `HDR` comes from the variable name, never from splitting the placeholder —
+  see the warning in `AGENTS.md`.
+- `res.status` is printed. An empty-bodied 401 and a 200 with an empty result
+  are indistinguishable otherwise.
 
 The proxy computes HMAC-SHA256 over your bytes with the secret, writes the hex
 digest into `X-BAPI-SIGN` in place of the placeholder, strips the
@@ -168,6 +214,18 @@ Everything under `/v5/market/*` is public. Send those with no auth headers at
 all — no api key, no timestamp, no signature. Adding a signature to a public
 call is not harmless here: the proxy is not watching those paths, so your
 placeholder would go to Bybit verbatim.
+
+**There is a third kind, and it is the one that will waste your time.** Bybit
+has authenticated families outside that list — `/v5/spot-lever-token/*` is one
+— and this credential CANNOT sign them. The proxy substitutes only on a path
+one of its rules matches, so on any other path your placeholder travels to
+Bybit as literal text and Bybit rejects it. Your signing was fine. Re-deriving
+it will not help, and neither will retrying.
+
+Check the path against the list above BEFORE you conclude anything about your
+signature. If the call is one the user needs, say so plainly: the credential's
+allowed routes have to be widened where it was enrolled, which is their action
+and not something you can work around.
 
 ## Market data (public, unsigned)
 
@@ -428,7 +486,11 @@ real limitation, not something to work around by asking for the secret.
 - **`retCode: 10004`, `error sign!`** — the string you signed is not the string
   Bybit reconstructed. Almost always the body was re-serialised after signing,
   or the query string order changed, or `recv_window` in the header differs from
-  the one you concatenated.
+  the one you concatenated. **Check the path first**: on a private family
+  outside the signed list — `/v5/spot-lever-token/*` and friends — the proxy
+  never substituted at all and Bybit is comparing against the literal
+  placeholder. Nothing about your signing is wrong and no amount of redoing it
+  will help.
 - **`retCode: 10002`, `invalid request, please check your timestamp`** — your
   timestamp is outside `recv_window`. Use milliseconds, not seconds.
 - **`retCode: 10003`, `API key is invalid`** — the `api_key` in `_META` does not
