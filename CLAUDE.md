@@ -17,9 +17,10 @@ mistake can also surface differently per endpoint — a bad Bybit key gives
 ## Public details are sent verbatim
 
 `detail_fields` are values the agent transmits, not secrets. Masking one breaks
-the call and the venue blames the signature. `AGENTS.md` in dime-terminal
-carries this rule for every app; repeat it in a skill only where the venue
-makes it easy to get wrong.
+the call, and the venue names whatever it checks first — a signature on Bybit,
+`invalid_credentials` on Deribit — rather than the field that was blanked.
+`AGENTS.md` in dime-terminal carries this rule for every app; repeat it in a
+skill only where the venue makes it easy to get wrong.
 
 ## Run it before merging
 
@@ -28,12 +29,17 @@ venue is a separate question and only a live run answers it. Probe the edges —
 empty payload, multi-parameter query, a public endpoint, a deliberate misuse
 that should be refused.
 
-## Iterating
+## Changing a skill means bumping the version
 
-A merge is in the catalogue within the refresh window, but the agent only gets
-the new text when the app is **reinstalled** — publishing replaces its skills
-directory wholesale. Merge, wait, toggle the app off and on, re-test. Batch
-fixes rather than shipping a line at a time.
+`app_versions` is keyed `(app_id, version)` and written `ON CONFLICT DO
+NOTHING`, so the first files ever installed under a version string are the ones
+kept for good. Edit `SKILL.md` and leave `version:` alone and nobody who has
+the app installed will ever see the change — reinstalling republishes the
+pinned row, not what is in the store now.
+
+So a skill change comes with a `version:` bump in `app.yaml`, every time. Then:
+merge, wait for the refresh window, take the update the app now offers, and
+re-test. Batch fixes rather than shipping a line at a time.
 
 ## Checks
 
