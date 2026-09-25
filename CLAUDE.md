@@ -3,6 +3,20 @@
 The README says what an app is and what the manifest means. This is the part
 the checker cannot catch.
 
+## Anything an agent must run verbatim needs an escape hatch
+
+A skill that says "run this exactly" and then hands over a line that is wrong
+creates a deadlock, and the agent pays for it in the turn you were trying to
+make cheap. One did: it spotted that a credential lookup depended on
+environment ordering, and spent a minute trapped between the defect and the
+instruction not to deviate.
+
+So every block that asks to be run as written also says what to do when it
+does not fit: change the smallest thing that works, run it, report the change
+in one line. Prescriptive by default, with permission to deviate and an
+obligation to say so. Being told not to think is expensive whenever the thing
+you were given is wrong.
+
 ## A failure table must list every cause of a symptom
 
 Bybit's table said an empty-bodied 401 means the signed bytes are wrong. It
