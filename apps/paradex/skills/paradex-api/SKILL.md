@@ -156,6 +156,117 @@ fails.
 — that needs no secret, so it is your job — and serialise it as exactly 32
 bytes. Base64 those bytes into the sign header.
 
+## You cannot hash this by hand
+
+SNIP-12 is Pedersen hashing over encoded felts, and working it out from the
+specification costs an agent several minutes and usually still comes out
+wrong. Install `starknet` once and let it do the hash:
+
+```sh
+cd ~/.openclaw/workspace && npm install --silent starknet@6
+```
+
+**A felt is smaller than 32 bytes.** `getMessageHash` returns a hex string
+that is routinely 61 or 63 characters, not 64, because a Starknet field
+element is under 2^252. Feeding that to `Buffer.from(hex, 'hex')` on an odd
+length silently drops a nibble and the proxy sees the wrong payload. Pad it
+left to 64 first — `hash.slice(2).padStart(64, '0')` — every time.
+
+Write the helper once and call it for every signed request. The version in the
+name is the skill version it came from; if only an older one is there, this
+file changed:
+
+```sh
+mkdir -p ~/.openclaw/workspace/tools/paradex
+rm -f ~/.openclaw/workspace/tools/paradex/paradex-*.mjs
+cat > ~/.openclaw/workspace/tools/paradex/paradex-1.1.0.mjs <<'EOF'
+import { typedData as td, shortString } from 'starknet';
+
+const V = Object.keys(process.env).find(k => (process.env[k] || '').startsWith('sign-paradex'));
+if (!V) { console.error('no Paradex sign- credential in the environment'); process.exit(2); }
+const META = JSON.parse(process.env[V + '_META'] || '{}');
+const ACCOUNT = process.env.ACCOUNT || META.account;
+const PUBKEY = process.env.PUBKEY || META.public_key;
+if (!ACCOUNT || !PUBKEY) { console.error('need account and public_key: ' + JSON.stringify(META)); process.exit(2); }
+
+const HDR = 'X-Dime-Sign-' + V.replace(/^CRED_/, '').toLowerCase().replaceAll('_', '-');
+const HOST = process.env.HOST
+  || (/NIGHTLY/i.test(V) ? 'api.nightly.paradex.trade'
+  : /TESTNET/i.test(V) ? 'api.testnet.paradex.trade'
+  : 'api.prod.paradex.trade');
+
+const cfg = await (await fetch(`https://${HOST}/v1/system/config`)).json();
+const chainId = shortString.encodeShortString(cfg.starknet_chain_id);
+const DOMAIN = { name: 'Paradex', chainId, version: '1' };
+const SND = [{ name: 'name', type: 'felt' }, { name: 'chainId', type: 'felt' }, { name: 'version', type: 'felt' }];
+
+// The only correct way to turn a felt hash into the 32 bytes the proxy wants.
+export const payload = (hash) =>
+  Buffer.from(hash.slice(2).padStart(64, '0'), 'hex').toString('base64');
+
+export async function auth() {
+  const now = Math.floor(Date.now() / 1000), exp = now + 1800;
+  const msg = {
+    domain: DOMAIN, primaryType: 'Request',
+    types: { StarkNetDomain: SND, Request: [
+      { name: 'method', type: 'felt' }, { name: 'path', type: 'felt' },
+      { name: 'body', type: 'felt' }, { name: 'timestamp', type: 'felt' },
+      { name: 'expiration', type: 'felt' }] },
+    // The literal string /v1/auth, NOT the URL you are about to call.
+    message: { method: 'POST', path: '/v1/auth', body: '', timestamp: now, expiration: exp },
+  };
+  const res = await fetch(`https://${HOST}/v1/auth/${PUBKEY}`, {
+    method: 'POST',
+    headers: {
+      'PARADEX-STARKNET-ACCOUNT': ACCOUNT,
+      'PARADEX-TIMESTAMP': String(now),
+      'PARADEX-SIGNATURE-EXPIRATION': String(exp),
+      [HDR]: payload(td.getMessageHash(msg, ACCOUNT)),
+      'PARADEX-STARKNET-SIGNATURE': process.env[V],
+    },
+  });
+  if (!res.ok) { console.error('auth ' + res.status + ' ' + await res.text()); process.exit(1); }
+  return (await res.json()).jwt_token;
+}
+
+// size and price are decimal STRINGS as the body carries them; the signed
+// message takes the same numbers scaled by 1e8, and side is 1/2 rather than
+// BUY/SELL. Two encodings of one field, and getting them out of step is the
+// usual cause of a rejected order signature.
+export function orderSig({ market, side, size, price, timestamp }) {
+  const msg = {
+    domain: DOMAIN, primaryType: 'Order',
+    types: { StarkNetDomain: SND, Order: [
+      { name: 'timestamp', type: 'felt' }, { name: 'market', type: 'felt' },
+      { name: 'side', type: 'felt' }, { name: 'orderType', type: 'felt' },
+      { name: 'size', type: 'felt' }, { name: 'price', type: 'felt' }] },
+    message: {
+      timestamp, market, side: side === 'BUY' ? '1' : '2', orderType: 'LIMIT',
+      size: String(Math.round(Number(size) * 1e8)),
+      price: String(Math.round(Number(price) * 1e8)),
+    },
+  };
+  return payload(td.getMessageHash(msg, ACCOUNT));
+}
+
+export { HOST, HDR, ACCOUNT, V };
+EOF
+```
+
+Reading is then one call:
+
+```sh
+node --input-type=module -e "
+import { auth, HOST } from '$HOME/.openclaw/workspace/tools/paradex/paradex-1.1.0.mjs';
+const jwt = await auth();
+const r = await fetch(\`https://\${HOST}/v1/account\`, { headers: { Authorization: 'Bearer ' + jwt } });
+console.log(r.status, await r.text());
+"
+```
+
+**When this block and reality disagree, reality wins.** Change the smallest
+thing that makes it work, run it, and say in one line what you changed.
+
 ```http
 POST /v1/auth/0x4f3c... HTTP/1.1
 Host: api.testnet.paradex.trade
