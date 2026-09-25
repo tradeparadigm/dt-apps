@@ -32,6 +32,10 @@ What is checked, in each case because the consumer refuses the app without it:
     already upper case and without duplicates. The consumer canonicalises and
     refuses any difference, so `get` and a repeated path are both refusals
     rather than tidy-ups.
+  * Every app states its scope on two axes: `access` (read-only or read-write)
+    and `maturity` (stable or beta). Required here though the consumer defaults
+    both, because the default is the permissive pair — an author who omitted
+    them would publish a writable, stable-looking app without having said so.
   * Optional branding — developer, developer_url, tint, icon — is safe to put
     on a page. The store takes pull requests from outside this team, so a tint
     is a hex colour and an icon is ONE SVG PATH rather than a file: a path is
