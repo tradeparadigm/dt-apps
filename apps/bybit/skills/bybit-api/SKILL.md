@@ -212,6 +212,18 @@ all — no api key, no timestamp, no signature. Adding a signature to a public
 call is not harmless here: the proxy is not watching those paths, so your
 placeholder would go to Bybit verbatim.
 
+**There is a third kind, and it is the one that will waste your time.** Bybit
+has authenticated families outside that list — `/v5/spot-lever-token/*` is one
+— and this credential CANNOT sign them. The proxy substitutes only on a path
+one of its rules matches, so on any other path your placeholder travels to
+Bybit as literal text and Bybit rejects it. Your signing was fine. Re-deriving
+it will not help, and neither will retrying.
+
+Check the path against the list above BEFORE you conclude anything about your
+signature. If the call is one the user needs, say so plainly: the credential's
+allowed routes have to be widened where it was enrolled, which is their action
+and not something you can work around.
+
 ## Market data (public, unsigned)
 
 ```
@@ -471,7 +483,11 @@ real limitation, not something to work around by asking for the secret.
 - **`retCode: 10004`, `error sign!`** — the string you signed is not the string
   Bybit reconstructed. Almost always the body was re-serialised after signing,
   or the query string order changed, or `recv_window` in the header differs from
-  the one you concatenated.
+  the one you concatenated. **Check the path first**: on a private family
+  outside the signed list — `/v5/spot-lever-token/*` and friends — the proxy
+  never substituted at all and Bybit is comparing against the literal
+  placeholder. Nothing about your signing is wrong and no amount of redoing it
+  will help.
 - **`retCode: 10002`, `invalid request, please check your timestamp`** — your
   timestamp is outside `recv_window`. Use milliseconds, not seconds.
 - **`retCode: 10003`, `API key is invalid`** — the `api_key` in `_META` does not
