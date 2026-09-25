@@ -22,7 +22,7 @@
 # narrowing and would need a pull request here every time Derive adds one.
 schema_version: 1
 id: derive
-version: 1.0.0
+version: 1.0.1
 name: Derive
 blurb: Trade onchain options and perps on Derive with a wallet key your agent never holds.
 description: |
