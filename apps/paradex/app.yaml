@@ -20,6 +20,17 @@ version: 1.0.0
 name: Paradex
 blurb: Trade perpetual futures on Paradex with a key your agent never holds.
 
+# What this app is for, on two axes that do not imply each other:
+# whether its credentials can write, and whether it has been exercised
+# enough to sit alongside the rest.
+#
+# NOT VERSIONED. These are served from the catalogue listing rather
+# than from the files an account pinned, so a change here reaches
+# everyone at the next refresh. Bumping `version` would offer every
+# installed app an update that changes no skill text.
+access: read-write
+maturity: stable
+
 # Shown on the app's detail page, above the skill. Markdown.
 description: |
   Paradex is a Starknet-based perpetual futures exchange.

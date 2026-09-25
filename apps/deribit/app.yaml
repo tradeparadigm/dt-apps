@@ -34,6 +34,17 @@ version: 1.0.1
 name: Deribit
 blurb: Trade options and futures on Deribit with a client secret your agent never holds.
 
+# What this app is for, on two axes that do not imply each other:
+# whether its credentials can write, and whether it has been exercised
+# enough to sit alongside the rest.
+#
+# NOT VERSIONED. These are served from the catalogue listing rather
+# than from the files an account pinned, so a change here reaches
+# everyone at the next refresh. Bumping `version` would offer every
+# installed app an update that changes no skill text.
+access: read-write
+maturity: beta
+
 description: |
   Deribit is a crypto derivatives exchange, best known for BTC and ETH options
   alongside perpetuals and dated futures.

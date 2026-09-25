@@ -11,6 +11,17 @@ version: 1.0.0
 name: Binance
 blurb: Trade Binance spot and USD-M futures without your agent seeing the API key or secret.
 
+# What this app is for, on two axes that do not imply each other:
+# whether its credentials can write, and whether it has been exercised
+# enough to sit alongside the rest.
+#
+# NOT VERSIONED. These are served from the catalogue listing rather
+# than from the files an account pinned, so a change here reaches
+# everyone at the next refresh. Bumping `version` would offer every
+# installed app an update that changes no skill text.
+access: read-write
+maturity: beta
+
 description: |
   Binance is a centralised exchange. This app covers **spot** trading and
   **USD-M futures** (USDT- and USDC-margined perpetuals and dated futures).
