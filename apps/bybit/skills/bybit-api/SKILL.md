@@ -151,15 +151,23 @@ node <<'EOF'
              : /DEMO/.test(V)    ? 'api-demo.bybit.com'
              :                     'api.bybit.com';
 
-  // ---- change these three ----
-  const method  = 'GET';
-  const path    = '/v5/position/list';
-  const payload = 'category=linear&settleCoin=USDT';   // GET: query string. POST: JSON.stringify(...)
-  // ----------------------------
+  // ---- change these two ----
+  const method = 'GET';
+  const target = '/v5/position/list?category=linear&settleCoin=USDT';
+  // GET: put the query on `target`. POST: leave `target` bare and set `body`.
+  const body   = '';
+  // --------------------------
+
+  // The query lives in exactly one place. Putting it on `target` AND in the
+  // signed payload is the mistake this shape exists to prevent: it produced
+  // "category=linear&symbol=BTCUSDT?category=linear&symbol=BTCUSDT" and a
+  // signature error that blamed the bytes.
+  const [path, query = ''] = target.split('?');
+  const get = method === 'GET';
+  const payload = get ? query : body;
 
   const ts = Date.now().toString();
-  const get = method === 'GET';
-  const res = await fetch(`https://${HOST}${path}` + (get && payload ? '?' + payload : ''), {
+  const res = await fetch(`https://${HOST}${path}` + (query ? '?' + query : ''), {
     method,
     headers: {
       'X-BAPI-API-KEY': KEY,
@@ -169,22 +177,25 @@ node <<'EOF'
       [HDR]: Buffer.from(ts + KEY + '5000' + payload).toString('base64'),
       ...(get ? {} : { 'Content-Type': 'application/json' }),
     },
-    ...(get ? {} : { body: payload }),
+    ...(get ? {} : { body }),
   });
   console.log(res.status, await res.text());
 })();
 EOF
 ```
 
-To place an order instead, those three lines become:
+To place an order instead, those two lines become:
 
 ```js
-const method  = 'POST';
-const path    = '/v5/order/create';
-const payload = JSON.stringify({ category: 'linear', symbol: 'BTCUSDT', side: 'Buy',
-                                 orderType: 'Limit', qty: '0.001', price: '50000',
-                                 timeInForce: 'PostOnly' });
+const method = 'POST';
+const target = '/v5/order/create';
+const body   = JSON.stringify({ category: 'linear', symbol: 'BTCUSDT', side: 'Buy',
+                                orderType: 'Limit', qty: '0.001', price: '50000',
+                                timeInForce: 'PostOnly' });
 ```
+
+A POST carries no query string, so `target` stays bare and everything goes in
+`body`.
 
 **When this block and reality disagree, reality wins.** Run it as given. If
 something in it does not match what you actually find — a variable that is not
