@@ -3,6 +3,8 @@ id: example
 version: 1.0.0
 name: Example
 blurb: A manifest the checker accepts, which the tests then break one field at a time.
+access: read-write
+maturity: stable
 description: |
   Nothing ships this. It exists so every rule in check_structure.py has a
   tree to be tested against, including the ones no real app uses yet.

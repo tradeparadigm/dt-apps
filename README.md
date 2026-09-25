@@ -63,6 +63,12 @@ that made the mistake:
   on the reading side until review found the split: a manifest missing a
   `secret_label` went green here and was dropped from the live catalogue on the
   next refresh, which is the failure this repository exists to move left;
+- every app states its scope on two axes — `access` (`read-only` or
+  `read-write`) and `maturity` (`stable` or `beta`). **Required here, optional
+  in the consumer**, and that difference is deliberate: the consumer defaults
+  an absent value so apps written before these fields existed keep working,
+  but the default is the permissive pair, so an author who left them out here
+  would publish a writable, stable-looking app without having said so;
 - a credential type narrows itself to no more endpoints than the API accepts;
 - every key is one the consumer knows, because its decoder runs with
   `KnownFields` and an unknown key refuses the whole app rather than being
@@ -119,6 +125,10 @@ the two agree, and they have drifted seven times so far — a `developer_url`
 accepted here and refused there, a whitespace class wider in Python than in
 Go, an empty field read as absent on one side only, and a signing scheme the
 server had learned and this had not.
+
+One divergence is deliberate and is marked as such in both places: `access`
+and `maturity` are required here and optional there. Everything else should
+agree.
 
 Drift in either direction costs something. Laxer here and an app merges and
 then goes missing from the catalogue, because the server drops what it cannot

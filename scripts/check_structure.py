@@ -32,6 +32,10 @@ What is checked, in each case because the consumer refuses the app without it:
     already upper case and without duplicates. The consumer canonicalises and
     refuses any difference, so `get` and a repeated path are both refusals
     rather than tidy-ups.
+  * Every app states its scope on two axes: `access` (read-only or read-write)
+    and `maturity` (stable or beta). Required here though the consumer defaults
+    both, because the default is the permissive pair — an author who omitted
+    them would publish a writable, stable-looking app without having said so.
   * Optional branding — developer, developer_url, tint, icon — is safe to put
     on a page. The store takes pull requests from outside this team, so a tint
     is a hex colour and an icon is ONE SVG PATH rather than a file: a path is
@@ -148,6 +152,7 @@ MAX_HOSTS = 100
 KNOWN = {
     "manifest": {
         "schema_version", "id", "version", "name", "blurb", "description",
+        "access", "maturity",
         "environments", "exclusive_credential_types", "credential_types",
         "developer", "developer_url", "tint", "icon",
     },
@@ -393,6 +398,31 @@ def as_text(value: object) -> str | None:
 # nothing anyone would write as an icon path or a colour reaches it.
 
 
+ACCESS_VALUES = ("read-only", "read-write")
+MATURITY_VALUES = ("stable", "beta")
+
+
+def check_scope(man: str, doc: dict, failures: list[str]) -> None:
+    """The two scope axes, REQUIRED HERE though optional in the consumer.
+
+    The consumer defaults an absent value so that an app written before these
+    existed keeps working. That is a compatibility rule, not an invitation:
+    in this store every app states its own scope, because the default is the
+    permissive one and an author who omitted it by accident would be
+    publishing a writable, stable-looking app without having said so.
+    """
+    for key, allowed in (("access", ACCESS_VALUES), ("maturity", MATURITY_VALUES)):
+        value = as_text(doc.get(key))
+        if not value:
+            failures.append(
+                f"{man}: {key} is required — say which of {', '.join(allowed)} this app is"
+            )
+        elif value not in allowed:
+            failures.append(
+                f"{man}: {key} {value!r} is not one of {', '.join(allowed)}"
+            )
+
+
 def check_presentation(man: str, doc: dict, failures: list[str]) -> None:
     """The optional branding, which is optional but not unchecked.
 
@@ -476,6 +506,7 @@ def check_manifest(app: str, text: str, failures: list[str]) -> None:
         )
 
     check_presentation(man, doc, failures)
+    check_scope(man, doc, failures)
     check_environments(man, doc.get("environments"), failures)
     check_credential_types(man, doc.get("credential_types"), failures)
 

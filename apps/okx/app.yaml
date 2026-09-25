@@ -30,6 +30,17 @@ version: 1.0.0
 name: OKX
 blurb: Trade spot, perpetuals and options on OKX without your agent seeing any of the three secrets.
 
+# What this app is for, on two axes that do not imply each other:
+# whether its credentials can write, and whether it has been exercised
+# enough to sit alongside the rest.
+#
+# NOT VERSIONED. These are served from the catalogue listing rather
+# than from the files an account pinned, so a change here reaches
+# everyone at the next refresh. Bumping `version` would offer every
+# installed app an update that changes no skill text.
+access: read-write
+maturity: beta
+
 description: |
   OKX is a centralised exchange offering spot, margin, perpetual swaps, futures
   and options through one v5 API.

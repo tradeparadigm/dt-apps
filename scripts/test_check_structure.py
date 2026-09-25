@@ -8,6 +8,7 @@ could be deleted and the check would still pass.
     python3 scripts/test_check_structure.py
 """
 
+import re
 import shutil
 import subprocess
 import sys
@@ -43,6 +44,50 @@ def append(text: str):
 class TestFixture(unittest.TestCase):
     def test_the_fixture_is_accepted(self):
         code, out = check()
+        self.assertEqual(code, 0, out)
+
+
+class TestScope(unittest.TestCase):
+    """Required in the store, unlike the consumer, which defaults them.
+
+    The default is the PERMISSIVE pair, so an author who leaves these out is
+    publishing a writable, stable-looking app without having said so. Making
+    it a refusal is the only way that stays a decision.
+    """
+
+    def drop(self, key):
+        return lambda src: re.sub(rf"^{key}: .*$\n", "", src, flags=re.M)
+
+    def test_access_is_required(self):
+        code, out = check(self.drop("access"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("access is required", out)
+
+    def test_maturity_is_required(self):
+        code, out = check(self.drop("maturity"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("maturity is required", out)
+
+    def test_access_must_be_one_of_the_two(self):
+        code, out = check(
+            lambda src: src.replace("access: read-write", "access: write-only")
+        )
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("is not one of", out)
+
+    def test_maturity_must_be_one_of_the_two(self):
+        code, out = check(
+            lambda src: src.replace("maturity: stable", "maturity: alpha")
+        )
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("is not one of", out)
+
+    def test_the_other_values_are_accepted(self):
+        code, out = check(
+            lambda src: src.replace("access: read-write", "access: read-only").replace(
+                "maturity: stable", "maturity: beta"
+            )
+        )
         self.assertEqual(code, 0, out)
 
 

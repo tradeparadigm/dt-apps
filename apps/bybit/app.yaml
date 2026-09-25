@@ -30,6 +30,17 @@ version: 1.0.6
 name: Bybit
 blurb: Trade spot, perpetuals and options on Bybit with a secret your agent never holds.
 
+# What this app is for, on two axes that do not imply each other:
+# whether its credentials can write, and whether it has been exercised
+# enough to sit alongside the rest.
+#
+# NOT VERSIONED. These are served from the catalogue listing rather
+# than from the files an account pinned, so a change here reaches
+# everyone at the next refresh. Bumping `version` would offer every
+# installed app an update that changes no skill text.
+access: read-write
+maturity: stable
+
 description: |
   Bybit is a centralised exchange offering spot, perpetual futures, futures and
   options through one unified v5 API.
