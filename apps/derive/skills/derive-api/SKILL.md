@@ -63,6 +63,94 @@ The signature comes back as `r||s||v` in hex, 130 characters, with `v` as 27
 or 28. **Derive wants it `0x`-prefixed, so write `0x` in front of the
 placeholder yourself** — the proxy substitutes only where the placeholder is.
 
+## You cannot hash this with what is installed
+
+Everything below needs **keccak256**, and nothing in the agent has it. Node's
+`crypto` offers `sha3-256`, which is a DIFFERENT hash — NIST padding, not
+Keccak padding. It returns a perfectly good 32 bytes, the proxy will sign
+them, and Derive will reject the signature with nothing pointing at the cause.
+Reaching for it is the single most expensive mistake available on this page.
+
+Install `ethers` once, at the start of the task. It carries all three things
+this venue needs — `keccak256`, the EIP-191 message hash, and the EIP-712
+typed-data hash — so it replaces three separate dependencies:
+
+```sh
+cd ~/.openclaw/workspace && npm install --silent ethers
+```
+
+Then write the helper, once, and call it for every private request. The
+version in the name is the skill version it came from; if only an older one is
+there, this file changed:
+
+```sh
+mkdir -p ~/.openclaw/workspace/tools/derive
+rm -f ~/.openclaw/workspace/tools/derive/derive-*.mjs
+cat > ~/.openclaw/workspace/tools/derive/derive-1.0.2.mjs <<'EOF'
+import { hashMessage } from 'ethers';
+
+const V = Object.keys(process.env).find(k => (process.env[k] || '').startsWith('sign-derive'));
+if (!V) { console.error('no Derive sign- credential in the environment'); process.exit(2); }
+
+// _META may be absent entirely, so default it rather than parsing undefined.
+const META = JSON.parse(process.env[V + '_META'] || '{}');
+const OWNER = process.env.OWNER || META.owner;
+if (!OWNER) { console.error('no owner address: pass OWNER=0x… or ask the user'); process.exit(2); }
+
+const HDR = 'X-Dime-Sign-' + V.replace(/^CRED_/, '').toLowerCase().replaceAll('_', '-');
+const HOST = /TESTNET|DEMO/i.test(V) ? 'api-demo.lyra.finance' : 'api.lyra.finance';
+
+// EIP-191 personal_sign over the timestamp STRING. hashMessage applies the
+// "\x19Ethereum Signed Message:\n<len>" prefix and keccak256 for us — the two
+// places this is easy to get wrong by hand.
+const ts = Date.now().toString();
+const digest = hashMessage(ts);
+
+const res = await fetch(`https://${HOST}${process.env.TARGET}`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-LyraWallet': OWNER,
+    'X-LyraTimestamp': ts,                  // the one that was signed
+    'X-LyraSignature': '0x' + process.env[V],
+    [HDR]: Buffer.from(digest.slice(2), 'hex').toString('base64'),
+  },
+  body: process.env.BODY || `{"wallet": "${OWNER}"}`,
+});
+console.log(res.status, await res.text());
+EOF
+```
+
+## Start by finding the subaccount id
+
+Almost every other private call needs a `subaccount_id`, and the credential
+often does not carry one — it is an optional detail the user may have left
+blank. Ask Derive rather than asking the user:
+
+```sh
+TARGET=/private/get_subaccounts node ~/.openclaw/workspace/tools/derive/derive-1.0.2.mjs
+```
+
+```
+200 {"result": {"wallet": "0xEDE0…f7A4", "subaccount_ids": [73340]}, "id": "…"}
+```
+
+This is also the cheapest way to prove the whole signing path works, because
+it needs nothing but the owner address. Everything after it is one line:
+
+```sh
+TARGET=/private/get_subaccount BODY='{"subaccount_id": 73340}' \
+  node ~/.openclaw/workspace/tools/derive/derive-1.0.2.mjs
+```
+
+The `0x` in front of the placeholder is written by the helper, because the
+proxy substitutes only where the placeholder itself sits and Derive wants the
+prefix.
+
+**When this block and reality disagree, reality wins.** Change the smallest
+thing that makes it work, run it, and say in one line what you changed. Do not
+stop to ask, and do not run it unchanged to prove it fails.
+
 ## Digest one: a private REST call
 
 Every `/private/*` call carries three headers:
@@ -135,6 +223,9 @@ The body carries `subaccount_id`, `nonce`, `signer`, `signature_expiry_sec`,
 | What you see | What it means |
 |---|---|
 | Proxy says the payload is not a digest | You sent the message. Hash it first. |
+| Derive rejects a signature that looks well formed | You hashed with `sha3-256` instead of `keccak256`. They are different hashes and both return 32 bytes, so nothing upstream can tell. Use `ethers`. |
+| `JSON.parse` throws on `undefined` | `CRED_<NAME>_META` is not set. It is not required — default it to `{}` and pass `OWNER=0x…` instead |
+| You have no `subaccount_id` | It is an optional detail and may be blank. Call `/private/get_subaccounts`; do not ask the user |
 | Proxy 403 | The placeholder and the `X-Dime-Sign-…` header were not both present, or the path is not under `/private/` |
 | Derive `14020`/`14021` | `X-LyraWallet` is missing or does not match the subaccount |
 | Derive `11022` | The timestamp is stale, or you signed a different one from the one you sent |
