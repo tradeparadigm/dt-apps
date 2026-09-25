@@ -26,7 +26,7 @@
 schema_version: 1
 
 id: bybit
-version: 1.0.3
+version: 1.0.4
 name: Bybit
 blurb: Trade spot, perpetuals and options on Bybit with a secret your agent never holds.
 
