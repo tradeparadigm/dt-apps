@@ -190,7 +190,10 @@ const PUBKEY = process.env.PUBKEY || META.public_key;
 if (!ACCOUNT || !PUBKEY) { console.error('need account and public_key: ' + JSON.stringify(META)); process.exit(2); }
 
 const HDR = 'X-Dime-Sign-' + V.replace(/^CRED_/, '').toLowerCase().replaceAll('_', '-');
-const HOST = /TESTNET/i.test(V) ? 'api.testnet.paradex.trade' : 'api.prod.paradex.trade';
+const HOST = process.env.HOST
+  || (/NIGHTLY/i.test(V) ? 'api.nightly.paradex.trade'
+  : /TESTNET/i.test(V) ? 'api.testnet.paradex.trade'
+  : 'api.prod.paradex.trade');
 
 const cfg = await (await fetch(`https://${HOST}/v1/system/config`)).json();
 const chainId = shortString.encodeShortString(cfg.starknet_chain_id);
