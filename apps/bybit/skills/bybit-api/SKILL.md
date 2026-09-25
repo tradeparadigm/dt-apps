@@ -124,25 +124,68 @@ key order, added whitespace, a float rendered differently — the signature is
 over a string Bybit never sees and you get `10004 error sign!`. Serialise the
 body **once**, into a string, sign that string, and send that same string.
 
-### Worked example
+### Copy one of these and run it
 
-Read your USDT perpetual positions.
+These work as written. Take one, change the path and the parameters, send it.
+Do not rebuild the request from the description above, and do not write
+yourself a client — every line here is the way it is because the obvious
+alternative fails on some machines, and you find out only when a signature is
+rejected.
 
+Once per session, derive everything from the credential's variable NAME. No
+secret is printed — only the name, which is what decides the header:
+
+```sh
+VAR=$(node -p "Object.keys(process.env).find(k => k.startsWith('CRED_BYBIT') && !k.endsWith('_META'))")
+KEY=$(node -e "process.stdout.write(JSON.parse(process.env[process.argv[1] + '_META']).api_key)" "$VAR")
+SIGN_HEADER="X-Dime-Sign-$(printf '%s' "${VAR#CRED_}" | tr 'A-Z_' 'a-z-')"
+PLACEHOLDER=$(printenv "$VAR")
+HOST=api.bybit.com    # api-testnet.bybit.com or api-demo.bybit.com if VAR says so
 ```
-GET /v5/position/list?category=linear&settleCoin=USDT
+
+A signed GET — read your USDT perpetual positions:
+
+```sh
+Q='category=linear&settleCoin=USDT'
+TS=$(node -p 'Date.now()')
+B64=$(printf '%s' "${TS}${KEY}5000${Q}" | base64 | tr -d '\n')
+curl -sS -w '\nHTTP %{http_code}\n' "https://$HOST/v5/position/list?$Q" \
+  -H "X-BAPI-API-KEY: $KEY" \
+  -H "X-BAPI-TIMESTAMP: $TS" \
+  -H "X-BAPI-RECV-WINDOW: 5000" \
+  -H "X-BAPI-SIGN: $PLACEHOLDER" \
+  -H "$SIGN_HEADER: $B64"
 ```
 
-1. Take a millisecond timestamp: `1735689600000`.
-2. Build the signed string — timestamp, then api key, then recv window, then
-   the query string:
+A signed POST — place an order:
 
-   ```
-   1735689600000<api_key>5000category=linear&settleCoin=USDT
-   ```
+```sh
+BODY='{"category":"linear","symbol":"BTCUSDT","side":"Buy","orderType":"Limit","qty":"0.001","price":"50000","timeInForce":"PostOnly"}'
+TS=$(node -p 'Date.now()')
+B64=$(printf '%s' "${TS}${KEY}5000${BODY}" | base64 | tr -d '\n')
+curl -sS -w '\nHTTP %{http_code}\n' "https://$HOST/v5/order/create" \
+  -H 'Content-Type: application/json' \
+  -H "X-BAPI-API-KEY: $KEY" \
+  -H "X-BAPI-TIMESTAMP: $TS" \
+  -H "X-BAPI-RECV-WINDOW: 5000" \
+  -H "X-BAPI-SIGN: $PLACEHOLDER" \
+  -H "$SIGN_HEADER: $B64" \
+  --data "$BODY"
+```
 
-3. Base64-encode those bytes and send them in `X-Dime-Sign-<label>`, where
-   `<label>` is the credential's label.
-4. Put the `sign-` placeholder in `X-BAPI-SIGN`.
+Why each awkward bit is there:
+
+- `$Q` and `$BODY` each appear twice — once signed, once sent. That is the
+  byte-exactness this page is about. Inline either one and you have two
+  serialisations that can differ.
+- `node -p 'Date.now()'`, not `date +%s%3N`. `%3N` is GNU-only and prints a
+  literal `3N` on BSD and macOS, giving a timestamp Bybit rejects.
+- `base64 | tr -d '\n'`, not `base64 -w0`. The `-w` flag is GNU-only.
+- `$SIGN_HEADER` is built from the variable name, never by splitting the
+  placeholder — see the warning in `AGENTS.md`.
+- `-w '\nHTTP %{http_code}\n'` prints the status. Without it `-sS` gives you
+  the body only, and you cannot tell an empty-bodied 401 from a 200 that
+  returned nothing.
 
 The proxy computes HMAC-SHA256 over your bytes with the secret, writes the hex
 digest into `X-BAPI-SIGN` in place of the placeholder, strips the
