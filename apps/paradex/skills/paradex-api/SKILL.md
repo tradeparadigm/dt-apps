@@ -176,10 +176,13 @@ Write the helper once and call it for every signed request. The version in the
 name is the skill version it came from; if only an older one is there, this
 file changed:
 
+That directory holds this one file and nothing else. The `rm` clears it, so a
+script an earlier chat wrote there goes too. Do not put your own scripts in it.
+
 ```sh
 mkdir -p ~/.openclaw/workspace/tools/paradex
-rm -f ~/.openclaw/workspace/tools/paradex/paradex-*.mjs
-cat > ~/.openclaw/workspace/tools/paradex/paradex-1.1.0.mjs <<'EOF'
+rm -f ~/.openclaw/workspace/tools/paradex/*
+cat > ~/.openclaw/workspace/tools/paradex/paradex-1.1.1.mjs <<'EOF'
 import { typedData as td, shortString } from 'starknet';
 
 const V = Object.keys(process.env).find(k => (process.env[k] || '').startsWith('sign-paradex'));
@@ -257,7 +260,7 @@ Reading is then one call:
 
 ```sh
 node --input-type=module -e "
-import { auth, HOST } from '$HOME/.openclaw/workspace/tools/paradex/paradex-1.1.0.mjs';
+import { auth, HOST } from '$HOME/.openclaw/workspace/tools/paradex/paradex-1.1.1.mjs';
 const jwt = await auth();
 const r = await fetch(\`https://\${HOST}/v1/account\`, { headers: { Authorization: 'Bearer ' + jwt } });
 console.log(r.status, await r.text());
