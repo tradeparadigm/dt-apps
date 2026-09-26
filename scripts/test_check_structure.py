@@ -234,13 +234,14 @@ class TestSigning(unittest.TestCase):
         "      header: X-Api-Key\n"
     )
 
-    def sign(self, scheme, encoding="hex"):
+    def sign(self, scheme, encoding="hex", key_encoding=None):
         block = (
             "    delivery:\n"
             "      mode: sign\n"
             f"      scheme: {scheme}\n"
             f"      encoding: {encoding}\n"
-            "      match_body: true\n"
+            + (f"      key_encoding: {key_encoding}\n" if key_encoding else "")
+            + "      match_body: true\n"
         )
         return lambda src: src.replace(self.INJECT, block)
 
@@ -268,6 +269,49 @@ class TestSigning(unittest.TestCase):
         code, out = check(self.sign("stark", "der"))
         self.assertNotEqual(code, 0, out)
         self.assertIn("der", out)
+
+    # key_encoding is how the stored key is READ before signing with it, which
+    # `encoding` does not cover: `encoding` is how the signature is written
+    # back. Paradigm and Kraken issue a base64 key, Bybit and Binance issue one
+    # whose characters are the key, and guessing is not available because a
+    # printable secret whose length is a multiple of four is also valid base64
+    # and decodes to unrelated bytes.
+    def test_every_key_encoding_the_server_reads(self):
+        for key_encoding in ("raw", "base64"):
+            with self.subTest(key_encoding=key_encoding):
+                code, out = check(self.sign("hmac-sha256", "base64", key_encoding))
+                self.assertEqual(code, 0, out)
+
+    def test_an_absent_key_encoding_is_accepted(self):
+        """Absent means raw, so every credential stored before it existed works."""
+        code, out = check(self.sign("hmac-sha256", "base64"))
+        self.assertEqual(code, 0, out)
+
+    def test_a_key_encoding_the_server_does_not_know_is_refused(self):
+        code, out = check(self.sign("hmac-sha256", "base64", "rot13"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("rot13", out)
+
+    def test_a_key_encoding_on_a_scheme_that_never_reads_one_is_refused(self):
+        """datastore.checkSignShape: only the MAC scheme reads a key encoding.
+
+        The others sign with a key whose bytes are not a question, so a manifest
+        naming one there describes a step that does not happen.
+        """
+        code, out = check(self.sign("stark", "felt-pair", "base64"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("hmac-sha256", out)
+
+    def test_a_key_encoding_outside_sign_mode_is_refused(self):
+        """The other modes carry no key, so there is no encoding for one."""
+        code, out = check(
+            lambda src: src.replace(
+                "      mode: inject\n      header: X-Api-Key\n",
+                "      mode: inject\n      header: X-Api-Key\n      key_encoding: base64\n",
+            )
+        )
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("key_encoding", out)
 
 
 class TestScopeCaps(unittest.TestCase):

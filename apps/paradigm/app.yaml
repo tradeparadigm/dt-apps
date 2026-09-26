@@ -1,0 +1,103 @@
+# Paradigm.
+#
+# TWO CREDENTIALS AT ONCE. Every authenticated Paradigm call carries three
+# headers: an Authorization bearer, a timestamp, and an HMAC-SHA256 signature
+# over the request. The bearer and the signing key are separate secrets and both
+# are required on every call, so exclusive_credential_types is false.
+#
+# OKX and Binance are already in this group, and OKX needs three at once. What
+# the field separates is whether a venue's credential types are alternatives or
+# halves: Paradex, Derive and Bybit set it true because theirs are alternatives,
+# and enrolling one of those replaces the other.
+#
+# Two credentials on one host works because the proxy applies every entry whose
+# rule matches, each with its own placeholder, up to eight signatures per
+# request. What breaks is a credential whose rule matches a request the agent
+# did not mean it for, since the matching rule is also the rule that REQUIRES
+# the placeholder. Hence the narrowing below.
+
+schema_version: 1
+
+id: paradigm
+version: 1.0.0
+name: Paradigm
+blurb: Request and trade institutional blocks with keys your agent never holds.
+
+# Read-write: the RFQ surface creates and cancels quotes. Beta: nothing on
+# Paradigm has been through the credential proxy before this.
+access: read-write
+maturity: beta
+
+description: |
+  Paradigm is an institutional liquidity network for crypto derivatives.
+
+  This app installs a skill that teaches your agent to authenticate to the
+  DRFQv2 REST API through the credential proxy, and adds Paradigm to the
+  credentials form so you can enrol the two values Paradigm issues without
+  filling in the signing details by hand.
+
+  Both credentials are needed. The access key identifies the desk and the
+  signing key proves the request, and every authenticated call carries both.
+
+environments:
+  - id: mainnet
+    label: Mainnet
+    host: api.prod.paradigm.trade
+  - id: testnet
+    label: Testnet
+    host: api.testnet.paradigm.trade
+
+# FALSE: these two are halves of one credential. See the header.
+exclusive_credential_types: false
+
+credential_types:
+  # The bearer. A string the venue compares, so the proxy forwards it and the
+  # agent never sees it.
+  - id: access-key
+    label: Access key
+    slug: access
+    secret_label: Access key
+    # NO DETAIL FIELDS. The signature identifies the desk, so there is nothing
+    # public the agent has to send alongside. A multi-desk key may need a desk
+    # selector, and no header for one is documented, so adding a field for it
+    # would be asking the user to paste a value with nowhere to go.
+    detail_fields: []
+    # NARROWED TO THE AUTHENTICATED SURFACE. Everything the skill calls is
+    # under /v2/drfq, all of it authenticated, and nothing public lives there.
+    # Leaving it unnarrowed would demand the placeholder on every request to
+    # this host, including ones that want no credential at all.
+    #
+    # No method narrowing: a listing is a GET, an RFQ is a POST and a cancel is
+    # a DELETE, and all three are authenticated.
+    routes:
+      - path: /v2/drfq/*
+    delivery:
+      mode: replace
+    summary: >-
+      Sets: the placeholder is swapped for the access key in any request
+      header, on every path under /v2/drfq.
+
+  # The signing key. Paradigm issues it base64-encoded and the HMAC is taken
+  # over the DECODED bytes, which is what key_encoding says. Guessing is not
+  # available: a printable secret whose length is a multiple of four is also
+  # valid base64 and decodes to unrelated bytes.
+  - id: signing-key
+    label: Signing key
+    slug: signing
+    secret_label: Signing key
+    detail_fields: []
+    routes:
+      - path: /v2/drfq/*
+    # match_headers names the one header the signature goes in. The default
+    # scans every header, and Paradigm has exactly one home for it, so naming
+    # it keeps the scan off headers that have no business being rewritten.
+    delivery:
+      mode: sign
+      scheme: hmac-sha256
+      encoding: base64
+      key_encoding: base64
+      match_headers: [Paradigm-API-Signature]
+    summary: >-
+      Sets: signing credential, HMAC-SHA256 over the base64-decoded key,
+      base64, substituted into the Paradigm-API-Signature header, on every path
+      under /v2/drfq.

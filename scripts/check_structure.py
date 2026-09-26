@@ -43,9 +43,11 @@ What is checked, in each case because the consumer refuses the app without it:
   * Every key is one the consumer knows. Its decoder runs with KnownFields,
     so an unknown key — a typo, a field from a newer schema — refuses the
     whole app rather than being ignored.
-  * A credential type names a delivery mode, and a signing scheme and encoding,
-    that the proxy actually has a case for. A manifest may describe an app; it
-    cannot invent a capability.
+  * A credential type names a delivery mode, a signing scheme, a signature
+    encoding and a key encoding that the proxy actually has a case for. A
+    manifest may describe an app; it cannot invent a capability. The key
+    encoding is how the stored key is READ before signing with it, which the
+    signature encoding does not cover, and only the MAC scheme reads one.
   * A delivery carries only the fields its mode uses. The consumer compares
     what a manifest declared against what canonicalising it produced and
     refuses a difference, because a field silently dropped is a line a reviewer
@@ -137,6 +139,13 @@ MODES = {"inject", "replace", "sign"}
 # repository — see README, "Where this disagrees with the server".
 SCHEMES = {"hmac-sha256", "ecdsa-p256", "stark", "secp256k1"}
 ENCODINGS = {"hex", "base64", "felt-pair"}
+# datastore.ValidKeyEncoding. How the stored key is READ before signing with it,
+# as distinct from `encoding`, which is how the signature is written back. Absent
+# means raw, so the empty string is valid and means the same thing.
+KEY_ENCODINGS = {"", "raw", "base64"}
+# datastore.checkSignShape: only the MAC scheme reads a key encoding. The others
+# sign with a key whose bytes are not a question.
+KEY_ENCODING_SCHEME = "hmac-sha256"
 
 # datastore.MaxAllowedRoutes and MaxAllowedHosts. Both are set where the
 # number stops being possible for a key that belongs to one venue rather than
@@ -165,7 +174,8 @@ KNOWN = {
     "detail_field": {"key", "label", "placeholder"},
     "delivery": {
         "mode", "header", "query_param", "formatter", "scheme", "encoding",
-        "match_headers", "match_body", "match_path", "match_query",
+        "key_encoding", "match_headers", "match_body", "match_path",
+        "match_query",
     },
     "route": {"path", "methods"},
 }
@@ -176,8 +186,8 @@ KNOWN = {
 DELIVERY_FIELDS = {
     "inject": {"mode", "header", "query_param", "formatter"},
     "replace": {"mode", "match_headers", "match_body", "match_path", "match_query"},
-    "sign": {"mode", "scheme", "encoding", "match_headers", "match_body",
-             "match_path", "match_query"},
+    "sign": {"mode", "scheme", "encoding", "key_encoding", "match_headers",
+             "match_body", "match_path", "match_query"},
 }
 
 # The manifest format this checker understands, matching the consumer's.
@@ -366,6 +376,18 @@ def check_credential_types(man: str, types: object, failures: list[str]) -> None
             if delivery.get("encoding") not in ENCODINGS:
                 failures.append(
                     f"{man}: {where}.delivery.encoding {delivery.get('encoding')!r} is not one of {sorted(ENCODINGS)}"
+                )
+            key_encoding = as_text(delivery.get("key_encoding")) or ""
+            if key_encoding not in KEY_ENCODINGS:
+                failures.append(
+                    f"{man}: {where}.delivery.key_encoding {key_encoding!r} is not one of "
+                    f"{sorted(k for k in KEY_ENCODINGS if k)}"
+                )
+            elif key_encoding and delivery.get("scheme") != KEY_ENCODING_SCHEME:
+                failures.append(
+                    f"{man}: {where}.delivery.key_encoding is only read for "
+                    f"{KEY_ENCODING_SCHEME}, and the scheme is "
+                    f"{delivery.get('scheme')!r}"
                 )
     check_unique(man, "credential_types.id", [c.get("id") for c in types if isinstance(c, dict)], failures)
     check_unique(man, "credential_types.slug", [c.get("slug") for c in types if isinstance(c, dict)], failures)
