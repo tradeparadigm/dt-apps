@@ -180,6 +180,25 @@ DELIVERY_FIELDS = {
              "match_path", "match_query"},
 }
 
+# The manifest's boolean keys. A known key whose VALUE is the wrong kind is the
+# same failure as an unknown key: the consumer's decoder refuses the whole app
+# and it goes missing from the catalogue.
+#
+# WHAT COUNTS AS A BOOLEAN WAS MEASURED. yaml.v3 was run over every
+# candidate token: it takes true/false in any of the three case forms, and also
+# yes, no, on, off, y and n with their case variants, and reads null and ~ as
+# false. It REFUSES 1, 0, a quoted "true", and mixed case like tRuE.
+#
+# PyYAML's own set covers all of those but the single letters: it reads bare y
+# and n as strings, so this refuses two values the consumer would accept. That is
+# the one divergence, it is stricter here, and matching it would need a custom
+# loader to see the raw token. `test_single_letter_booleans_are_refused_here_and_
+# that_is_known` pins it.
+#
+# None is allowed because that is what PyYAML makes of null and ~, which the
+# consumer reads as false.
+BOOLEAN_KEYS = ("exclusive_credential_types", "default_install")
+
 # The manifest format this checker understands, matching the consumer's.
 SCHEMA_VERSION = 1
 
@@ -510,6 +529,13 @@ def check_manifest(app: str, text: str, failures: list[str]) -> None:
         failures.append(
             f"{man}: manifests do not name skills. The directory beside this file is the content"
         )
+
+    for key in BOOLEAN_KEYS:
+        if key in doc and doc[key] is not None and not isinstance(doc[key], bool):
+            failures.append(
+                f"{man}: {key} is {doc[key]!r}, and the consumer decodes it into a "
+                "bool. Use true or false"
+            )
 
     check_presentation(man, doc, failures)
     check_scope(man, doc, failures)

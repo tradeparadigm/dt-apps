@@ -428,6 +428,52 @@ class TestDefaultInstall(unittest.TestCase):
         self.assertNotEqual(code, 0, out)
         self.assertIn("default_instal", out)
 
+    # A known key whose VALUE is the wrong kind is the same failure as an unknown
+    # key: the consumer's decoder refuses the whole app and it goes missing from
+    # the catalogue. The known-key check alone does not see it.
+    def test_a_value_the_consumer_cannot_decode_is_refused(self):
+        for bad in ("banana", "1", "0", '"true"', "tRuE"):
+            with self.subTest(value=bad):
+                code, out = check(append(f"default_install: {bad}\n"))
+                self.assertNotEqual(code, 0, out)
+                self.assertIn("default_install", out)
+
+    # Measured by running yaml.v3 over each token. It takes all three case forms
+    # of true and false, and also yes, no, on and off.
+    def test_every_token_the_consumer_reads_as_a_boolean(self):
+        for good in ("true", "False", "TRUE", "yes", "no", "on", "off"):
+            with self.subTest(value=good):
+                code, out = check(append(f"default_install: {good}\n"))
+                self.assertEqual(code, 0, out)
+
+    # THE ONE DIVERGENCE, pinned so it is a decision and not a surprise. yaml.v3
+    # reads bare y and n as booleans and PyYAML does not, so these are refused
+    # here and would be accepted there. Stricter costs a legitimate app, and a
+    # one-letter boolean is not a style anyone writes; matching it would need a
+    # custom loader to see the raw token. Named in BOOLEAN_KEYS' comment too.
+    def test_single_letter_booleans_are_refused_here_and_that_is_known(self):
+        for letter in ("y", "n"):
+            with self.subTest(value=letter):
+                code, out = check(append(f"default_install: {letter}\n"))
+                self.assertNotEqual(code, 0, out)
+
+    # null and ~ decode to false over there, so blocking them would refuse an app
+    # the consumer is happy with.
+    def test_null_is_accepted_because_the_consumer_reads_it_as_false(self):
+        for empty in ("null", "~"):
+            with self.subTest(value=empty):
+                code, out = check(append(f"default_install: {empty}\n"))
+                self.assertEqual(code, 0, out)
+
+    # The same gap existed on the other boolean, and it is the same one line.
+    def test_exclusive_credential_types_is_checked_too(self):
+        code, out = check(
+            lambda s: s.replace("exclusive_credential_types: true",
+                                "exclusive_credential_types: banana")
+        )
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("exclusive_credential_types", out)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
