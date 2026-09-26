@@ -1,12 +1,14 @@
 # Paradigm.
 #
-# THE FIRST APP THAT NEEDS TWO CREDENTIALS AT ONCE. Every authenticated Paradigm
-# call carries three headers: an Authorization bearer, a timestamp, and an
-# HMAC-SHA256 signature over the request. The bearer and the signing key are
-# separate secrets and both are required on every call, so this app sets
-# exclusive_credential_types to false. Paradex, Derive and Bybit all set it
-# true, and for them that is right: their two credential types are alternatives.
-# Here they are halves.
+# TWO CREDENTIALS AT ONCE. Every authenticated Paradigm call carries three
+# headers: an Authorization bearer, a timestamp, and an HMAC-SHA256 signature
+# over the request. The bearer and the signing key are separate secrets and both
+# are required on every call, so exclusive_credential_types is false.
+#
+# OKX and Binance are already in this group, and OKX needs three at once. What
+# the field separates is whether a venue's credential types are alternatives or
+# halves: Paradex, Derive and Bybit set it true because theirs are alternatives,
+# and enrolling one of those replaces the other.
 #
 # Two credentials on one host works because the proxy applies every entry whose
 # rule matches, each with its own placeholder, up to eight signatures per
@@ -45,7 +47,7 @@ environments:
     label: Testnet
     host: api.testnet.paradigm.trade
 
-# FALSE, and this is the app the field was waiting for. See the header.
+# FALSE: these two are halves of one credential. See the header.
 exclusive_credential_types: false
 
 credential_types:
