@@ -25,11 +25,14 @@ The id is the join and the directory is the content. There is no index to keep
 in step with the filesystem, and "how many skills does this app have" is
 answered by listing a directory.
 
-One skill per app today, for a reason that is not about this file: the agent's
-publish path writes an app's files under `<skills>/apps/<id>/` and discovers a
-skill by `SKILL.md` at that root, so a second has nowhere to go until that path
-takes nested ones. CI refuses a second rather than letting one be silently
-dropped.
+An app may carry several, up to eight. Each skill's files are published under
+its own name, `apps/<id>/<skill-name>/SKILL.md`, and openclaw finds a skill by
+looking for that file anywhere under a configured root, so a directory per skill
+is all the separation the agent needs.
+
+The cap is on SKILLS. A skill is prose plus its references and scripts, and the
+512KB and 32-file limits are what one of those needs, so the per-app file ceiling
+is the product of the two. Eight is more than any venue teaches.
 
 ## Naming
 
@@ -63,6 +66,10 @@ that made the mistake:
   on the reading side until review found the split: a manifest missing a
   `secret_label` went green here and was dropped from the live catalogue on the
   next refresh, which is the failure this repository exists to move left;
+- `default_install` is a key the consumer knows. An app declaring it is
+  installed for every account without being asked for, so CI accepting it here
+  while a deployed build does not know the key would drop the whole app from
+  that build's catalogue;
 - every app states its scope on two axes — `access` (`read-only` or
   `read-write`) and `maturity` (`stable` or `beta`). **Required here, optional
   in the consumer**, and that difference is deliberate: the consumer defaults
