@@ -19,10 +19,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURE = ROOT / "scripts" / "testdata" / "apps"
 MANIFEST = "apps/example/app.yaml"
+SKILL = "apps/example/skills/example-api/SKILL.md"
 
 
-def check(edit=None) -> tuple[int, str]:
-    """Run the real checker over a copy of the fixture, optionally edited."""
+def check(edit=None, skill=None) -> tuple[int, str]:
+    """Run the real checker over a copy of the fixture, optionally edited.
+
+    `edit` rewrites the manifest and `skill` rewrites the skill body, because
+    some rules are about the two agreeing.
+    """
     with tempfile.TemporaryDirectory() as d:
         tree = Path(d)
         shutil.copytree(FIXTURE, tree / "apps")
@@ -30,6 +35,9 @@ def check(edit=None) -> tuple[int, str]:
         if edit is not None:
             man = tree / MANIFEST
             man.write_text(edit(man.read_text()))
+        if skill is not None:
+            md = tree / SKILL
+            md.write_text(skill(md.read_text()))
         r = subprocess.run(
             [sys.executable, "scripts/check_structure.py"],
             cwd=tree, capture_output=True, text=True,
@@ -330,6 +338,67 @@ class TestManifest(unittest.TestCase):
             lambda s: s.replace("methods: [GET, POST]", "methods: [TELEPORT]")
         )
         self.assertNotEqual(code, 0, out)
+
+
+class TestHelperVersion(unittest.TestCase):
+    """The cached helper's filename carries the app version, and that IS the
+    staleness mechanism.
+
+    A skill tells the agent to write a helper to
+    ~/.openclaw/workspace/tools/<app>/<skill>/<skill>-<version>.mjs and to reuse
+    it when the name matches. Bump `version:` and leave the filename alone and
+    every agent that already has one keeps a helper built from skill text that
+    has since changed, for good, because nothing ever looks at it again. Nothing
+    in the consumer reads this path, so this check is the only thing that can
+    catch it.
+    """
+
+    HELPER = "tools/example/example-api/example-api-{}.mjs"
+
+    def helper(self, version):
+        return append(
+            "\n## Helper\n\n```sh\n"
+            "cat > ~/.openclaw/workspace/" + self.HELPER.format(version) + " <<'EOF'\n"
+            "EOF\n```\n"
+        )
+
+    def test_a_helper_naming_the_manifest_version_is_accepted(self):
+        code, out = check(skill=self.helper("1.0.0"))
+        self.assertEqual(code, 0, out)
+
+    def test_a_helper_naming_another_version_is_refused(self):
+        code, out = check(skill=self.helper("0.9.0"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("named for version '0.9.0'", out)
+        self.assertIn("says '1.0.0'", out)
+
+    def test_a_bumped_manifest_with_an_unchanged_filename_is_refused(self):
+        code, out = check(
+            edit=lambda s: s.replace("version: 1.0.0", "version: 1.0.1"),
+            skill=self.helper("1.0.0"),
+        )
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("named for version '1.0.0'", out)
+
+    def test_a_helper_under_another_skill_is_refused(self):
+        code, out = check(
+            skill=append(
+                "\n```sh\n"
+                "node ~/.openclaw/workspace/tools/example/other-api/other-api-1.0.0.mjs\n"
+                "```\n"
+            )
+        )
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("tools/example/other-api/", out)
+
+    def test_one_failure_however_often_the_path_appears(self):
+        """A skill names its helper on every call it demonstrates."""
+        code, out = check(skill=lambda s: s + (
+            "\n```sh\n" + ("node ~/.openclaw/workspace/"
+                            + self.HELPER.format("0.9.0") + "\n") * 5 + "```\n"
+        ))
+        self.assertNotEqual(code, 0, out)
+        self.assertEqual(out.count("named for version '0.9.0'"), 1, out)
 
 
 if __name__ == "__main__":
