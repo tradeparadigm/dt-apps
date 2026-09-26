@@ -41,10 +41,10 @@ credential's variable name is the only thing that answers this.
 
 ## What you hold
 
-**Two credentials, and every authenticated call needs both.** This is the
-difference from every other venue in the store, where the two credential types
-are alternatives. Here they are halves of one thing: the access key says which
-desk is calling and the signature proves the call.
+**Two credentials, and every authenticated call needs both.** They are halves of
+one thing: the access key says which desk is calling and the signature proves the
+call. Some venues in the store issue credential types that are alternatives, so
+one replaces the other. These do not.
 
 - **`CRED_PARADIGM_<ENV>_ACCESS`** is the access key, as a `cred-` placeholder.
   Write it where the bearer token goes. The proxy swaps it for the real value.
