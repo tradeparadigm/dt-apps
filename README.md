@@ -91,9 +91,12 @@ that made the mistake:
 - routes carry a path the API accepts and methods from the closed set, already
   upper case and without duplicates: the consumer canonicalises and refuses any
   difference, so `get` and a repeated path are refusals rather than tidy-ups;
-- delivery modes, signing schemes and encodings are ones the proxy has a case
-  for. **A manifest may describe an app; it cannot invent a capability** — a
-  scheme outside that list would be accepted and then never signed;
+- delivery modes, signing schemes, signature encodings and key encodings are
+  ones the proxy has a case for. **A manifest may describe an app; it cannot
+  invent a capability** — a scheme outside that list would be accepted and then
+  never signed. A key encoding says how the stored key is READ before signing
+  with it, which the signature encoding does not cover, and only the MAC scheme
+  reads one;
 - slugs can be credential labels, so a template cannot produce a credential
   nobody can enrol;
 - every skill directory holds a `SKILL.md` whose frontmatter `name` matches
