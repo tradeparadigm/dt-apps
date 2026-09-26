@@ -391,6 +391,24 @@ class TestHelperVersion(unittest.TestCase):
         self.assertNotEqual(code, 0, out)
         self.assertIn("tools/example/other-api/", out)
 
+    def test_a_helper_under_another_app_is_refused(self):
+        """The skill name and the version can both be right and the app wrong.
+
+        Nothing else catches this. The global skill-name check only refuses two
+        apps CLAIMING one name, and a path naming an app that does not exist is
+        not a claim. The helper would be written under a directory this skill
+        never reads and re-derived on every chat.
+        """
+        code, out = check(
+            skill=append(
+                "\n```sh\n"
+                "node ~/.openclaw/workspace/tools/other-app/example-api/example-api-1.0.0.mjs\n"
+                "```\n"
+            )
+        )
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("tools/other-app/example-api/", out)
+
     def test_one_failure_however_often_the_path_appears(self):
         """A skill names its helper on every call it demonstrates."""
         code, out = check(skill=lambda s: s + (
