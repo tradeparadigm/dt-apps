@@ -143,18 +143,12 @@ ls ~/.openclaw/workspace/tools/bybit/bybit-api/bybit-api-1.0.7.mjs
 ```
 
 If that file is there, an earlier chat already wrote it, so skip to the calls
-below.
-
-`tools/bybit/bybit-api/` belongs to this skill and holds this one file. The
-`rm` clears it, so a script an earlier chat wrote there goes too. Do not put
-your own scripts in it. The second glob clears a helper from the flat layout an
-earlier version of this skill used.
-
-If the file is not there, run this:
+below. If it is not, run this:
 
 ```sh
+rm -rf ~/.openclaw/workspace/tools/bybit/bybit-api
 mkdir -p ~/.openclaw/workspace/tools/bybit/bybit-api
-rm -f ~/.openclaw/workspace/tools/bybit/bybit-api/* ~/.openclaw/workspace/tools/bybit/*.mjs
+find ~/.openclaw/workspace/tools/bybit -maxdepth 1 -name '*.mjs' -delete
 cat > ~/.openclaw/workspace/tools/bybit/bybit-api/bybit-api-1.0.7.mjs <<'EOF'
 const all = Object.keys(process.env).filter(k => (process.env[k] || '').startsWith('sign-bybit'));
 const V = process.env.BYBIT_CRED || all[0];
@@ -193,6 +187,11 @@ const res = await fetch(`https://${HOST}${path}` + (query ? '?' + query : ''), {
 console.log(res.status, await res.text());
 EOF
 ```
+
+`tools/bybit/bybit-api/` belongs to this skill and holds this one file.
+The `rm -rf` clears it, so a script an earlier chat wrote there goes
+too. Do not put your own scripts in it. The `find` deletes a helper
+left at the flat path an earlier version of this skill used.
 
 Every call after that is one line:
 

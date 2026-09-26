@@ -172,18 +172,14 @@ element is under 2^252. Feeding that to `Buffer.from(hex, 'hex')` on an odd
 length silently drops a nibble and the proxy sees the wrong payload. Pad it
 left to 64 first — `hash.slice(2).padStart(64, '0')` — every time.
 
-`tools/paradex/paradex-api/` belongs to this skill and holds this one file. The
-`rm` clears it, so a script an earlier chat wrote there goes too. Do not put
-your own scripts in it. The second glob clears a helper from the flat layout an
-earlier version of this skill used.
-
 The version in the name is the app's `version:`. If only an older one is
 there, this file changed. Write the helper once, then call it for every signed
 request:
 
 ```sh
+rm -rf ~/.openclaw/workspace/tools/paradex/paradex-api
 mkdir -p ~/.openclaw/workspace/tools/paradex/paradex-api
-rm -f ~/.openclaw/workspace/tools/paradex/paradex-api/* ~/.openclaw/workspace/tools/paradex/*.mjs
+find ~/.openclaw/workspace/tools/paradex -maxdepth 1 -name '*.mjs' -delete
 cat > ~/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.1.1.mjs <<'EOF'
 import { typedData as td, shortString } from 'starknet';
 
@@ -257,6 +253,11 @@ export function orderSig({ market, side, size, price, timestamp }) {
 export { HOST, HDR, ACCOUNT, V };
 EOF
 ```
+
+`tools/paradex/paradex-api/` belongs to this skill and holds this one file.
+The `rm -rf` clears it, so a script an earlier chat wrote there goes
+too. Do not put your own scripts in it. The `find` deletes a helper
+left at the flat path an earlier version of this skill used.
 
 Reading is then one call:
 

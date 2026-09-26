@@ -79,18 +79,14 @@ typed-data hash — so it replaces three separate dependencies:
 cd ~/.openclaw/workspace && npm install --silent ethers
 ```
 
-`tools/derive/derive-api/` belongs to this skill and holds this one file. The
-`rm` clears it, so a script an earlier chat wrote there goes too. Do not put
-your own scripts in it. The second glob clears a helper from the flat layout an
-earlier version of this skill used.
-
 The version in the name is the app's `version:`. If only an older one is
 there, this file changed. Write the helper once, then call it for every
 private request:
 
 ```sh
+rm -rf ~/.openclaw/workspace/tools/derive/derive-api
 mkdir -p ~/.openclaw/workspace/tools/derive/derive-api
-rm -f ~/.openclaw/workspace/tools/derive/derive-api/* ~/.openclaw/workspace/tools/derive/*.mjs
+find ~/.openclaw/workspace/tools/derive -maxdepth 1 -name '*.mjs' -delete
 cat > ~/.openclaw/workspace/tools/derive/derive-api/derive-api-1.0.3.mjs <<'EOF'
 import { hashMessage } from 'ethers';
 
@@ -125,6 +121,11 @@ const res = await fetch(`https://${HOST}${process.env.TARGET}`, {
 console.log(res.status, await res.text());
 EOF
 ```
+
+`tools/derive/derive-api/` belongs to this skill and holds this one file.
+The `rm -rf` clears it, so a script an earlier chat wrote there goes
+too. Do not put your own scripts in it. The `find` deletes a helper
+left at the flat path an earlier version of this skill used.
 
 ## Start by finding the subaccount id
 

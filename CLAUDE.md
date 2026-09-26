@@ -38,9 +38,13 @@ one file serves every call:
 METHOD=POST TARGET=/v5/order/create BODY='{...}' node <the helper>
 ```
 
-Nothing else goes in the skill's directory. Caching a derived artifact is safe
-because the filename invalidates it; caching FACTS is not, because facts about
-an account are one call away and change without warning, and nothing keys them.
+Nothing else goes in the skill's directory, and the app's directory above it
+holds nothing but those. Anything loose at the app level is a helper from the
+flat layout this replaced, which is why each setup block deletes one.
+
+Caching a derived artifact is safe because the filename invalidates it; caching
+FACTS is not, because facts about an account are one call away and change
+without warning, and nothing keys them.
 Anything an agent concludes about the venue belongs in the skill as a pull
 request here, or one account quietly behaves differently from every other with
 nothing to diff.
