@@ -79,17 +79,19 @@ typed-data hash — so it replaces three separate dependencies:
 cd ~/.openclaw/workspace && npm install --silent ethers
 ```
 
-Then write the helper, once, and call it for every private request. The
-version in the name is the skill version it came from; if only an older one is
-there, this file changed:
+`tools/derive/derive-api/` belongs to this skill and holds this one file. The
+`rm` clears it, so a script an earlier chat wrote there goes too. Do not put
+your own scripts in it. The second glob clears a helper from the flat layout an
+earlier version of this skill used.
 
-That directory holds this one file and nothing else. The `rm` clears it, so a
-script an earlier chat wrote there goes too. Do not put your own scripts in it.
+The version in the name is the app's `version:`. If only an older one is
+there, this file changed. Write the helper once, then call it for every
+private request:
 
 ```sh
-mkdir -p ~/.openclaw/workspace/tools/derive
-rm -f ~/.openclaw/workspace/tools/derive/*
-cat > ~/.openclaw/workspace/tools/derive/derive-1.0.3.mjs <<'EOF'
+mkdir -p ~/.openclaw/workspace/tools/derive/derive-api
+rm -f ~/.openclaw/workspace/tools/derive/derive-api/* ~/.openclaw/workspace/tools/derive/*.mjs
+cat > ~/.openclaw/workspace/tools/derive/derive-api/derive-api-1.0.3.mjs <<'EOF'
 import { hashMessage } from 'ethers';
 
 const V = Object.keys(process.env).find(k => (process.env[k] || '').startsWith('sign-derive'));
@@ -131,7 +133,7 @@ often does not carry one — it is an optional detail the user may have left
 blank. Ask Derive rather than asking the user:
 
 ```sh
-TARGET=/private/get_subaccounts node ~/.openclaw/workspace/tools/derive/derive-1.0.3.mjs
+TARGET=/private/get_subaccounts node ~/.openclaw/workspace/tools/derive/derive-api/derive-api-1.0.3.mjs
 ```
 
 ```
@@ -143,7 +145,7 @@ it needs nothing but the owner address. Everything after it is one line:
 
 ```sh
 TARGET=/private/get_subaccount BODY='{"subaccount_id": 73340}' \
-  node ~/.openclaw/workspace/tools/derive/derive-1.0.3.mjs
+  node ~/.openclaw/workspace/tools/derive/derive-api/derive-api-1.0.3.mjs
 ```
 
 The `0x` in front of the placeholder is written by the helper, because the

@@ -172,17 +172,19 @@ element is under 2^252. Feeding that to `Buffer.from(hex, 'hex')` on an odd
 length silently drops a nibble and the proxy sees the wrong payload. Pad it
 left to 64 first — `hash.slice(2).padStart(64, '0')` — every time.
 
-Write the helper once and call it for every signed request. The version in the
-name is the skill version it came from; if only an older one is there, this
-file changed:
+`tools/paradex/paradex-api/` belongs to this skill and holds this one file. The
+`rm` clears it, so a script an earlier chat wrote there goes too. Do not put
+your own scripts in it. The second glob clears a helper from the flat layout an
+earlier version of this skill used.
 
-That directory holds this one file and nothing else. The `rm` clears it, so a
-script an earlier chat wrote there goes too. Do not put your own scripts in it.
+The version in the name is the app's `version:`. If only an older one is
+there, this file changed. Write the helper once, then call it for every signed
+request:
 
 ```sh
-mkdir -p ~/.openclaw/workspace/tools/paradex
-rm -f ~/.openclaw/workspace/tools/paradex/*
-cat > ~/.openclaw/workspace/tools/paradex/paradex-1.1.1.mjs <<'EOF'
+mkdir -p ~/.openclaw/workspace/tools/paradex/paradex-api
+rm -f ~/.openclaw/workspace/tools/paradex/paradex-api/* ~/.openclaw/workspace/tools/paradex/*.mjs
+cat > ~/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.1.1.mjs <<'EOF'
 import { typedData as td, shortString } from 'starknet';
 
 const V = Object.keys(process.env).find(k => (process.env[k] || '').startsWith('sign-paradex'));
@@ -260,7 +262,7 @@ Reading is then one call:
 
 ```sh
 node --input-type=module -e "
-import { auth, HOST } from '$HOME/.openclaw/workspace/tools/paradex/paradex-1.1.1.mjs';
+import { auth, HOST } from '$HOME/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.1.1.mjs';
 const jwt = await auth();
 const r = await fetch(\`https://\${HOST}/v1/account\`, { headers: { Authorization: 'Bearer ' + jwt } });
 console.log(r.status, await r.text());

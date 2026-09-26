@@ -139,20 +139,23 @@ request. Do not paste a block per call, and do not build the request out of
 computed value, which is exactly where byte-exactness dies.
 
 ```sh
-ls ~/.openclaw/workspace/tools/bybit/bybit-1.0.7.mjs
+ls ~/.openclaw/workspace/tools/bybit/bybit-api/bybit-api-1.0.7.mjs
 ```
 
-If that file is there, an earlier chat already wrote it — skip to the calls
-below. If it is not, run this. The `rm` clears any version an older skill
-left, so there is nothing to compare and no way to end up with two:
+If that file is there, an earlier chat already wrote it, so skip to the calls
+below.
 
-That directory holds this one file and nothing else. The `rm` clears it, so a
-script an earlier chat wrote there goes too. Do not put your own scripts in it.
+`tools/bybit/bybit-api/` belongs to this skill and holds this one file. The
+`rm` clears it, so a script an earlier chat wrote there goes too. Do not put
+your own scripts in it. The second glob clears a helper from the flat layout an
+earlier version of this skill used.
+
+If the file is not there, run this:
 
 ```sh
-mkdir -p ~/.openclaw/workspace/tools/bybit
-rm -f ~/.openclaw/workspace/tools/bybit/*
-cat > ~/.openclaw/workspace/tools/bybit/bybit-1.0.7.mjs <<'EOF'
+mkdir -p ~/.openclaw/workspace/tools/bybit/bybit-api
+rm -f ~/.openclaw/workspace/tools/bybit/bybit-api/* ~/.openclaw/workspace/tools/bybit/*.mjs
+cat > ~/.openclaw/workspace/tools/bybit/bybit-api/bybit-api-1.0.7.mjs <<'EOF'
 const all = Object.keys(process.env).filter(k => (process.env[k] || '').startsWith('sign-bybit'));
 const V = process.env.BYBIT_CRED || all[0];
 if (!V) { console.error('no Bybit sign- credential in the environment'); process.exit(2); }
@@ -194,13 +197,13 @@ EOF
 Every call after that is one line:
 
 ```sh
-METHOD=GET TARGET='/v5/account/wallet-balance?accountType=UNIFIED' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.7.mjs
+METHOD=GET TARGET='/v5/account/wallet-balance?accountType=UNIFIED' node ~/.openclaw/workspace/tools/bybit/bybit-api/bybit-api-1.0.7.mjs
 
-METHOD=GET TARGET='/v5/position/list?category=linear&settleCoin=USDT' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.7.mjs
+METHOD=GET TARGET='/v5/position/list?category=linear&settleCoin=USDT' node ~/.openclaw/workspace/tools/bybit/bybit-api/bybit-api-1.0.7.mjs
 
 METHOD=POST TARGET=/v5/order/create \
   BODY='{"category":"linear","symbol":"BTCUSDT","side":"Buy","orderType":"Limit","qty":"0.001","price":"50000","timeInForce":"PostOnly"}' \
-  node ~/.openclaw/workspace/tools/bybit/bybit-1.0.7.mjs
+  node ~/.openclaw/workspace/tools/bybit/bybit-api/bybit-api-1.0.7.mjs
 ```
 
 `TARGET` carries the path and, on a GET, its query. A POST leaves `TARGET`
@@ -279,8 +282,8 @@ then signed, then a path you know is signable as a control:
 
 ```sh
 curl -sS -w '\nHTTP %{http_code}\n' 'https://api.bybit.com/v5/<the path in question>'
-METHOD=GET TARGET='/v5/<the path in question>' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.7.mjs
-METHOD=GET TARGET='/v5/account/wallet-balance?accountType=UNIFIED' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.7.mjs
+METHOD=GET TARGET='/v5/<the path in question>' node ~/.openclaw/workspace/tools/bybit/bybit-api/bybit-api-1.0.7.mjs
+METHOD=GET TARGET='/v5/account/wallet-balance?accountType=UNIFIED' node ~/.openclaw/workspace/tools/bybit/bybit-api/bybit-api-1.0.7.mjs
 ```
 
 - **Same answer signed and unsigned, while the control returns 200** — the
