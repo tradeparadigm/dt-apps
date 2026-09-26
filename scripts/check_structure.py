@@ -120,6 +120,20 @@ PATH_RE = re.compile(r"^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$")
 METHODS = {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE"}
 MAX_METHODS = 8
 
+# The cached signing helper a skill tells the agent to write, at
+# ~/.openclaw/workspace/tools/<app-id>/<skill-name>/<skill-name>-<version>.mjs.
+#
+# NOT MIRRORED FROM ANYWHERE. Nothing in the consumer reads this path: it is an
+# instruction the agent follows, so the only thing that can be wrong with it is
+# the version, and the only thing that can check the version is this. The whole
+# staleness mechanism is that the filename stops matching when `version:` moves,
+# so a bump that leaves the filename alone means every agent keeps a helper
+# derived from skill text that has changed, for good and with nothing to notice
+# it.
+HELPER_RE = re.compile(
+    r"tools/(?P<app>[a-z0-9-]+)/(?P<skill>[a-z0-9-]+)/(?P=skill)-(?P<version>[^/\s`'\"]+)\.mjs"
+)
+
 # Mirrored from pkg/apps: idPattern, slugPattern, detailKeyPattern.
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
@@ -476,16 +490,17 @@ def check_presentation(man: str, doc: dict, failures: list[str]) -> None:
         failures.append(f"{man}: icon.view_box {box!r} must be four numbers")
 
 
-def check_manifest(app: str, text: str, failures: list[str]) -> None:
+def check_manifest(app: str, text: str, failures: list[str]) -> str:
+    """Check one manifest, and return the version it declares."""
     man = f"{APPS}/{app}/{MANIFEST}"
     try:
         doc = yaml.safe_load(text)
     except yaml.YAMLError as exc:
         failures.append(f"{man}: is not readable YAML: {exc}")
-        return
+        return ""
     if not isinstance(doc, dict):
         failures.append(f"{man}: is not a mapping")
-        return
+        return ""
 
     check_known(man, "manifest", doc, "manifest", failures)
 
@@ -509,6 +524,7 @@ def check_manifest(app: str, text: str, failures: list[str]) -> None:
     check_scope(man, doc, failures)
     check_environments(man, doc.get("environments"), failures)
     check_credential_types(man, doc.get("credential_types"), failures)
+    return as_text(doc.get("version")) or ""
 
 
 def frontmatter(md: str) -> dict[str, str]:
@@ -522,6 +538,39 @@ def frontmatter(md: str) -> dict[str, str]:
     except yaml.YAMLError:
         return {}
     return got if isinstance(got, dict) else {}
+
+
+def check_helper_versions(
+    app: str, version: str, skill: str, files: list[Path], failures: list[str]
+) -> None:
+    """Every helper path a skill names carries this app's version.
+
+    One failure per distinct wrong path, however many times the file repeats it.
+    A skill names its helper on every call it demonstrates, so reporting each
+    occurrence buries the other apps' output under one mistake.
+    """
+    for f in files:
+        try:
+            text = f.read_text()
+        except (OSError, UnicodeDecodeError):
+            continue
+        misplaced: set[str] = set()
+        stale: set[str] = set()
+        for m in HELPER_RE.finditer(text):
+            if m.group("app") != app or m.group("skill") != skill:
+                misplaced.add(f"{m.group('app')}/{m.group('skill')}")
+            elif m.group("version") != version:
+                stale.add(m.group("version"))
+        for where in sorted(misplaced):
+            failures.append(
+                f"{f}: names a helper under tools/{where}/, and this is {app}/{skill}"
+            )
+        for got in sorted(stale):
+            failures.append(
+                f"{f}: the helper is named for version {got!r} and {app}/{MANIFEST} "
+                f"says {version!r}. A bump the filename does not follow never "
+                "invalidates the agent's cached copy"
+            )
 
 
 def main() -> int:
@@ -538,7 +587,7 @@ def main() -> int:
         if not man.is_file():
             failures.append(f"{app}: no {MANIFEST}")
             continue
-        check_manifest(app.name, man.read_text(), failures)
+        version = check_manifest(app.name, man.read_text(), failures)
 
         skills_dir = app / "skills"
         on_disk = (
@@ -580,6 +629,8 @@ def main() -> int:
                 failures.append(f"{entry}: frontmatter has no description")
 
             files = [p for p in d.rglob("*") if p.is_file()]
+            if version:
+                check_helper_versions(app.name, version, name, files, failures)
             if len(files) > MAX_FILES:
                 failures.append(f"{d}: {len(files)} files, limit {MAX_FILES}")
             for f in files:

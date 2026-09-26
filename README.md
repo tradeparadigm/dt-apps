@@ -97,7 +97,13 @@ that made the mistake:
 - slugs can be credential labels, so a template cannot produce a credential
   nobody can enrol;
 - every skill directory holds a `SKILL.md` whose frontmatter `name` matches
-  it, with a description, inside the file-count and size limits.
+  it, with a description, inside the file-count and size limits;
+- the version in a cached helper's filename matches the app's `version:`.
+  Nothing in the consumer reads that path, because it is an instruction the
+  agent follows rather than a field anything parses. So a bump the filename does
+  not follow is invisible: every agent that already wrote a helper keeps the one
+  it has, built from skill text that has since changed, because the name it
+  checks for still matches.
 
 A refusal still happens on the reading side too. Nothing here is trusted
 because it passed CI here.

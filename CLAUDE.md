@@ -12,17 +12,23 @@ script each time — we watched one do it three separate ways in an afternoon.
 So a skill whose venue needs signing hands over a helper the agent keeps:
 
 ```
-~/.openclaw/workspace/tools/<app-id>/<app-id>-<skill-version>.mjs
+~/.openclaw/workspace/tools/<app-id>/<skill-name>/<skill-name>-<app-version>.mjs
 ```
 
 The workspace persists across chats. The skills directory does NOT — a publish
 replaces it wholesale — so nothing an agent writes there survives an update.
 
-The skill version is in the FILENAME, and that is the whole staleness
-mechanism. Bump `version:` and the name no longer matches, so the agent writes
-the new one and deletes the old without needing to work out whether its cached
-copy is still right. There is no cache-invalidation logic to get wrong because
-there is no cache invalidation.
+A DIRECTORY PER SKILL. The helper is derived from one SKILL.md's signing
+instructions and has to track that file's text, so the skill owns the
+directory. An app-level one was workable only while an app carried a single
+skill: each setup block clears its directory before writing, so two skills
+sharing one would delete each other's copy on every use.
+
+The app's `version:` is in the FILENAME, and that is the whole staleness
+mechanism. Bump it and the name no longer matches, so the agent writes the new
+one and deletes the old without needing to work out whether its cached copy is
+still right. There is no cache-invalidation logic to get wrong because there is
+no cache invalidation.
 
 Tell the agent to check for the file first, to delete and re-derive rather
 than patch when it breaks, and to take its parameters from the environment so
@@ -32,9 +38,13 @@ one file serves every call:
 METHOD=POST TARGET=/v5/order/create BODY='{...}' node <the helper>
 ```
 
-Nothing else goes in that folder. Caching a derived artifact is safe because
-the filename invalidates it; caching FACTS is not, because facts about an
-account are one call away and change without warning, and nothing keys them.
+Nothing else goes in the skill's directory, and the app's directory above it
+holds nothing but those. Anything loose at the app level is a helper from the
+flat layout this replaced, which is why each setup block deletes one.
+
+Caching a derived artifact is safe because the filename invalidates it; caching
+FACTS is not, because facts about an account are one call away and change
+without warning, and nothing keys them.
 Anything an agent concludes about the venue belongs in the skill as a pull
 request here, or one account quietly behaves differently from every other with
 nothing to diff.
