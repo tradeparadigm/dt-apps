@@ -16,13 +16,25 @@ import tempfile
 import unittest
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from check_structure import MAX_SKILLS  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURE = ROOT / "scripts" / "testdata" / "apps"
 MANIFEST = "apps/example/app.yaml"
 
 
-def check(edit=None) -> tuple[int, str]:
-    """Run the real checker over a copy of the fixture, optionally edited."""
+def skill_md(name: str) -> str:
+    return f"---\nname: {name}\ndescription: What this skill is for.\n---\n\nBody.\n"
+
+
+def check(edit=None, extra=None, remove=None) -> tuple[int, str]:
+    """Run the real checker over a copy of the fixture, optionally edited.
+
+    `edit` rewrites the manifest. `extra` writes additional files, keyed by path
+    relative to the tree, which is how a case adds a second skill. `remove`
+    deletes paths, which is how a case takes one away.
+    """
     with tempfile.TemporaryDirectory() as d:
         tree = Path(d)
         shutil.copytree(FIXTURE, tree / "apps")
@@ -30,6 +42,16 @@ def check(edit=None) -> tuple[int, str]:
         if edit is not None:
             man = tree / MANIFEST
             man.write_text(edit(man.read_text()))
+        for rel, body in (extra or {}).items():
+            f = tree / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(body)
+        for rel in remove or ():
+            target = tree / rel
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
         r = subprocess.run(
             [sys.executable, "scripts/check_structure.py"],
             cwd=tree, capture_output=True, text=True,
@@ -330,6 +352,81 @@ class TestManifest(unittest.TestCase):
             lambda s: s.replace("methods: [GET, POST]", "methods: [TELEPORT]")
         )
         self.assertNotEqual(code, 0, out)
+
+
+class TestSeveralSkills(unittest.TestCase):
+    """An app may teach more than one thing.
+
+    The cap used to be one, because the agent's publish path wrote an app's files
+    to <skills>/apps/<id>/ and looked for SKILL.md at that root. It takes nested
+    paths now, so each skill's files are published under its own name.
+    """
+
+    def skills(self, *names):
+        return {
+            f"apps/example/skills/{n}/SKILL.md": skill_md(n) for n in names
+        }
+
+    def test_a_second_skill_is_accepted(self):
+        code, out = check(extra=self.skills("example-mcp"))
+        self.assertEqual(code, 0, out)
+        self.assertIn("example-api", out)
+        self.assertIn("example-mcp", out)
+
+    def test_exactly_the_limit_is_accepted(self):
+        # The fixture already ships one, so the limit is that plus MAX_SKILLS-1.
+        names = [f"example-s{i:02d}" for i in range(MAX_SKILLS - 1)]
+        code, out = check(extra=self.skills(*names))
+        self.assertEqual(code, 0, out)
+
+    def test_one_over_the_limit_is_refused(self):
+        names = [f"example-s{i:02d}" for i in range(MAX_SKILLS)]
+        code, out = check(extra=self.skills(*names))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn(f"limit {MAX_SKILLS}", out)
+
+    def test_a_second_skill_still_needs_its_entrypoint(self):
+        """Every skill directory is checked, and not only the first."""
+        code, out = check(extra={"apps/example/skills/example-mcp/notes.md": "no entrypoint"})
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("SKILL.md", out)
+
+    def test_a_second_skill_must_declare_its_own_name(self):
+        code, out = check(
+            extra={"apps/example/skills/example-mcp/SKILL.md": skill_md("something-else")}
+        )
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("something-else", out)
+
+    def test_zero_skills_is_still_refused(self):
+        """A publish is a full replacement, so an app with no files is dropped
+        from the set, and that is byte-identical to one whose files did not
+        survive the fetch."""
+        code, out = check(remove=["apps/example/skills"])
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("no skills/", out)
+
+
+class TestDefaultInstall(unittest.TestCase):
+    """A key the consumer knows, so the checker has to know it too.
+
+    The decoder over there runs with KnownFields, so a key this accepts and a
+    deployed build does not drops the whole app from that build's catalogue.
+    """
+
+    def test_default_install_is_accepted(self):
+        code, out = check(append("default_install: true\n"))
+        self.assertEqual(code, 0, out)
+
+    def test_false_is_accepted(self):
+        code, out = check(append("default_install: false\n"))
+        self.assertEqual(code, 0, out)
+
+    def test_a_key_the_consumer_does_not_know_is_still_refused(self):
+        """The guard this relies on, so relaxing one key did not open the set."""
+        code, out = check(append("default_instal: true\n"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("default_instal", out)
 
 
 if __name__ == "__main__":
