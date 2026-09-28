@@ -28,6 +28,11 @@ blurb: Trade institutional blocks and analyse the tape, with keys your agent nev
 access: read-write
 maturity: beta
 
+# EVERY ACCOUNT GETS THIS WITHOUT ASKING. These skills reached every pod by a
+# git clone until now, so without this an account that never clicks Install
+# ends up with fewer skills than it had. Uninstalling keeps it uninstalled.
+default_install: true
+
 description: |
   Paradigm is an institutional liquidity network for crypto derivatives.
 
