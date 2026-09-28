@@ -60,13 +60,13 @@ What is checked, in each case because the consumer refuses the app without it:
     path: followed, it names something outside the tree; skipped, it empties a
     skill directory and the app loads as one that teaches nothing, which
     deletes its skill off every agent that installed it.
-  * EXACTLY one skill per app. Not "at most one": the agent's publish path
-    writes an app's files under <skills>/apps/<id>/ and discovers a skill by
-    SKILL.md at that root, so a second has nowhere to go. Zero is refused for a
-    different reason: a publish is a full replacement, an app contributing no
-    files is dropped from the set, and so an app that ships no skill is
-    byte-identical to one whose files did not survive the fetch — which
-    deletes a working skill off every agent that installed it.
+  * AT LEAST ONE SKILL PER APP, and at most MAX_SKILLS. Zero is refused because
+    a publish is a full replacement, an app contributing no files is dropped
+    from the set, and so an app that ships no skill is byte-identical to one
+    whose files did not survive the fetch — which deletes a working skill off
+    every agent that installed it. The cap is on SKILLS because a skill is
+    prose plus its references, MAX_FILES is what one of those needs, and the
+    per-app file ceiling is the product.
   * Every directory under skills/ holds a SKILL.md whose frontmatter `name`
     equals the directory, with a non-empty description.
   * No two apps claim the same skill name. openclaw resolves a collision by
@@ -152,7 +152,7 @@ MAX_HOSTS = 100
 KNOWN = {
     "manifest": {
         "schema_version", "id", "version", "name", "blurb", "description",
-        "access", "maturity",
+        "access", "maturity", "default_install",
         "environments", "exclusive_credential_types", "credential_types",
         "developer", "developer_url", "tint", "icon",
     },
@@ -180,12 +180,37 @@ DELIVERY_FIELDS = {
              "match_path", "match_query"},
 }
 
+# The manifest's boolean keys. A known key whose VALUE is the wrong kind is the
+# same failure as an unknown key: the consumer's decoder refuses the whole app
+# and it goes missing from the catalogue.
+#
+# WHAT COUNTS AS A BOOLEAN WAS MEASURED. yaml.v3 was run over every
+# candidate token: it takes true/false in any of the three case forms, and also
+# yes, no, on, off, y and n with their case variants, and reads null and ~ as
+# false. It REFUSES 1, 0, a quoted "true", and mixed case like tRuE.
+#
+# PyYAML's own set covers all of those but the single letters: it reads bare y
+# and n as strings, so this refuses two values the consumer would accept. That is
+# the one divergence, it is stricter here, and matching it would need a custom
+# loader to see the raw token. `test_single_letter_booleans_are_refused_here_and_
+# that_is_known` pins it.
+#
+# None is allowed because that is what PyYAML makes of null and ~, which the
+# consumer reads as false.
+BOOLEAN_KEYS = ("exclusive_credential_types", "default_install")
+
 # The manifest format this checker understands, matching the consumer's.
 SCHEMA_VERSION = 1
 
-# The consumer's own limits (pkg/apps: MaxSkillFileBytes, MaxSkillFiles).
+# The consumer's own limits (pkg/apps: MaxSkillFileBytes, MaxSkillFiles,
+# MaxSkillsPerApp).
+#
+# MAX_FILES is PER SKILL. What an app may hold is a number of skills, and the
+# per-app file ceiling is the product of the two, which is what the sidecar
+# refuses a payload over.
 MAX_FILE_BYTES = 512 * 1024
 MAX_FILES = 32
+MAX_SKILLS = 8
 
 
 def check_links(failures: list[str]) -> None:
@@ -505,6 +530,13 @@ def check_manifest(app: str, text: str, failures: list[str]) -> None:
             f"{man}: manifests do not name skills. The directory beside this file is the content"
         )
 
+    for key in BOOLEAN_KEYS:
+        if key in doc and doc[key] is not None and not isinstance(doc[key], bool):
+            failures.append(
+                f"{man}: {key} is {doc[key]!r}, and the consumer decodes it into a "
+                "bool. Use true or false"
+            )
+
     check_presentation(man, doc, failures)
     check_scope(man, doc, failures)
     check_environments(man, doc.get("environments"), failures)
@@ -548,12 +580,12 @@ def main() -> int:
         )
         if not on_disk:
             failures.append(
-                f"{app}: no skills/ — an app must ship exactly one, or it is indistinguishable "
+                f"{app}: no skills/ — an app must ship at least one, or it is indistinguishable "
                 "from one whose files went missing, and that reads as an uninstall"
             )
-        if len(on_disk) > 1:
+        if len(on_disk) > MAX_SKILLS:
             failures.append(
-                f"{app}: {len(on_disk)} skills ({', '.join(on_disk)}) — one per app until the agent can take nested paths"
+                f"{app}: {len(on_disk)} skills ({', '.join(on_disk)}), limit {MAX_SKILLS}"
             )
 
         for name in on_disk:
