@@ -245,6 +245,21 @@ def test_classify_structure():
                _leg("ETH-16JUL26-1825-P", "buy", 63)]
     check("4-leg, 3-strike, C&P mid → Iron Butterfly",
           classify_structure(ironfly) == "Iron Butterfly", classify_structure(ironfly))
+    # The shape needs BOTH an even ratio and opposite body/wing directions. Each
+    # of these breaks one of them, so an `or` between the two reads either as an
+    # Iron Butterfly and mislabels a live print.
+    lopsided = [_leg("ETH-16JUL26-1875-C", "sell", 10),
+                _leg("ETH-16JUL26-1875-P", "sell", 10),
+                _leg("ETH-16JUL26-1925-C", "buy", 100),
+                _leg("ETH-16JUL26-1825-P", "buy", 100)]
+    check("same shape at a 10:1 ratio is not an Iron Butterfly",
+          classify_structure(lopsided) != "Iron Butterfly", classify_structure(lopsided))
+    all_buy = [_leg("ETH-16JUL26-1875-C", "buy", 63),
+               _leg("ETH-16JUL26-1875-P", "buy", 63),
+               _leg("ETH-16JUL26-1925-C", "buy", 63),
+               _leg("ETH-16JUL26-1825-P", "buy", 63)]
+    check("same shape bought on every leg is not an Iron Butterfly",
+          classify_structure(all_buy) != "Iron Butterfly", classify_structure(all_buy))
     # 4 strikes, 2 calls + 2 puts → Iron Condor.
     ironcondor = [_leg("BTC-26JUN26-55000-P", "buy", 10),
                   _leg("BTC-26JUN26-60000-P", "sell", 10),

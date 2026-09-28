@@ -31,6 +31,9 @@ jobs:
       - name: Test the checker
         run: python3 scripts/test_check_structure.py
 
+      - name: Test the version bump checker
+        run: python3 scripts/test_check_version_bump.py
+
       - name: Check app structure
         run: python3 scripts/check_structure.py
 

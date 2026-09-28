@@ -99,7 +99,7 @@ Paradigm answers `403 Invalid API Access Key`.
 | Quote or cross | `POST /v2/drfq/orders/` | **yes** |
 | Amend an order | `PUT /v2/drfq/orders/{id}/` | **yes** |
 | Cancel one RFQ or order | `DELETE /v2/drfq/rfqs/{id}/`, `DELETE /v2/drfq/orders/{id}/` | no |
-| Cancel a batch | `DELETE /v2/drfq/orders/?rfq_id=&state=` | **yes, unless every filter resolved** |
+| Cancel a batch | `DELETE /v2/drfq/orders/?rfq_id=<id>&state=<state>` | **yes, unless every filter resolved** |
 | Your cleared blocks | `GET /v2/drfq/trades/`, `GET /v2/drfq/trades/{id}/` | no |
 | The public block tape | `GET /v2/drfq/trade_tape/` | no |
 | Price a multi-leg structure | `POST /v2/drfq/pricing/` | no |
@@ -123,9 +123,10 @@ Two things this skill does NOT do, because they live outside `/v2/drfq/`:
 
 Nothing sits between you and Paradigm now, so these are yours.
 
-**Never send a batch cancel with an unresolved filter.** Dropping an empty
-parameter turns `DELETE /v2/drfq/orders/?rfq_id=` into the cancel-all. Resolve
-every filter first, and gate the call when you cannot.
+**Never send a batch cancel with an unresolved filter.** You drop a parameter
+that has no value, so an unresolved `rfq_id` turns a batch cancel into the
+cancel-all. Fill every filter in before you send it, and gate the call when you
+cannot.
 
 **Encode the query exactly once, and sign what you send.** The signed path
 carries the query string, so build it once and use the same bytes for both.
@@ -139,10 +140,12 @@ bytes. `JSON.stringify` gives you this; re-serialising after signing does not.
 Page one is not the desk list. Follow the cursor to the end before you use it,
 and stop at 100 pages.
 
-**Send the fields you mean.** An RFQ body needs `counterparties`, even as an
-empty list, `is_taker_anonymous` and `state`. Send `is_taker_anonymous: true`
-and `state: "OPEN"` unless the user asks otherwise. Write enum values bare:
-`OPEN`, not `RFQState.OPEN`, and `MAKER`, not `AuctionRole.MAKER`.
+**Send all six RFQ fields every time.** `venue`, `legs`, `quantity`,
+`counterparties` (an empty list broadcasts), `is_taker_anonymous` and `state`.
+Send `is_taker_anonymous: true` and `state: "OPEN"` unless the user asks
+otherwise. `account_name` and `label` are the only optional ones. Write enum
+values bare: `OPEN`, not `RFQState.OPEN`, and `MAKER`, not
+`AuctionRole.MAKER`.
 
 **Keep the status code and the request id.** Paradigm returns an
 `x-request-id` header. Quote it with the status code and the body when you
@@ -188,15 +191,16 @@ ambiguous, ask.
 | `legs` | `{instrument_id, ratio, side, price?}` rows. Outright = 1 leg; spread / straddle / RR = 2 legs; condors etc. = more. `side` defines structure orientation — see **Direction** below |
 | `quantity` | Decimal string in base units |
 | `counterparties` | **Default: send to every prime-venue-enabled LP for the venue, by name.** Resolve them with `GET /v2/drfq/counterparties/` — **page through the whole result** (follow the cursor / `has_more`; don't stop at page 1) — then filter to desks flagged prime-venue-enabled for this venue and pass that explicit list (see Step 3a · 1). Narrow to specific desks only when the user names them. Last-resort fallback (the counterparty call fails): send an empty / omitted list so Paradigm open-broadcasts (GRFQ), and note it in the trace |
-| `is_taker_anonymous` | Hide identity from makers (optional) |
-| `account_name`, `label` | Account label + idempotency tag |
+| `is_taker_anonymous` | Hide identity from makers. Always sent; `true` unless the user says otherwise |
+| `state` | `OPEN` sends it now, `DRAFT` stages it without notifying anyone. Always sent |
+| `account_name`, `label` | Account to bill and an idempotency tag. The only optional fields |
 
 **Maker:**
 
 | Field | Meaning |
 |---|---|
 | `rfq_id` | RFQ to quote — fetch it first to learn `venue` + `kind` |
-| `side` | `BUY` (bid) / `SELL` (offer). Two-way = two `post_order` calls |
+| `side` | `BUY` (bid) / `SELL` (offer). Two-way = two `POST /v2/drfq/orders/` calls |
 | `price` or `edge` | Absolute price, or an edge spec interpreted per `references/venues.md` for that RFQ's venue |
 | `quantity` | Defaults to RFQ quantity |
 | `type` | `LIMIT` (default) or `HIDDEN` |
@@ -235,7 +239,7 @@ build it conventionally and short the **package**, never the legs.
   double-negates back to long the call spread. The lower strike is always
   the BUY leg in the conventional build.
 
-The cross `side` at `post_order` (Step 3a · 5) is a separate
+The cross `side` at `POST /v2/drfq/orders/` (Step 3a · 5) is a separate
 matching-mechanics concern — see there.
 
 If anything is ambiguous, ask before calling tools.
@@ -270,8 +274,8 @@ for the session; do not invent IDs.
      or returns nothing: send an empty / omitted `counterparties` list so
      Paradigm open-broadcasts (GRFQ), and call this out in the trace.
 
-   Then `POST /v2/drfq/rfqs/` with `venue`, `legs`, `quantity`,
-   counterparties=[...], account_name=..., label=...)`. Capture `rfq_id`.
+   Then `POST /v2/drfq/rfqs/` with all six body fields, plus `account_name`
+   and `label` when you have them. Capture `rfq_id`.
    Show: id, venue, legs, quantity, counterparties (`all N PRDX prime
    LPs`, the named desks, or `open broadcast (fallback)`), expiry.
 2. **Stream quotes live** — every 1 to 3 s poll all three of
@@ -295,8 +299,8 @@ for the session; do not invent IDs.
    on a slower cadence than the quote poll.
 4. **Confirmation gate** (see below). Wait for explicit `yes`.
 5. **Cross** — `POST /v2/drfq/orders/` with `rfq_id`, `side`,
-   type="LIMIT", time_in_force="FILL_OR_KILL", price=..., quantity=...,
-   legs=[...])`. `side` is opposite the resting order being taken.
+   `"type": "LIMIT"`, `"time_in_force": "FILL_OR_KILL"`, `price`, `quantity`
+   and `legs`. `side` is opposite the resting order being taken.
    This cross `side` is matching mechanics (lift an offer = BUY, hit a
    bid = SELL) and is independent of the structure's long/short
    orientation, which the leg sides already fixed at create-time (see
@@ -343,8 +347,8 @@ for the session; do not invent IDs.
    Show the implied edge before going to the gate.
 5. **Confirmation gate**. Wait for explicit `yes`.
 6. **Post** — `POST /v2/drfq/orders/` with `rfq_id`, `side`,
-   type="LIMIT", time_in_force="GOOD_TILL_CANCELED", price=...,
-   quantity=..., legs=[...])`. Two-way = two calls.
+   `"type": "LIMIT"`, `"time_in_force": "GOOD_TILL_CANCELED"`, `price`,
+   `quantity` and `legs`. Two-way = two calls.
 7. **Manage lifecycle** — poll each 1–3 s:
    - `GET /v2/drfq/orders/?rfq_id=...` — surface when no longer
      top-of-book.
@@ -385,9 +389,14 @@ swap in the venue's fair-value section per `references/venues.md`):
 CONFIRM RFQ — MAINNET (CRED_PARADIGM_MAINNET_ACCESS) — taker
 BTC-USD-PERP (id 98765) · PRDX
 Will call on yes:
-  POST /v2/drfq/rfqs/  venue="PRDX",
-    legs=[{instrument_id: 98765, ratio: 1, side: "BUY"}],
-    quantity="500", counterparties=[...14 prime LPs], label="...")   # resolved prime-venue LP set (paginated)
+  POST /v2/drfq/rfqs/
+  {"venue": "PRDX",
+   "legs": [{"instrument_id": 98765, "ratio": 1, "side": "BUY"}],
+   "quantity": "500",
+   "counterparties": [...14 prime LPs],   # resolved and paginated
+   "is_taker_anonymous": true,
+   "state": "OPEN",
+   "label": "..."}
 BUY 500 BTC → all 14 PRDX prime LPs           ~$48.23M
 Fair: mid $96,455 · BBO 96,450/96,460 (10 bps) · walk 500 ~$96,612 (+16 bps)
 [yes / no / adjust]
@@ -414,10 +423,15 @@ structure mark + net delta/vega. Deribit options show prices in BTC terms
 CONFIRM RFQ — MAINNET (CRED_PARADIGM_MAINNET_ACCESS) — taker
 BTC 8MAY26 90/80 risk reversal · PRDX · short/bearish
 Will call on yes:
-  POST /v2/drfq/rfqs/  venue="PRDX", quantity="100",
-    legs=[{instrument_id: 50121, ratio: 1, side: "SELL"},   # 90000-C
-          {instrument_id: 50144, ratio: 1, side: "BUY"}],    # 80000-P
-    counterparties=["LP1","LP2"], label="...")
+  POST /v2/drfq/rfqs/
+  {"venue": "PRDX",
+   "quantity": "100",
+   "legs": [{"instrument_id": 50121, "ratio": 1, "side": "SELL"},    # 90000-C
+            {"instrument_id": 50144, "ratio": 1, "side": "BUY"}],    # 80000-P
+   "counterparties": ["LP1", "LP2"],
+   "is_taker_anonymous": true,
+   "state": "OPEN",
+   "label": "..."}
   90000-C  mark 0.021 · IV 58% · Δ +0.34 · vega 9.2
   80000-P  mark 0.018 · IV 61% · Δ −0.22 · vega 8.1
   Underlying BTC-USD-PERP mark $96,455 · net structure mark 0.003 · net Δ +0.12
