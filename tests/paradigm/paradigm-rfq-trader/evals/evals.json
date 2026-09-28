@@ -5,14 +5,14 @@
     {
       "id": 1,
       "prompt": "send a Paradigm block RFQ to buy 500 BTC perp, directed to LP1 and LP2, settles on Paradex",
-      "expected_output": "A taker RFQ-build flow that: (1) calls GET /v2/drfq/instruments/(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-PERP\") to resolve the integer instrument_id; (2) assembles a POST /v2/drfq/rfqs/ call with venue=PRDX, a single leg (ratio=1, side=BUY), quantity=500, counterparties=[\"LP1\",\"LP2\"], and a label; (3) pulls Paradex BBO + orderbook via the Paradex public REST API (web_fetch) for fair-value reference and the walked-ask cost for 500 BTC; (4) presents a confirmation block with the Paradex book reference and waits for explicit yes before invoking POST /v2/drfq/rfqs/; (5) includes a data-source trace listing each tool called.",
+      "expected_output": "A taker RFQ-build flow that: (1) calls GET /v2/drfq/instruments/(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-PERP\") to resolve the integer instrument_id; (2) assembles a POST /v2/drfq/rfqs/ call with venue=PRDX, a single leg (ratio=1, side=BUY), quantity=500, counterparties=[\"LP1\",\"LP2\"], and a label; (3) pulls Paradex BBO + orderbook via the Paradex public REST API (web_fetch) for fair-value reference and the walked-ask cost for 500 BTC; (4) presents a confirmation block with the Paradex book reference and waits for explicit yes before invoking POST /v2/drfq/rfqs/; (5) includes a data-source trace listing each call it made.",
       "assertions": [
         "Response calls (or describes calling) GET /v2/drfq/instruments/ with venue=PRDX and venue_instrument_name=BTC-USD-PERP",
         "Response assembles a POST /v2/drfq/rfqs/ call with venue=PRDX, side=BUY, quantity=500, counterparties=[\"LP1\",\"LP2\"]",
         "Response pulls Paradex book data via the Paradex public BBO / orderbook endpoints (web_fetch, NOT Deribit) for fair-value reference",
-        "Response presents a confirmation block showing the Paradex BBO and waits for explicit yes before invoking the create tool",
+        "Response presents a confirmation block showing the Paradex BBO and waits for explicit yes before sending POST /v2/drfq/rfqs/",
         "Response does not echo or print either Paradigm credential, nor the value behind a placeholder",
-        "Response includes a data-source trace listing the MCP tools called"
+        "Response includes a data-source trace listing the calls it made"
       ]
     },
     {
@@ -109,7 +109,7 @@
         "Response also pulls BTC-PERPETUAL mark for underlying spot reference",
         "Confirmation block shows per-leg prices in BTC terms (Deribit inverse-option convention), not USD",
         "Final POST /v2/drfq/rfqs/ call uses venue=DBT and two legs (call + put at same strike for a straddle)",
-        "Response waits for explicit user confirmation before invoking the create tool"
+        "Response waits for explicit user confirmation before sending POST /v2/drfq/rfqs/"
       ]
     },
     {
@@ -133,7 +133,7 @@
         "Response also pulls the underlying BTC-USD-PERP mark for spot reference",
         "Confirmation block shows per-leg mark + IV + delta + vega and an aggregated structure mark / net delta",
         "Final POST /v2/drfq/rfqs/ call uses venue=PRDX and two legs with the correct sides (+call -put for a risk reversal)",
-        "Response waits for explicit user confirmation before invoking the create tool"
+        "Response waits for explicit user confirmation before sending POST /v2/drfq/rfqs/"
       ]
     },
     {

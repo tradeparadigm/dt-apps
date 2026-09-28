@@ -81,14 +81,23 @@ STALE = [
     (r"empty\s*/?\s*(omitted\s*)?broadcast", "a broadcast the service refuses"),
     (r"mcp[- ]paradigm|\.mcpb|MCP server config", "MCP setup"),
 ]
+# One assertion names MCP on purpose, to require that the answer does NOT
+# describe it. Cut exactly that string before scanning, rather than letting its
+# presence excuse the whole file: a file-wide allowance means an install guide
+# pasted anywhere else in it passes.
+INTENTIONAL = (
+    "Response does NOT describe an MCP server, a .mcpb bundle, or PARADIGM_* "
+    "environment variables"
+)
+
 for f in EVALS:
     body = f.read_text()
+    scanned = body.replace(INTENTIONAL, "")
+    ok(INTENTIONAL not in scanned,
+       f"{f.parent.parent.name}: the intentional MCP assertion is cut before scanning")
     for pat, what in STALE:
-        hits = re.findall(pat, body, re.I)
-        # Case 4 names MCP on purpose, to assert the answer does NOT describe it.
-        allowed = what == "MCP setup" and "does NOT describe an MCP server" in body
-        ok(not hits or allowed,
-           f"{f.parent.parent.name}: no {what} {sorted(set(hits))[:3] if hits and not allowed else ''}")
+        hits = re.findall(pat, scanned, re.I)
+        ok(not hits, f"{f.parent.parent.name}: no {what} {sorted(set(hits))[:3] if hits else ''}")
 
 print(f"\n{_p} passed, {_f} failed")
 sys.exit(1 if _f else 0)

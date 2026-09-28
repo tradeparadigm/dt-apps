@@ -437,7 +437,7 @@ same** — environment line, header line, assembled call, leg(s) listed, fair-va
 sizing line — but the fair-value section is shaped per
 `references/venues.md` for that venue + kind. Options **must** show, *inside
 the confirmation block itself* (not only in an earlier step), a per-leg line
-with `mark + mark_iv + delta + vega`, the **underlying spot** (pull
+with its mark, implied vol, delta and vega, the **underlying spot** (pull
 `BTC-USD-PERP` mark on PRDX / `BTC-PERPETUAL` on DBT), and an aggregated
 structure mark + net delta/vega. Deribit options show prices in BTC terms
 (not USD). Example (PRDX risk reversal):
