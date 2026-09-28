@@ -21,7 +21,7 @@ schema_version: 1
 id: paradigm
 version: 1.0.0
 name: Paradigm
-blurb: Request and trade institutional blocks with keys your agent never holds.
+blurb: Trade institutional blocks and analyse the tape, with keys your agent never sees.
 
 # Read-write: the RFQ surface creates and cancels quotes. Beta: nothing on
 # Paradigm has been through the credential proxy before this.
@@ -31,13 +31,18 @@ maturity: beta
 description: |
   Paradigm is an institutional liquidity network for crypto derivatives.
 
-  This app installs a skill that teaches your agent to authenticate to the
-  DRFQv2 REST API through the credential proxy, and adds Paradigm to the
-  credentials form so you can enrol the two values Paradigm issues without
-  filling in the signing details by hand.
+  Install this and your agent can call the DRFQv2 REST API through the
+  credential proxy, analyse a filled block against live venue data, query the
+  historical trade tape, and write an options flow recap. It also adds
+  Paradigm to the credentials form, so you enrol the two values Paradigm
+  issues without filling in the signing details by hand.
 
-  Both credentials are needed. The access key identifies the desk and the
-  signing key proves the request, and every authenticated call carries both.
+  You need both credentials. The access key identifies the desk and the
+  signature proves the request, and we send both on every authenticated call.
+
+  The three data skills read market data from S3 using the permissions your
+  pod already has. Without those, they report an access error rather than a
+  result.
 
 environments:
   - id: mainnet

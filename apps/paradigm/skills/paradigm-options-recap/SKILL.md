@@ -1,0 +1,172 @@
+---
+name: paradigm-options-recap
+description: >
+  Options market recap for a requested or default window, invoked via /recap.
+  Parses "/recap [asset] [options] [window]" (e.g. "/recap btc options 8h")
+  and builds the fixed four-section recap — Snapshot, Biggest Print, Block
+  Flow, Vol Surface — from bounded raw exchange venue files and source tapes,
+  never from Dime hot files. Use when the user types /recap or asks for a
+  market recap, an options flow summary, "what happened in BTC options",
+  "last Xh of flow", or what the vol surface looks like. Dataset inventory,
+  schema and historical lookups belong to paradigm-data-discovery. The output format
+  is fixed — always the same four sections in the same order.
+compatibility: >
+  Requires uv (the scripts are PEP 723 single-file programs), S3 read access to
+  dt-exchange-venue-data resolved through the AWS credential chain (IRSA in the
+  deployed stack), and the Deribit public API for realized vol and the
+  DVOL/spot fallback.
+metadata:
+  author: tradeparadigm
+  version: "3.1"
+---
+
+# Options Recap
+
+## Command
+
+`/recap [asset] [options] [window]` is order-independent. Default to BTC and
+24h; `options` is a no-op token. Accept `Nm`, `Nh`, and `Nd` windows, and state
+the actual interval queried rather than silently capping or changing it.
+
+Windows longer than 30d are refused: the execution tape keeps 30 days. A
+NARROWER ceiling also applies wherever the container is small, because the read
+holds the whole window in memory — the script names the limit it is enforcing
+and which of the two it came from. Report the refusal and that limit, then stop
+and let the user pick the window. Re-running at the ceiling is the wrong repair:
+it lists thousands of partitions and takes minutes, spending their time on a
+window they did not ask for.
+
+## Live execution
+
+Run one command from this skill's directory:
+
+```bash
+bash scripts/run_recap.sh BTC 24h
+```
+
+Pass the parsed asset and window. The script reads non-hot partitions, applies
+event-time instrument metadata, computes the established metrics, and prints
+the finished four-section recap. Relay stdout verbatim as the entire answer,
+including coverage warnings. Do not recalculate, reformat, inspect its intermediate
+JSON, or make additional reads to fill optional fields. If it fails, report the
+error and stop; never retry with a different window or bypass a freshness gate.
+The following calculation and output rules describe what the script implements
+and how to handle supplied/injected evidence when no live execution is needed.
+
+## Hard rules
+
+The collector's trade examples and surface nodes are samples, not the full
+market. Read aggregate field coverage and missing partitions before claiming
+totals or rankings: null `premium_turnover_usd` means incomplete valuation;
+`known_premium_turnover_usd` is only the valued subset. Surface nodes are
+nearest available absolute 25/50 delta per expiry/type, with actual deltas;
+the same instrument can occupy both nodes. Never sum their OI or describe
+them as a full chain. For OI/max-pain, read all instruments once per snapshot.
+Opening observations are the first event within the requested opening 5m
+bucket, not an exact as-of quote; latest observations use the explicitly
+reported stable bucket. Missing opening evidence cannot establish a change.
+Exclude expired instruments at the comparison anchor and report observed time.
+
+1. **Do not use `s3://dt-exchange-venue-data/hot/` or any `hot__*` object.**
+2. Run `bash scripts/run_recap.sh <ASSET> <WINDOW>` once and relay the finished
+   recap, not the intermediate collector evidence.
+3. Read
+   [the raw exchange catalog](../paradigm-data-discovery/references/exchange-raw.md)
+   when explaining the source contract or working with injected evidence;
+   the live script already implements the bounded query plan.
+4. Bound reads to the requested window, asset, venues, data types, and
+   partitions. Check `max(timestamp)` in each continuous source used.
+5. Normalise IV, amount, premium turnover, and OI with event-time-applicable instrument
+   metadata before combining venues. If a conversion cannot be proved, keep
+   the result venue-local and label the native unit.
+   Follow the catalog's 30-day metadata-history limit; raw availability alone
+   does not establish that a historical conversion is supported.
+6. A missing or unreadable source is not a quiet market. Name the missing
+   section or field; do not estimate, simulate, or fill it from a stale object.
+7. When the prompt supplies fixture or injected evidence, treat those values as
+   authoritative. Do not add invented "live" observations or replace fixture
+   opens/closes with plausible numbers.
+
+## Choose the raw inputs
+
+Start from the requested output and use the smallest direct data set that can
+support it. Typical choices are:
+
+- normalized `option_trade` rows from Deribit, Deribit USDC, OKX, Bybit, and
+  Bullish for volume, put/call activity, screen flow, IV at trade, and venue
+  blocks — what `run_recap.sh` reads;
+- normalized `option_summary` rows for current/window-open mark IV, bid/ask,
+  greeks, OI, underlying price, skew, and term structure;
+- existing normalized `option_summary` per-period aggregates when a period-end
+  observation suffices; use rows for exact event-time selection and apply the
+  same metadata-driven unit conversions;
+- Deribit raw `dvol` for DVOL open/close/high/low;
+- raw `perp_summary` or relevant raw spot/perp trades for spot and funding —
+  not read by `run_recap.sh`, which takes spot and the DVOL/spot fallback from
+  the Deribit public API;
+- `meta/instruments/` for contract size and IV/OI/premium units;
+- the daily partitioned Paradigm execution tape for brokered option legs
+  (`evidence.paradigm_executions`), the current RFQ tape for request activity,
+  and the frozen non-hot
+  executed tape only for historical trades at or before 2026-08-10;
+- public venue APIs when they provide a clearer current observation than the
+  latest raw partition.
+
+Internally the collector supplies source-local aggregates,
+largest trade observations, window-open/latest surface observations, DVOL,
+perpetual snapshots, venue-native block rows, provenance, units, freshness,
+and explicit gaps to the existing calculator and renderer. This intermediate
+data is not a second model-driven rendering workflow.
+
+For separate follow-up questions, use bounded raw S3, normalized rows or
+per-period aggregates, source tapes, or venue APIs. Do not add those queries to
+the live recap command or use a hot/pre-shaped recap file.
+The source map in the raw exchange catalog covers all former hot-file inputs.
+Check `partitioned_paradigm_executions` source status and publication coverage;
+do not present exchange-only block flow as complete Paradigm execution coverage.
+
+## Computation constraints
+
+- Select ticker snapshots at the required time; do not sum repeated
+  `option_summary` observations.
+- Group blocks only by real venue identifiers: Deribit/OKX
+  `block_trade_id`, Bullish OTC ids, or a published Bybit block flag without
+  inventing a group id.
+- Cross-venue coin volume requires venue metadata. Option premium turnover is
+  `amount_coin * price * index_price` for coin-quoted venues and
+  `amount_coin * price` for USD-quoted venues.
+- Convert decimal IV venues to vol points before comparing them with Deribit.
+- Build surface deltas from a window-open raw snapshot and the latest raw
+  snapshot; show `n/a` when either side is unavailable.
+- Derive DVOL open/close from the first/last event-time observations in the
+  requested window. Do not substitute a different point from the range.
+  Raw S3 `dvol` rows contain point observations (`timestamp`, `volatility`);
+  fixture/API candles instead contain `[timestamp_ms, open, high, low, close]`.
+  For a supplied candle series, sort by timestamp and use the earliest
+  candle's open and latest candle's close, not the earliest candle's close.
+  Candle coverage may straddle the requested boundaries; label that coverage
+  rather than claiming exact sub-candle endpoints.
+- For a mixed-direction biggest block, state each proven leg side (for example,
+  `buy put / sell call`); "two-way" alone does not establish the structure.
+- Deduplicate a Paradigm and venue block only when a real shared identifier or
+  uniquely provable match exists. Otherwise describe the overlap uncertainty.
+
+## Output
+
+Render exactly four sections in this order:
+
+1. **Snapshot** — spot range/change, DVOL/RV/VRP when available, comparable
+   cross-venue volume/activity, and put/call balance.
+2. **Biggest Print** — the largest resolved option print/block in the window,
+   with venue, structure, notional, and each leg's size and taker side.
+3. **Block Flow** — real block clusters by venue plus any source limitation or
+   unresolved Paradigm linkage.
+4. **Vol Surface** — current ATM/skew/term and window change from raw summary
+   snapshots.
+
+Follow [references/output-format.md](references/output-format.md) for concise
+formatting, but omit fields whose values cannot be established. Never drop an
+entire section: render `Unavailable — <specific source/reason>` instead.
+
+Work silently while reading and calculating. The final response begins with
+the recap and contains no process narration or simulated-data disclaimer.
