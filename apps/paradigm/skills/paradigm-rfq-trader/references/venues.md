@@ -36,27 +36,22 @@ the Paradex distinguisher vs Deribit.
 
 ### Counterparties / LP coverage
 
-Default to sending to **every prime-venue-enabled LP for PRDX, by
-name** — resolve them explicitly rather than relying on an open
-broadcast:
+Default to every LP eligible for PRDX, named explicitly. Paradigm has no open
+broadcast on this path: an empty `counterparties` list is a 400.
 
-1. Call `GET /v2/drfq/counterparties/` and **page through the entire
-   result**. The response is paginated — follow the cursor / `next` /
-   `has_more` until it is exhausted. **Stopping at page 1 silently drops
-   LPs** and is the cause of "not all LPs got the RFQ".
-2. Filter to desks flagged prime-venue-enabled for PRDX (the per-desk
-   prime / venue-eligibility flag on each counterparty record). Pass
-   that explicit list as `counterparties` to
-   `POST /v2/drfq/rfqs/`, and surface the count (`all N PRDX
-   prime LPs`).
+1. Call `GET /v2/drfq/counterparties/?venues=PRDX&group=LP` and **page through
+   the entire result**. Follow the cursor, `next` or `has_more` to the end.
+   Stopping at page 1 silently drops LPs, which is what "not all LPs got the
+   RFQ" means.
+2. Keep the desks whose `groups` carry `LP` and whose `venues` carry `PRDX`.
+   Those two lists are what the endpoint returns per desk. Pass their tickers
+   as `counterparties` to `POST /v2/drfq/rfqs/` and surface the count
+   (`all N PRDX LPs`).
 
 Narrow to a directed subset only when the user names specific desks.
 
-Last-resort fallback (the counterparties tool is unavailable or returns
-nothing): send `POST /v2/drfq/rfqs/` with an empty / omitted
-`counterparties` list → Paradigm open-broadcasts (GRFQ) to all eligible
-PRDX makers. Note the fallback in the data trace so it's clear the
-prime-LP filter was bypassed.
+When the lookup fails or comes back empty, stop and ask which desks to send
+to. An empty list does not broadcast, it errors.
 
 ### Fair value
 

@@ -140,12 +140,25 @@ bytes. `JSON.stringify` gives you this; re-serialising after signing does not.
 Page one is not the desk list. Follow the cursor to the end before you use it,
 and stop at 100 pages.
 
-**Send all six RFQ fields every time.** `venue`, `legs`, `quantity`,
-`counterparties` (an empty list broadcasts), `is_taker_anonymous` and `state`.
-Send `is_taker_anonymous: true` and `state: "OPEN"` unless the user asks
-otherwise. `account_name` and `label` are the only optional ones. Write enum
-values bare: `OPEN`, not `RFQState.OPEN`, and `MAKER`, not
-`AuctionRole.MAKER`.
+**An RFQ body needs six fields and Paradigm refuses it without them.**
+`venue`, `legs`, `quantity`, `account_name`, `counterparties` and
+`is_taker_anonymous`. `state` has a server default of `OPEN`, and `label` is
+the only other optional one. Write enum values bare: `OPEN`, not
+`RFQState.OPEN`, and `MAKER`, not `AuctionRole.MAKER`.
+
+**`counterparties` can never be empty.** Paradigm answers `At least one
+counterparty must be specified`. There is no open-broadcast fallback on this
+path, so a failed counterparty lookup means you stop and say so rather than
+sending an empty list.
+
+**A maker quote needs `account_name`; a taker cross does not.** Paradigm
+answers `This field is required` on a maker order without it. A taker crossing
+an existing order inherits the credential from the RFQ.
+
+**Anonymous needs three LPs.** With `is_taker_anonymous: true` and fewer than
+three counterparties in the `LP` group, Paradigm answers `To send an Anonymous
+RFQ, please select at least 3x LPs`. Send `false`, or add LPs, and say which
+you did.
 
 **Keep the status code and the request id.** Paradigm returns an
 `x-request-id` header. Quote it with the status code and the body when you
@@ -190,10 +203,11 @@ ambiguous, ask.
 | `venue` | `PRDX` or `DBT` (see scope table; ask if unspecified) |
 | `legs` | `{instrument_id, ratio, side, price?}` rows. Outright = 1 leg; spread / straddle / RR = 2 legs; condors etc. = more. `side` defines structure orientation — see **Direction** below |
 | `quantity` | Decimal string in base units |
-| `counterparties` | **Default: send to every prime-venue-enabled LP for the venue, by name.** Resolve them with `GET /v2/drfq/counterparties/` — **page through the whole result** (follow the cursor / `has_more`; don't stop at page 1) — then filter to desks flagged prime-venue-enabled for this venue and pass that explicit list (see Step 3a · 1). Narrow to specific desks only when the user names them. Last-resort fallback (the counterparty call fails): send an empty / omitted list so Paradigm open-broadcasts (GRFQ), and note it in the trace |
-| `is_taker_anonymous` | Hide identity from makers. Always sent; `true` unless the user says otherwise |
-| `state` | `OPEN` sends it now, `DRAFT` stages it without notifying anyone. Always sent |
-| `account_name`, `label` | Account to bill and an idempotency tag. The only optional fields |
+| `counterparties` | Desk tickers, and **never empty**. Default to every LP eligible for the venue: `GET /v2/drfq/counterparties/?venues=<venue>&group=LP`, paged to the end, then take the desks whose `groups` carry `LP` and whose `venues` carry this venue. Narrow to named desks only when the user names them. A failed lookup stops the RFQ, because an empty list is a 400 (see Step 3a · 1) |
+| `is_taker_anonymous` | Hide the taker desk from makers. **Required.** `true` needs at least three `LP` counterparties |
+| `state` | `OPEN` sends it now, `DRAFT` stages it. Optional, and the server defaults it to `OPEN` |
+| `account_name` | The account to bill. **Required**, and a missing one is a 400 |
+| `label` | Idempotency tag, echoed back. Optional |
 
 **Maker:**
 
@@ -261,23 +275,22 @@ for the session; do not invent IDs.
 
 ## Step 3a — Taker flow
 
-1. **Resolve counterparties, then create the RFQ.** Unless the user
-   named specific desks, **default to every prime-venue-enabled LP for
-   the venue**:
-   - Call `GET /v2/drfq/counterparties/` and **page through every
-     result** — follow the cursor / `next` / `has_more` until exhausted.
-     Do **not** stop at the first page; a partial list silently drops LPs.
-   - Filter the desks to those flagged prime-venue-enabled for this
-     venue (see `references/venues.md`), and pass that explicit list as
-     `counterparties`. Capture the resolved count `N`.
-   - Last-resort fallback only if the counterparties tool is unavailable
-     or returns nothing: send an empty / omitted `counterparties` list so
-     Paradigm open-broadcasts (GRFQ), and call this out in the trace.
+1. **Resolve counterparties, then create the RFQ.** Unless the user named
+   specific desks, default to every LP eligible for the venue:
+   - Call `GET /v2/drfq/counterparties/?venues=<venue>&group=LP` and **page
+     through every result**. Follow the cursor, `next` or `has_more` to the
+     end. A partial list silently drops LPs.
+   - Keep the desks whose `groups` carry `LP` and whose `venues` carry this
+     venue, and pass their tickers as `counterparties`. Capture the count `N`.
+   - **A failed or empty lookup stops here.** Paradigm refuses an empty
+     `counterparties` list, so say the lookup failed and ask which desks to
+     send to. Do not send the RFQ.
+   - With `is_taker_anonymous: true`, Paradigm needs at least three LPs. With
+     fewer, either send `false` or add desks, and say which you did.
 
-   Then `POST /v2/drfq/rfqs/` with all six body fields, plus `account_name`
-   and `label` when you have them. Capture `rfq_id`.
-   Show: id, venue, legs, quantity, counterparties (`all N PRDX prime
-   LPs`, the named desks, or `open broadcast (fallback)`), expiry.
+   Then `POST /v2/drfq/rfqs/` with all six required fields. Capture `rfq_id`.
+   Show: id, venue, legs, quantity, counterparties (`all N PRDX LPs` or the
+   named desks), expiry.
 2. **Stream quotes live** — every 1 to 3 s poll all three of
    `GET /v2/drfq/rfqs/{rfq_id}/`, `GET /v2/drfq/rfqs/{rfq_id}/bbo/` and
    `GET /v2/drfq/rfqs/{rfq_id}/orders/`. There is no composite call, so one
@@ -346,9 +359,10 @@ for the session; do not invent IDs.
      absolute price.
    Show the implied edge before going to the gate.
 5. **Confirmation gate**. Wait for explicit `yes`.
-6. **Post** — `POST /v2/drfq/orders/` with `rfq_id`, `side`,
+6. **Post** — `POST /v2/drfq/orders/` with `rfq_id`, `side`, `account_name`,
    `"type": "LIMIT"`, `"time_in_force": "GOOD_TILL_CANCELED"`, `price`,
-   `quantity` and `legs`. Two-way = two calls.
+   `quantity` and `legs`. A maker order without `account_name` is a 400.
+   Two-way = two calls.
 7. **Manage lifecycle** — poll each 1–3 s:
    - `GET /v2/drfq/orders/?rfq_id=...` — surface when no longer
      top-of-book.
@@ -393,11 +407,11 @@ Will call on yes:
   {"venue": "PRDX",
    "legs": [{"instrument_id": 98765, "ratio": 1, "side": "BUY"}],
    "quantity": "500",
-   "counterparties": [...14 prime LPs],   # resolved and paginated
-   "is_taker_anonymous": true,
-   "state": "OPEN",
+   "account_name": "desk-main",
+   "counterparties": [...14 LP tickers],   # resolved and paged
+   "is_taker_anonymous": true,             # 14 LPs, so the 3 LP minimum holds
    "label": "..."}
-BUY 500 BTC → all 14 PRDX prime LPs           ~$48.23M
+BUY 500 BTC → all 14 PRDX LPs                 ~$48.23M
 Fair: mid $96,455 · BBO 96,450/96,460 (10 bps) · walk 500 ~$96,612 (+16 bps)
 [yes / no / adjust]
 ```
@@ -428,9 +442,9 @@ Will call on yes:
    "quantity": "100",
    "legs": [{"instrument_id": 50121, "ratio": 1, "side": "SELL"},    # 90000-C
             {"instrument_id": 50144, "ratio": 1, "side": "BUY"}],    # 80000-P
+   "account_name": "desk-main",
    "counterparties": ["LP1", "LP2"],
-   "is_taker_anonymous": true,
-   "state": "OPEN",
+   "is_taker_anonymous": false,            # two LPs, under the 3 LP minimum
    "label": "..."}
   90000-C  mark 0.021 · IV 58% · Δ +0.34 · vega 9.2
   80000-P  mark 0.018 · IV 61% · Δ −0.22 · vega 8.1
