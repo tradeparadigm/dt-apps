@@ -120,6 +120,13 @@ PATH_RE = re.compile(r"^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$")
 METHODS = {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE"}
 MAX_METHODS = 8
 
+# The cached helper path a skill names. Nothing in the consumer reads it, and
+# the filename is the whole staleness mechanism, so a `version:` bump that
+# leaves the filename alone is only catchable here.
+HELPER_RE = re.compile(
+    r"tools/(?P<app>[a-z0-9-]+)/(?P<skill>[a-z0-9-]+)/(?P=skill)-(?P<version>[^/\s`'\"]+)\.mjs"
+)
+
 # Mirrored from pkg/apps: idPattern, slugPattern, detailKeyPattern.
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
@@ -180,34 +187,16 @@ DELIVERY_FIELDS = {
              "match_path", "match_query"},
 }
 
-# The manifest's boolean keys. A known key whose VALUE is the wrong kind is the
-# same failure as an unknown key: the consumer's decoder refuses the whole app
-# and it goes missing from the catalogue.
-#
-# WHAT COUNTS AS A BOOLEAN WAS MEASURED. yaml.v3 was run over every
-# candidate token: it takes true/false in any of the three case forms, and also
-# yes, no, on, off, y and n with their case variants, and reads null and ~ as
-# false. It REFUSES 1, 0, a quoted "true", and mixed case like tRuE.
-#
-# PyYAML's own set covers all of those but the single letters: it reads bare y
-# and n as strings, so this refuses two values the consumer would accept. That is
-# the one divergence, it is stricter here, and matching it would need a custom
-# loader to see the raw token. `test_single_letter_booleans_are_refused_here_and_
-# that_is_known` pins it.
-#
-# None is allowed because that is what PyYAML makes of null and ~, which the
-# consumer reads as false.
+# A known key whose value is the wrong kind fails the same way an unknown key
+# does. PyYAML reads bare y and n as strings where yaml.v3 reads booleans, so
+# this is stricter by two values, pinned in the divergence test.
 BOOLEAN_KEYS = ("exclusive_credential_types", "default_install")
 
 # The manifest format this checker understands, matching the consumer's.
 SCHEMA_VERSION = 1
 
-# The consumer's own limits (pkg/apps: MaxSkillFileBytes, MaxSkillFiles,
-# MaxSkillsPerApp).
-#
-# MAX_FILES is PER SKILL. What an app may hold is a number of skills, and the
-# per-app file ceiling is the product of the two, which is what the sidecar
-# refuses a payload over.
+# Mirrors pkg/apps: MaxSkillFileBytes, MaxSkillFiles, MaxSkillsPerApp.
+# MAX_FILES is per skill, so an app's ceiling is the product of the two.
 MAX_FILE_BYTES = 512 * 1024
 MAX_FILES = 32
 MAX_SKILLS = 8
@@ -501,16 +490,17 @@ def check_presentation(man: str, doc: dict, failures: list[str]) -> None:
         failures.append(f"{man}: icon.view_box {box!r} must be four numbers")
 
 
-def check_manifest(app: str, text: str, failures: list[str]) -> None:
+def check_manifest(app: str, text: str, failures: list[str]) -> str:
+    """Check one manifest, and return the version it declares."""
     man = f"{APPS}/{app}/{MANIFEST}"
     try:
         doc = yaml.safe_load(text)
     except yaml.YAMLError as exc:
         failures.append(f"{man}: is not readable YAML: {exc}")
-        return
+        return ""
     if not isinstance(doc, dict):
         failures.append(f"{man}: is not a mapping")
-        return
+        return ""
 
     check_known(man, "manifest", doc, "manifest", failures)
 
@@ -541,6 +531,7 @@ def check_manifest(app: str, text: str, failures: list[str]) -> None:
     check_scope(man, doc, failures)
     check_environments(man, doc.get("environments"), failures)
     check_credential_types(man, doc.get("credential_types"), failures)
+    return as_text(doc.get("version")) or ""
 
 
 def frontmatter(md: str) -> dict[str, str]:
@@ -607,6 +598,37 @@ def check_errata_version(app: str, version: str, files: list, failures: list[str
                     "that name is the whole expiry, so a mismatch means an agent reads "
                     "a note about a bug you have already fixed."
                 )
+def check_helper_versions(
+    app: str, version: str, skill: str, files: list[Path], failures: list[str]
+) -> None:
+    """Every helper path a skill names carries this app's version.
+
+    One failure per distinct wrong path, however many times the file repeats it.
+    A skill names its helper on every call it demonstrates, so reporting each
+    occurrence buries the other apps' output under one mistake.
+    """
+    for f in files:
+        try:
+            text = f.read_text()
+        except (OSError, UnicodeDecodeError):
+            continue
+        misplaced: set[str] = set()
+        stale: set[str] = set()
+        for m in HELPER_RE.finditer(text):
+            if m.group("app") != app or m.group("skill") != skill:
+                misplaced.add(f"{m.group('app')}/{m.group('skill')}")
+            elif m.group("version") != version:
+                stale.add(m.group("version"))
+        for where in sorted(misplaced):
+            failures.append(
+                f"{f}: names a helper under tools/{where}/, and this is {app}/{skill}"
+            )
+        for got in sorted(stale):
+            failures.append(
+                f"{f}: the helper is named for version {got!r} and {app}/{MANIFEST} "
+                f"says {version!r}. A bump the filename does not follow never "
+                "invalidates the agent's cached copy"
+            )
 
 
 def main() -> int:
@@ -623,12 +645,7 @@ def main() -> int:
         if not man.is_file():
             failures.append(f"{app}: no {MANIFEST}")
             continue
-        check_manifest(app.name, man.read_text(), failures)
-        try:
-            app_version = str((yaml.safe_load(man.read_text()) or {}).get("version", ""))
-        except yaml.YAMLError:
-            app_version = ""
-
+        version = check_manifest(app.name, man.read_text(), failures)
 
         skills_dir = app / "skills"
         on_disk = (
@@ -671,7 +688,9 @@ def main() -> int:
 
             files = [p for p in d.rglob("*") if p.is_file()]
             check_client_preamble(app.name, files, failures)
-            check_errata_version(app.name, app_version, files, failures)
+            if version:
+                check_errata_version(app.name, version, files, failures)
+                check_helper_versions(app.name, version, name, files, failures)
             if len(files) > MAX_FILES:
                 failures.append(f"{d}: {len(files)} files, limit {MAX_FILES}")
             for f in files:
