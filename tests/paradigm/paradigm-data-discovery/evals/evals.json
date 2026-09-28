@@ -1,0 +1,95 @@
+{
+  "skill_name": "paradigm-data-discovery",
+  "requires_auth": false,
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "what data do we have available to query?",
+      "expected_output": "An inventory-style response listing raw/normalized per-venue exchange files, instrument metadata and the current partitioned Paradigm execution tape under s3://dt-exchange-venue-data; the Paradigm RFQ and legacy historical executed CSV tapes under s3://dt-paradigm-data/paradigm_data/; and the Paradex DEX trade tape under s3://dt-paradex-data/paradex_data/. Mentions ap-northeast-1 and credential-chain access. Does not use the hot prefix.",
+      "assertions": [
+        "Response names the S3 buckets (s3://dt-paradigm-data, s3://dt-exchange-venue-data, s3://dt-paradex-data)",
+        "Response lists raw exchange venue files and metadata, the current partitioned Paradigm execution tape, Paradigm RFQ and legacy executed CSV tapes, and the Paradex DEX trade tape",
+        "Response does not recommend s3://dt-exchange-venue-data/hot/ or any hot__ object",
+        "Response is structured as a catalog summary, not a query — it does not attempt to run SQL"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "do we have OKX combo quotes?",
+      "expected_output": "A direct answer: there is no dedicated OKX combo-quote feed. Points to raw OKX option_trade and option_summary partitions as the available leg-level trade/quote evidence, explains that block_trade_id can group real block legs, and does not fabricate a path or recommend hot files.",
+      "assertions": [
+        "Response clearly states there is no dedicated OKX combo-quote feed",
+        "Response points to raw OKX option_trade and/or option_summary data as what is available",
+        "Response does not fabricate an S3 path (no external/tardis, no terminal-dime-prod)"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "what columns does the Paradigm trade tape have and where does it live?",
+      "expected_output": "Response leads with current daily Parquet at s3://dt-exchange-venue-data/paradigm_trade_tape/year=YYYY/month=MM/day=DD/paradigm_trade_tape__YYYYMMDD.parquet, lists its lowercase leg-level columns, and gives the case-sensitive options filter instrument_kind == \"OPTION\". It distinguishes the legacy s3://dt-paradigm-data/paradigm_data/paradigm_trade_tape_slim.csv.gz frozen at 2026-08-10, whose uppercase columns are not the Parquet schema. Current objects are mutable, support trailing 30-day reads plus the full oldest UTC day, and require metadata freshness/coverage checks.",
+      "assertions": [
+        "Response identifies the current tape at s3://dt-exchange-venue-data/paradigm_trade_tape/ with year/month/day partitions and paradigm_trade_tape__YYYYMMDD.parquet filenames",
+        "Response lists current Parquet columns including traded_at, trade_id, rfq_id, block_trade_id, venue_block_trade_id, instrument_kind, trade_price, notional_volume_usd",
+        "Response gives the case-sensitive options-only filter instrument_kind == \"OPTION\" (or equivalent SQL equality with uppercase OPTION), not merely the legacy PRODUCT filter",
+        "Response distinguishes current partitioned Parquet from the legacy paradigm_trade_tape_slim.csv.gz frozen at 2026-08-10, without presenting the frozen CSV as the only execution dataset",
+        "Response explains bounded recent coverage and checking freshness or coverage metadata rather than treating all historical days as available"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "what's the latest Deribit option trade data available?",
+      "expected_output": "A helpful answer pointing to the raw Deribit option_trade and option_summary partitions under s3://dt-exchange-venue-data/raw/exchange=deribit/, with dvol and perp_summary as related raw feeds. Explains the partition layout and recommends checking max(timestamp) in the narrow latest partition. Does not cite hot, terminal-dime-prod, or external/tardis paths.",
+      "assertions": [
+        "Response points to raw Deribit option_trade and option_summary paths under s3://dt-exchange-venue-data/raw/",
+        "Response does not cite a terminal-dime-prod or external/tardis S3 path",
+        "Response recommends checking record timestamps in a narrow raw partition rather than assuming coverage"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    { "query": "what Paradigm data do we have in S3", "should_trigger": true },
+    { "query": "what historical datasets are connected via DuckDB", "should_trigger": true },
+    { "query": "do we have OKX combo quotes in the S3 bucket", "should_trigger": true },
+    { "query": "where does the Paradigm RFQ tape live in S3", "should_trigger": true },
+    { "query": "what columns does the Paradigm trade tape have", "should_trigger": true },
+    { "query": "what's the date range for Deribit combo quotes on S3", "should_trigger": true },
+    { "query": "what's the schema for paradigm_trade_tape_slim", "should_trigger": true },
+    { "query": "I need to write a DuckDB query — which exchange market-data dataset should I use", "should_trigger": true },
+    { "query": "do we have AVAX options block trade data", "should_trigger": true },
+    { "query": "What were the biggest RFQs in March 2026 across all venues?", "should_trigger": true },
+    { "query": "where can I find greeks and IV in S3", "should_trigger": true },
+    { "query": "do we have future quotes for Bybit", "should_trigger": true },
+    { "query": "where's the Paradex historical trade tape stored", "should_trigger": true },
+    { "query": "biggest Paradex perp trades last month from the historical tape", "should_trigger": true },
+    { "query": "rank Paradigm block trades by notional last month", "should_trigger": true },
+    { "query": "show me BTC option block trades on 2026-04-15", "should_trigger": true },
+    { "query": "most-traded structures on Paradigm in Q1 2026", "should_trigger": true },
+    { "query": "Paradigm block volume on Deribit vs Paradex last 30 days", "should_trigger": true },
+    { "query": "unfilled RFQ ratio for BTC options in April 2026", "should_trigger": true },
+    { "query": "most-traded Deribit options on 2026-03-15", "should_trigger": true },
+    { "query": "analyze this trade", "should_trigger": false },
+    { "query": "what's my current PnL on Paradex", "should_trigger": false },
+    { "query": "build me a strangle", "should_trigger": false },
+    { "query": "show me live BTC funding on Paradex", "should_trigger": false },
+    { "query": "benchmark this fill", "should_trigger": false },
+    { "query": "what Paradex markets are available to trade", "should_trigger": false },
+    { "query": "what's the current orderbook on BTC-PERP", "should_trigger": false },
+    { "query": "show me my Paradex positions", "should_trigger": false },
+    { "query": "what data sources do you have for live prices", "should_trigger": false },
+    { "query": "what skills do you have", "should_trigger": false },
+    { "query": "what can you do", "should_trigger": false }
+  ],
+  "trigger_evals_validation": [
+    { "query": "is there a historical tape of Paradigm block trades I can query", "should_trigger": true },
+    { "query": "do we have Paradex options in the Paradigm trade tape", "should_trigger": true },
+    { "query": "is there Greeks or IV data in S3", "should_trigger": true },
+    { "query": "what's the s3 path for Deribit option trades", "should_trigger": true },
+    { "query": "top 10 largest Paradigm RFQs ever recorded", "should_trigger": true },
+    { "query": "compare ETH option block flow in Feb 2026 vs March 2026", "should_trigger": true },
+    { "query": "which counterparties traded the most BTC straddles last month", "should_trigger": true },
+    { "query": "give me net greeks for this block trade", "should_trigger": false },
+    { "query": "what's the IV term structure on BTC right now", "should_trigger": false },
+    { "query": "what data do I have access to on Paradex", "should_trigger": false },
+    { "query": "what's available in my Paradex account", "should_trigger": false }
+  ]
+}

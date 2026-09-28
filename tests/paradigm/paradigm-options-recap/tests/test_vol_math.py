@@ -1,0 +1,903 @@
+#!/usr/bin/env python3
+"""
+Unit tests for vol_math.py — no network, no auth, no deps.
+
+Run: python3 tests/test_vol_math.py
+These pin the formulas so the production CLI and the eval fixture generator
+can't drift, and so a human can verify the math once by inspection.
+"""
+
+import math
+import sys
+import os
+
+import sys as _sys, pathlib as _pl
+_sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[2]))
+import skillpath  # noqa: E402
+sys.path.insert(0, str(skillpath.scripts("paradigm-options-recap")))
+from vol_math import (
+    compute_realized_vol,
+    realized_vs_implied,
+    black76_greeks,
+    expiry_ms_from_instrument,
+    compute_flow_greeks,
+    cluster_blocks,
+    compute_vol_surface,
+    classify_structure,
+    dominant_side,
+    summarize_blocks,
+    aggregate_clips,
+    clip_signature,
+    parse_tape_description,
+    build_tape_blocks,
+    tape_venue_label,
+    HOURS_PER_YEAR,
+)
+
+_passed = 0
+_failed = 0
+
+
+def check(name, cond, detail=""):
+    global _passed, _failed
+    if cond:
+        _passed += 1
+    else:
+        _failed += 1
+        print(f"  ✗ {name}  {detail}")
+
+
+def approx(a, b, tol=1e-6):
+    return a is not None and b is not None and abs(a - b) <= tol
+
+
+# ── Realized vol ───────────────────────────────────────────────────────────
+
+def test_rv_flat_series_is_zero():
+    rv = compute_realized_vol([100.0] * 10)
+    check("flat series → 0 vol", approx(rv["annualized_vol"], 0.0, 1e-9),
+          f"got {rv['annualized_vol']}")
+
+
+def test_rv_too_few_points():
+    rv = compute_realized_vol([100.0, 101.0])
+    check("under 3 points → None", rv["annualized_vol"] is None, f"got {rv}")
+    check("empty → None", compute_realized_vol([])["annualized_vol"] is None)
+
+
+def test_rv_known_value():
+    # Alternating +1%/-1% each hour: every log-return has equal magnitude.
+    closes = [100.0]
+    for i in range(1, 50):
+        closes.append(closes[-1] * (1.01 if i % 2 else 1 / 1.01))
+    rv = compute_realized_vol(closes)
+    # Reconstruct expected: sample stdev of the log returns × √8760 × 100.
+    rets = [math.log(closes[i] / closes[i - 1]) for i in range(1, len(closes))]
+    n = len(rets)
+    mean = sum(rets) / n
+    sd = math.sqrt(sum((r - mean) ** 2 for r in rets) / (n - 1))
+    expected = sd * math.sqrt(HOURS_PER_YEAR) * 100
+    check("known series matches formula", approx(rv["annualized_vol"], round(expected, 1), 0.05),
+          f"got {rv['annualized_vol']} vs {round(expected, 1)}")
+
+
+def test_rv_annualization_factor():
+    check("8760 hours/year (24/7)", HOURS_PER_YEAR == 8760)
+
+
+def test_vrp_labels():
+    # rv ~0 vs dvol 50 → implied very rich
+    rich = realized_vs_implied([100.0] * 10, 50.0)
+    check("VRP rich label", "rich" in (rich["vrp_label"] or ""), rich)
+    # Build a high-realized series, low implied → cheap
+    closes = [100.0]
+    for i in range(1, 200):
+        closes.append(closes[-1] * (1.02 if i % 2 else 1 / 1.02))
+    cheap = realized_vs_implied(closes, 5.0)
+    check("VRP cheap label", "cheap" in (cheap["vrp_label"] or ""), cheap)
+    check("VRP sign = dvol - rv", approx(cheap["vrp"], round(5.0 - cheap["value"], 1), 0.11),
+          f"vrp {cheap['vrp']} value {cheap['value']}")
+
+
+# ── Expiry parsing ─────────────────────────────────────────────────────────
+
+def test_expiry_parsing():
+    from datetime import datetime, timezone
+    one = expiry_ms_from_instrument("BTC-26JUN26-55000-P")
+    expect = int(datetime(2026, 6, 26, 8, 0, tzinfo=timezone.utc).timestamp() * 1000)
+    check("26JUN26 parses to 08:00 UTC", one == expect, f"got {one} vs {expect}")
+    # single-digit day
+    short = expiry_ms_from_instrument("BTC-5JUN26-60000-C")
+    expect2 = int(datetime(2026, 6, 5, 8, 0, tzinfo=timezone.utc).timestamp() * 1000)
+    check("5JUN26 (single-digit day) parses", short == expect2, f"got {short} vs {expect2}")
+    check("garbage → None", expiry_ms_from_instrument("not-an-instrument") is None)
+
+
+# ── Black-76 greeks ────────────────────────────────────────────────────────
+
+def test_black76_positivity():
+    g = black76_greeks(F=60000, K=60000, T_years=0.05, iv_pct=70)
+    check("vega positive", g["vega"] > 0, g)
+    check("dollar_gamma positive", g["dollar_gamma"] > 0, g)
+
+
+def test_black76_degenerate():
+    check("T=0 → zero greeks", black76_greeks(60000, 60000, 0, 70)["vega"] == 0)
+    check("sigma=0 → zero greeks", black76_greeks(60000, 60000, 0.1, 0)["vega"] == 0)
+
+
+def test_black76_vega_increases_with_tenor():
+    near = black76_greeks(60000, 60000, 0.02, 70)["vega"]
+    far = black76_greeks(60000, 60000, 0.50, 70)["vega"]
+    check("longer tenor → more vega", far > near, f"near {near:.1f} far {far:.1f}")
+
+
+def test_black76_atm_has_most_gamma():
+    atm = black76_greeks(60000, 60000, 0.1, 70)["dollar_gamma"]
+    otm = black76_greeks(60000, 80000, 0.1, 70)["dollar_gamma"]
+    check("ATM gamma > far-OTM gamma", atm > otm, f"atm {atm:.0f} otm {otm:.0f}")
+
+
+# ── Flow greeks / dealer positioning ───────────────────────────────────────
+
+def _leg(inst, direction, amount, F=62000, iv=70.0, ts=1748000000000, bid="B1"):
+    return {"instrument_name": inst, "index_price": F, "iv": iv,
+            "timestamp": ts, "direction": direction, "amount": amount,
+            "block_trade_id": bid}
+
+
+def test_customer_buying_makes_dealers_short():
+    # Customers buy a put → long vega/gamma → dealers short both.
+    trades = [_leg("BTC-26JUN26-60000-P", "buy", 100)]
+    fg = compute_flow_greeks(cluster_blocks(trades))
+    check("net customer vega > 0 (bought)", fg["net_customer_vega"] > 0, fg)
+    check("dealer vega < 0 (short)", fg["dealer_vega"] < 0, fg)
+    check("dealer short gamma label", "short gamma" in fg["positioning_label"], fg)
+
+
+def test_customer_selling_makes_dealers_long():
+    trades = [_leg("BTC-26JUN26-60000-C", "sell", 100)]
+    fg = compute_flow_greeks(cluster_blocks(trades))
+    check("net customer vega < 0 (sold)", fg["net_customer_vega"] < 0, fg)
+    check("dealer long gamma label", "long gamma" in fg["positioning_label"], fg)
+
+
+def test_dealer_is_opposite_of_customer():
+    trades = [_leg("BTC-26JUN26-60000-P", "buy", 100)]
+    fg = compute_flow_greeks(cluster_blocks(trades))
+    check("dealer vega = -customer vega",
+          fg["dealer_vega"] == -fg["net_customer_vega"], fg)
+    check("dealer gamma = -customer gamma",
+          fg["dealer_dollar_gamma"] == -fg["net_customer_dollar_gamma"], fg)
+
+
+def test_balanced_two_way():
+    # Same instrument bought and sold in equal size → net ≈ 0 vs gross → balanced.
+    trades = [_leg("BTC-26JUN26-60000-C", "buy", 100, bid="B1"),
+              _leg("BTC-26JUN26-60000-C", "sell", 100, bid="B2")]
+    fg = compute_flow_greeks(cluster_blocks(trades))
+    check("offsetting flow → balanced", fg["balanced"], fg)
+    check("balanced label", "two-way" in fg["positioning_label"], fg)
+
+
+def test_cluster_blocks_filters_screen():
+    trades = [
+        _leg("BTC-26JUN26-60000-P", "buy", 100, bid="B1"),
+        {"instrument_name": "BTC-26JUN26-60000-C", "direction": "buy", "amount": 1,
+         "index_price": 62000, "iv": 70, "timestamp": 1748000000000},  # no block_trade_id
+    ]
+    clusters = cluster_blocks(trades)
+    check("screen trade excluded from clusters", len(clusters) == 1, clusters)
+
+
+# ── Block structures / summary (#2b) ────────────────────────────────────────
+
+def test_classify_structure():
+    put = [_leg("BTC-26JUN26-60000-P", "buy", 10)]
+    check("single put → Put", classify_structure(put) == "Put", classify_structure(put))
+    # C&P diff strikes: all directions disclosed & they DIFFER → Risk Reversal.
+    rr = [_leg("BTC-26JUN26-55000-P", "buy", 100),
+          _leg("BTC-26JUN26-68000-C", "sell", 100)]
+    check("P buy + C sell diff strikes → Risk Reversal",
+          classify_structure(rr) == "Risk Reversal", classify_structure(rr))
+    # Same C&P diff strikes but both bought (same direction) → Strangle.
+    strangle = [_leg("BTC-26JUN26-55000-P", "buy", 100),
+                _leg("BTC-26JUN26-68000-C", "buy", 100)]
+    check("P buy + C buy diff strikes → Strangle",
+          classify_structure(strangle) == "Strangle", classify_structure(strangle))
+    # Direction undisclosed on any leg → keep the ambiguous Strangle/RR.
+    undisclosed = [_leg("BTC-26JUN26-55000-P", None, 100),
+                   _leg("BTC-26JUN26-68000-C", "sell", 100)]
+    check("undisclosed direction → Strangle/RR",
+          classify_structure(undisclosed) == "Strangle/RR", classify_structure(undisclosed))
+    straddle = [_leg("BTC-26JUN26-60000-P", "buy", 10),
+                _leg("BTC-26JUN26-60000-C", "buy", 10)]
+    check("P+C same strike → Straddle", classify_structure(straddle) == "Straddle",
+          classify_structure(straddle))
+    spread = [_leg("BTC-26JUN26-60000-P", "buy", 10),
+              _leg("BTC-26JUN26-55000-P", "sell", 10)]
+    check("both puts diff strikes → Put Spread",
+          classify_structure(spread) == "Put Spread", classify_structure(spread))
+    call_spread = [_leg("BTC-26JUN26-60000-C", "buy", 10),
+                   _leg("BTC-26JUN26-65000-C", "sell", 10)]
+    check("both calls diff strikes → Call Spread",
+          classify_structure(call_spread) == "Call Spread",
+          classify_structure(call_spread))
+    # ── ≥3-leg shape verification ──
+    # 3 distinct strikes, all calls → Call Butterfly (broken wings still count).
+    call_fly = [_leg("BTC-26JUN26-60000-C", "buy", 10),
+                _leg("BTC-26JUN26-65000-C", "sell", 20),
+                _leg("BTC-26JUN26-72000-C", "buy", 10)]
+    check("3 strikes all calls → Call Butterfly",
+          classify_structure(call_fly) == "Call Butterfly", classify_structure(call_fly))
+    # 4 distinct strikes, all puts → Put Condor.
+    put_condor = [_leg("BTC-26JUN26-50000-P", "buy", 10),
+                  _leg("BTC-26JUN26-55000-P", "sell", 10),
+                  _leg("BTC-26JUN26-60000-P", "sell", 10),
+                  _leg("BTC-26JUN26-65000-P", "buy", 10)]
+    check("4 strikes all puts → Put Condor",
+          classify_structure(put_condor) == "Put Condor", classify_structure(put_condor))
+    # Short straddle body + long wings = Iron Butterfly. The ≥3-leg check must beat
+    # the 2-leg C&P branch — this printed as "Strangle/RR" in a live ETH recap.
+    ironfly = [_leg("ETH-16JUL26-1875-C", "sell", 63),
+               _leg("ETH-16JUL26-1875-P", "sell", 63),
+               _leg("ETH-16JUL26-1925-C", "buy", 63),
+               _leg("ETH-16JUL26-1825-P", "buy", 63)]
+    check("4-leg, 3-strike, C&P mid → Iron Butterfly",
+          classify_structure(ironfly) == "Iron Butterfly", classify_structure(ironfly))
+    # 4 strikes, 2 calls + 2 puts → Iron Condor.
+    ironcondor = [_leg("BTC-26JUN26-55000-P", "buy", 10),
+                  _leg("BTC-26JUN26-60000-P", "sell", 10),
+                  _leg("BTC-26JUN26-70000-C", "sell", 10),
+                  _leg("BTC-26JUN26-75000-C", "buy", 10)]
+    check("4-leg, 4-strike, 2C+2P → Iron Condor",
+          classify_structure(ironcondor) == "Iron Condor", classify_structure(ironcondor))
+    # 3-leg, only 2 distinct strikes, mixed types → not a fly → Custom.
+    not_a_fly = [_leg("BTC-26JUN26-80000-C", "sell", 10),
+                 _leg("BTC-26JUN26-62000-P", "buy", 10),
+                 _leg("BTC-26JUN26-62000-C", "buy", 10)]
+    check("3-leg 2-strike package → Custom",
+          classify_structure(not_a_fly) == "Custom", classify_structure(not_a_fly))
+    # ── Calendars / diagonals ──
+    call_cal = [_leg("BTC-26JUN26-60000-C", "buy", 10),
+                _leg("BTC-3JUL26-60000-C", "sell", 10)]
+    check("diff expiry same strike all calls → Call Calendar",
+          classify_structure(call_cal) == "Call Calendar", classify_structure(call_cal))
+    put_cal = [_leg("BTC-26JUN26-60000-P", "buy", 10),
+               _leg("BTC-3JUL26-60000-P", "sell", 10)]
+    check("diff expiry same strike all puts → Put Calendar",
+          classify_structure(put_cal) == "Put Calendar", classify_structure(put_cal))
+    call_diag = [_leg("ETH-24JUL26-1900-C", "buy", 6400),
+                 _leg("ETH-28AUG26-2100-C", "sell", 6400)]
+    check("2 legs diff expiry+strike, calls → Call Diagonal",
+          classify_structure(call_diag) == "Call Diagonal", classify_structure(call_diag))
+    put_diag = [_leg("ETH-24JUL26-1900-P", "buy", 6400),
+                _leg("ETH-28AUG26-1700-P", "sell", 6400)]
+    check("2 legs diff expiry+strike, puts → Put Diagonal",
+          classify_structure(put_diag) == "Put Diagonal", classify_structure(put_diag))
+    # Cross-expiry, diff strikes, ONE call + ONE put → not a diagonal → Custom.
+    cross = [_leg("ETH-24JUL26-1900-C", "buy", 100),
+             _leg("ETH-28AUG26-1700-P", "sell", 100)]
+    check("cross-expiry C+P diff strikes → Custom",
+          classify_structure(cross) == "Custom", classify_structure(cross))
+
+
+def test_classify_structure_ratio_aware():
+    # ── Butterflies: ratio + disclosed direction, not just "3 strikes" ──
+    # Genuine 1:−2:1 call fly (buy wings, sell 2× middle).
+    fly = [_leg("BTC-26JUN26-60000-C", "buy", 10),
+           _leg("BTC-26JUN26-65000-C", "sell", 20),
+           _leg("BTC-26JUN26-70000-C", "buy", 10)]
+    check("genuine 1:-2:1 call fly → Call Butterfly",
+          classify_structure(fly) == "Call Butterfly", classify_structure(fly))
+    # Broken-wing fly: uneven strike spacing (60/65/78) but same 1:−2:1 ratio.
+    bwfly = [_leg("BTC-26JUN26-60000-C", "buy", 10),
+             _leg("BTC-26JUN26-65000-C", "sell", 20),
+             _leg("BTC-26JUN26-78000-C", "buy", 10)]
+    check("broken-wing fly (uneven spacing) → Call Butterfly",
+          classify_structure(bwfly) == "Call Butterfly", classify_structure(bwfly))
+    # Call ladder +1/−1/−1 (3 strikes, one type) is NOT a fly.
+    ladder = [_leg("BTC-26JUN26-60000-C", "buy", 10),
+              _leg("BTC-26JUN26-65000-C", "sell", 10),
+              _leg("BTC-26JUN26-70000-C", "sell", 10)]
+    check("call ladder +1/-1/-1 → Custom",
+          classify_structure(ladder) == "Custom", classify_structure(ladder))
+    # 3-strike strip: all bought, same type → not a fly.
+    strip3 = [_leg("BTC-26JUN26-60000-C", "buy", 10),
+              _leg("BTC-26JUN26-65000-C", "buy", 10),
+              _leg("BTC-26JUN26-70000-C", "buy", 10)]
+    check("3-strike all-buy strip → Custom",
+          classify_structure(strip3) == "Custom", classify_structure(strip3))
+    # ── Condors ──
+    condor = [_leg("BTC-26JUN26-50000-C", "buy", 10),
+              _leg("BTC-26JUN26-55000-C", "sell", 10),
+              _leg("BTC-26JUN26-60000-C", "sell", 10),
+              _leg("BTC-26JUN26-65000-C", "buy", 10)]
+    check("genuine +/-/-/+ call condor → Call Condor",
+          classify_structure(condor) == "Call Condor", classify_structure(condor))
+    # 4-strike same-type strip (all buys) → not a condor.
+    strip4 = [_leg("BTC-26JUN26-50000-C", "buy", 10),
+              _leg("BTC-26JUN26-55000-C", "buy", 10),
+              _leg("BTC-26JUN26-60000-C", "buy", 10),
+              _leg("BTC-26JUN26-65000-C", "buy", 10)]
+    check("4-strike all-buy strip → Custom",
+          classify_structure(strip4) == "Custom", classify_structure(strip4))
+    # ── Iron Butterfly wing placement ──
+    ironfly = [_leg("ETH-16JUL26-1875-C", "sell", 63),
+               _leg("ETH-16JUL26-1875-P", "sell", 63),
+               _leg("ETH-16JUL26-1925-C", "buy", 63),
+               _leg("ETH-16JUL26-1825-P", "buy", 63)]
+    check("P-low / C-high wings + short body → Iron Butterfly",
+          classify_structure(ironfly) == "Iron Butterfly", classify_structure(ironfly))
+    # A CALL wing below the body (low strike is a call, not a put) → Custom.
+    bad_ironfly = [_leg("ETH-16JUL26-1875-C", "sell", 63),
+                   _leg("ETH-16JUL26-1875-P", "sell", 63),
+                   _leg("ETH-16JUL26-1925-C", "buy", 63),
+                   _leg("ETH-16JUL26-1825-C", "buy", 63)]
+    check("call wing below body → Custom",
+          classify_structure(bad_ironfly) == "Custom", classify_structure(bad_ironfly))
+    # ── Straddle vs synthetic (Combo) ──
+    same = [_leg("BTC-26JUN26-60000-C", "buy", 10),
+            _leg("BTC-26JUN26-60000-P", "buy", 10)]
+    check("same-strike C&P same direction → Straddle",
+          classify_structure(same) == "Straddle", classify_structure(same))
+    combo = [_leg("BTC-26JUN26-60000-C", "buy", 10),
+             _leg("BTC-26JUN26-60000-P", "sell", 10)]
+    check("same-strike C&P opposite direction → Combo (synthetic)",
+          classify_structure(combo) == "Combo", classify_structure(combo))
+    # ── Calendar direction (long one expiry / short the other) ──
+    strip_cal = [_leg("BTC-26JUN26-60000-C", "buy", 10),
+                 _leg("BTC-3JUL26-60000-C", "buy", 10)]
+    check("same-direction two-expiry calls (time strip) → Custom",
+          classify_structure(strip_cal) == "Custom", classify_structure(strip_cal))
+    opp_cal = [_leg("BTC-26JUN26-60000-C", "buy", 10),
+               _leg("BTC-3JUL26-60000-C", "sell", 10)]
+    check("opposing-direction two-expiry calls → Call Calendar",
+          classify_structure(opp_cal) == "Call Calendar", classify_structure(opp_cal))
+
+
+def test_summarize_blocks_size_weights_avg_iv():
+    # Two legs, very different sizes and IVs: avg_iv must weight by amount, not
+    # take the plain leg mean. 90 BTC @ 40v + 10 BTC @ 80v → (40*90+80*10)/100
+    # = 44.0, NOT the unweighted 60.0.
+    trades = [_leg("BTC-26JUN26-60000-C", "buy", 90, iv=40.0, bid="W1"),
+              _leg("BTC-26JUN26-65000-C", "sell", 10, iv=80.0, bid="W1")]
+    blocks = summarize_blocks(cluster_blocks(trades), min_btc=5.0)
+    check("avg_iv size-weighted (44.0, not 60.0)", blocks[0]["avg_iv"] == 44.0,
+          blocks[0]["avg_iv"])
+
+
+def test_dominant_side():
+    buys = [_leg("BTC-26JUN26-60000-P", "buy", 10),
+            _leg("BTC-26JUN26-55000-P", "buy", 10)]
+    check("all buys → Buy", dominant_side(buys) == "Buy", dominant_side(buys))
+    sells = [_leg("BTC-26JUN26-60000-C", "sell", 10)]
+    check("all sells → Sell", dominant_side(sells) == "Sell", dominant_side(sells))
+    mixed = [_leg("BTC-26JUN26-55000-P", "buy", 100),
+             _leg("BTC-26JUN26-68000-C", "sell", 100)]
+    check("buy + sell → Mixed", dominant_side(mixed) == "Mixed", dominant_side(mixed))
+
+
+def test_summarize_blocks_ranks_and_describes():
+    trades = [
+        # big RR: 200 BTC @ ~62k → ~$12.4M notional
+        _leg("BTC-26JUN26-55000-P", "buy", 100, F=62000, bid="RR"),
+        _leg("BTC-26JUN26-68000-C", "sell", 100, F=62000, bid="RR"),
+        # small outright: 20 BTC → ~$1.24M
+        _leg("BTC-12JUN26-59000-P", "buy", 20, F=62000, bid="P1"),
+        # below the 10-BTC floor → filtered out
+        _leg("BTC-5JUN26-70000-C", "buy", 1, F=62000, bid="TINY"),
+    ]
+    blocks = summarize_blocks(cluster_blocks(trades))
+    check("two blocks survive the 10-BTC floor", len(blocks) == 2, blocks)
+    top = blocks[0]
+    check("largest by notional first (the RR)", top["block_trade_id"] == "RR", top)
+    check("largest size is 200 BTC", top["size_btc"] == 200.0, top)
+    check("unit size is 100 (per-leg, not leg-sum)", top["unit_size"] == 100.0, top)
+    check("largest classified Risk Reversal", top["structure"] == "Risk Reversal", top)
+    check("largest is mixed-direction", top["side"] == "Mixed", top)
+    check("largest expiry 26JUN26", top["expiry"] == "26JUN26", top)
+    check("notional ranks RR above outright", top["notional_usd"] > blocks[1]["notional_usd"], blocks)
+
+
+def test_summarize_blocks_multi_expiry_label():
+    # A cross-expiry structure names its near AND far tenor, chronologically —
+    # a legs[0]-based label let identical structures render under different
+    # expiries depending on tape order.
+    a = [_leg("BTC-26MAR27-4200-C", "buy", 270, bid="D1"),
+         _leg("BTC-25JUN27-2000-C", "buy", 270, bid="D1")]
+    b = list(reversed([_leg("BTC-26MAR27-4200-C", "buy", 250, bid="D2"),
+                       _leg("BTC-25JUN27-2000-C", "buy", 250, bid="D2")]))
+    rows = summarize_blocks(cluster_blocks(a + b), top_n=10, min_btc=5.0)
+    labels = {r["expiry"] for r in rows}
+    check("2-expiry label near/far with '/'", labels == {"26MAR27/25JUN27"}, labels)
+    check("same structure → same label regardless of leg order", len(labels) == 1, labels)
+    # 3+ expiries: "/" would read as a complete enumeration and contradict the
+    # Detail legs (a live 3-expiry package labeled "31JUL26/25SEP26" hid its
+    # 28AUG26 leg) — the label becomes a "→" range instead.
+    tri = [_leg("BTC-31JUL26-66000-C", "sell", 300, bid="T1"),
+           _leg("BTC-28AUG26-66000-C", "buy", 300, bid="T1"),
+           _leg("BTC-25SEP26-65000-C", "sell", 300, bid="T1")]
+    tri_rows = summarize_blocks(cluster_blocks(tri), top_n=10, min_btc=5.0)
+    check("3-expiry label is a '→' range", tri_rows[0]["expiry"] == "31JUL26→25SEP26",
+          tri_rows[0]["expiry"])
+
+
+def test_vrp_reconciles_with_displayed_lines():
+    # VRP must equal the difference of the DISPLAY-rounded DVOL and RV, so the
+    # rendered Snapshot reconciles line-to-line — live recaps showed VRP 0.1v
+    # off the visible DVOL−RV arithmetic. Boundary-ish dvol values included.
+    closes = [60000 + (i % 5) * 50 for i in range(60)]
+    for dvol in (36.38, 48.1499, 33.2501, 51.05):
+        r = realized_vs_implied(closes, dvol)
+        check(f"VRP({dvol}) = displayed DVOL − displayed RV",
+              r["vrp"] == round(round(dvol, 1) - r["value"], 1), r)
+
+
+def test_summarize_blocks_empty():
+    check("no clusters → empty list", summarize_blocks({}) == [], "expected []")
+
+
+# ── Vol surface ────────────────────────────────────────────────────────────
+
+def _surface_tickers():
+    """Front expiry with a downside skew (puts richer than calls) and wide
+    enough strikes to bracket the 25Δ wings; a back expiry at lower IV."""
+    return {
+        # 5JUN26 — ATM ~82v, 25Δ put rich (downside skew). call_delta spans 0.10–0.90.
+        "BTC-5JUN26-60000-C": {"mark_iv": 96.0, "delta": 0.90},
+        "BTC-5JUN26-61000-C": {"mark_iv": 90.0, "delta": 0.75},   # ~25Δ put strike (cd 0.75)
+        "BTC-5JUN26-62000-C": {"mark_iv": 82.0, "delta": 0.50},   # ATM
+        "BTC-5JUN26-63000-C": {"mark_iv": 80.0, "delta": 0.25},   # 25Δ call
+        "BTC-5JUN26-64000-C": {"mark_iv": 84.0, "delta": 0.10},
+        # 6JUN26 — lower ATM (contango if it were the back of a normal curve)
+        "BTC-6JUN26-62000-C": {"mark_iv": 70.0, "delta": 0.50},
+        "BTC-6JUN26-61000-C": {"mark_iv": 74.0, "delta": 0.75},
+        "BTC-6JUN26-63000-C": {"mark_iv": 68.0, "delta": 0.25},
+    }
+
+
+def test_surface_atm_and_skew():
+    s = compute_vol_surface(_surface_tickers(), spot=62000)
+    front = s["expiries"][0]
+    check("front expiry is 5JUN26", front["expiry"] == "5JUN26", front)
+    check("front ATM ≈ 82v", approx(front["atm_iv"], 82.0, 0.6), front)
+    # 25Δ call IV (80) − 25Δ put IV (90) = −10 → puts bid
+    check("25Δ RR negative (puts bid)", front["rr_25d"] < 0, front)
+    check("skew label says puts bid", "puts bid" in (s["skew_label"] or ""), s)
+    check("front wings not extrapolated", front["wings_extrapolated"] is False, front)
+
+
+def test_surface_butterfly_positive_when_wings_bid():
+    # wings (80,90) average 85 > ATM 82 → fly positive
+    s = compute_vol_surface(_surface_tickers(), spot=62000)
+    check("fly positive (wings bid)", s["expiries"][0]["fly_25d"] > 0, s["expiries"][0])
+
+
+def test_surface_term_structure_backwardation():
+    s = compute_vol_surface(_surface_tickers(), spot=62000)
+    check("front ATM > back ATM", s["front_atm"] > s["back_atm"], s)
+    check("term = backwardation", "backwardation" in (s["term_structure"] or ""), s)
+
+
+def _atm_only_tickers(exp_atms):
+    """One 0.50Δ strike per expiry — enough for ATM/term, no wings."""
+    return {f"BTC-{exp}-60000-C": {"mark_iv": iv, "delta": 0.50}
+            for exp, iv in exp_atms}
+
+
+AS_OF_SEP25 = 1790315700000   # 2026-09-25 05:55Z, two hours before 25SEP26 settles
+
+
+def test_an_expiry_settling_today_does_not_read_as_the_front():
+    s = compute_vol_surface(_atm_only_tickers([
+        ("25SEP26", 32.4), ("26SEP26", 32.9), ("2OCT26", 32.5)]), spot=84000,
+        as_of_ms=AS_OF_SEP25)
+    check("0DTE expiry left out", [e["expiry"] for e in s["expiries"]] == ["26SEP26", "2OCT26"],
+          s["expiries"])
+    check("front ATM is the next expiry", s["front_atm"] == 32.9, s["front_atm"])
+    after = compute_vol_surface(_atm_only_tickers([("26SEP26", 32.9)]), spot=84000,
+                                as_of_ms=AS_OF_SEP25 + 3 * 3600_000)   # 08:55, 23h to go
+    check("tomorrow's daily stays after today's settlement",
+          [e["expiry"] for e in after["expiries"]] == ["26SEP26"], after["expiries"])
+
+
+def test_surface_rows_are_chosen_by_tenor():
+    chain = [("26SEP26", 32.9), ("27SEP26", 26.8), ("28SEP26", 26.2), ("2OCT26", 32.5),
+             ("9OCT26", 33.0), ("16OCT26", 33.4), ("30OCT26", 34.0), ("27NOV26", 35.0),
+             ("25DEC26", 36.0), ("26MAR27", 38.0)]
+    s = compute_vol_surface(_atm_only_tickers(chain), spot=84000, max_expiries=5,
+                            as_of_ms=AS_OF_SEP25)
+    check("front, next weekly, then monthlies",
+          [e["expiry"] for e in s["expiries"]] == ["26SEP26", "2OCT26", "30OCT26", "27NOV26", "25DEC26"],
+          [e["expiry"] for e in s["expiries"]])
+
+
+def test_a_deeper_trough_outranks_a_shallow_peak():
+    s = compute_vol_surface(_atm_only_tickers([
+        ("15JUL26", 32.4), ("16JUL26", 32.9), ("17JUL26", 26.8), ("18JUL26", 26.2),
+        ("24JUL26", 32.5)]), spot=60000)
+    check("the 6-vol trough names the shape", s["term_structure"] == "dished — trough at 18JUL26",
+          s["term_structure"])
+
+
+def test_surface_term_structure_reads_whole_curve():
+    # The reported bug: 33.3 → 35.6 → 35.1 → 35.2 → 33.7 rises then falls.
+    # A front-vs-next comparison called this "contango"; it is humped.
+    s = compute_vol_surface(_atm_only_tickers([
+        ("15JUL26", 33.3), ("16JUL26", 35.6), ("17JUL26", 35.1),
+        ("18JUL26", 35.2), ("24JUL26", 33.7)]), spot=60000)
+    check("humped, not contango", "humped" in (s["term_structure"] or ""), s)
+    check("names the peak expiry", "16JUL26" in s["term_structure"], s)
+    check("back_atm is the LAST expiry", s["back_atm"] == 33.7, s)
+
+    up = compute_vol_surface(_atm_only_tickers([
+        ("15JUL26", 30.0), ("16JUL26", 31.5), ("18JUL26", 33.0)]), spot=60000)
+    check("monotonic up → contango", "contango" in (up["term_structure"] or ""), up)
+
+    # A 0.1v counter-dip is within tolerance — still contango, not humped.
+    wiggle = compute_vol_surface(_atm_only_tickers([
+        ("15JUL26", 30.0), ("16JUL26", 31.5), ("17JUL26", 31.4),
+        ("18JUL26", 33.0)]), spot=60000)
+    check("≤0.2v dip tolerated as contango",
+          "contango" in (wiggle["term_structure"] or ""), wiggle)
+
+    shallow = compute_vol_surface(_atm_only_tickers([
+        ("15JUL26", 30.0), ("16JUL26", 30.4), ("18JUL26", 30.8)]), spot=60000)
+    check("monotonic but <1v span → flat",
+          "flat" in (shallow["term_structure"] or ""), shallow)
+
+
+def test_labels_are_contract_tokens_only():
+    # The skew/term labels render verbatim inside a FIXED template
+    # (references/output-format.md) — no explanatory suffixes. Live recaps
+    # leaked "(35.2v), non-monotonic" and ", downside skew" into the output.
+    humped = compute_vol_surface(_atm_only_tickers([
+        ("15JUL26", 33.3), ("16JUL26", 35.6), ("24JUL26", 33.7)]), spot=60000)
+    check("humped label is exactly the contract token",
+          humped["term_structure"] == "humped — peak at 16JUL26", humped["term_structure"])
+    up = compute_vol_surface(_atm_only_tickers([
+        ("15JUL26", 30.0), ("16JUL26", 31.5), ("18JUL26", 33.0)]), spot=60000)
+    check("contango label is bare", up["term_structure"] == "contango", up["term_structure"])
+    s = compute_vol_surface(_surface_tickers(), spot=62000)
+    check("skew label matches template (no prose suffix)",
+          s["skew_label"] == f"front 25Δ RR {s['expiries'][0]['rr_25d']:+}v → puts bid",
+          s["skew_label"])
+    check("no 'downside skew' suffix", "downside" not in s["skew_label"], s["skew_label"])
+
+
+def test_aggregate_clips_merges_worked_order():
+    # Three clips of the same 2:1 put spread (differing only in size) + one
+    # distinct straddle. The clips collapse to one entry; the straddle stays.
+    trades = (
+        [_leg("BTC-31JUL26-60000-P", "buy", 100, iv=36.5, bid="C1"),
+         _leg("BTC-31JUL26-64000-P", "sell", 50, iv=36.5, bid="C1")] +
+        [_leg("BTC-31JUL26-60000-P", "buy", 20, iv=36.6, bid="C2"),
+         _leg("BTC-31JUL26-64000-P", "sell", 10, iv=36.6, bid="C2")] +
+        [_leg("BTC-31JUL26-60000-P", "buy", 20, iv=37.0, bid="C3"),
+         _leg("BTC-31JUL26-64000-P", "sell", 10, iv=37.0, bid="C3")] +
+        [_leg("BTC-26JUN26-62000-C", "buy", 40, bid="S1"),
+         _leg("BTC-26JUN26-62000-P", "buy", 40, bid="S1")]
+    )
+    clusters = cluster_blocks(trades)
+    ranked = summarize_blocks(clusters, top_n=10**9, min_btc=5.0)
+    grouped = aggregate_clips(ranked, clusters)
+    check("4 blocks → 2 grouped rows", len(grouped) == 2, grouped)
+    spread = next(g for g in grouped if g["structure"] == "Put Ratio Spread")
+    check("clip_count 3", spread["clip_count"] == 3, spread)
+    check("sizes summed (150+30+30)", spread["size_btc"] == 210.0, spread)
+    check("unit sizes summed (50+10+10)", spread["unit_size"] == 70.0, spread)
+    check("keeps largest clip's id", spread["block_trade_id"] == "C1", spread)
+    check("iv size-weighted toward big clip", 36.5 <= spread["avg_iv"] <= 36.7, spread)
+    straddle = next(g for g in grouped if g["structure"] == "Straddle")
+    check("distinct structure not merged", straddle["clip_count"] == 1, straddle)
+    # Signature is ratio-based: 100/50 and 20/10 match; a 1:1 print would not.
+    even = [_leg("BTC-31JUL26-60000-P", "buy", 10, bid="E1"),
+            _leg("BTC-31JUL26-64000-P", "sell", 10, bid="E1")]
+    check("different leg ratio → different signature",
+          clip_signature(even) != clip_signature(clusters["C1"]), None)
+
+
+def test_surface_extrapolation_flag():
+    # Narrow strikes: call_delta only spans 0.40–0.60, so 25Δ wings are extrapolated.
+    narrow = {
+        "BTC-5JUN26-62000-C": {"mark_iv": 82.0, "delta": 0.50},
+        "BTC-5JUN26-61500-C": {"mark_iv": 84.0, "delta": 0.60},
+        "BTC-5JUN26-62500-C": {"mark_iv": 81.0, "delta": 0.40},
+    }
+    s = compute_vol_surface(narrow, spot=62000)
+    check("narrow strikes → wings extrapolated", s["expiries"][0]["wings_extrapolated"] is True, s)
+
+
+def test_surface_empty():
+    s = compute_vol_surface({}, spot=62000)
+    check("empty tickers → no expiries", s["expiries"] == [], s)
+    check("empty → term None", s["term_structure"] is None, s)
+
+
+# ── Tape parsing (paradigm_trade_tape_slim DESCRIPTION) ─────────────────────
+
+def test_parse_tape_description_named_and_custom():
+    cases = {
+        "Call 26 Dec 25 104000": ("Call", "26DEC25", 1),
+        "Put 23 Jan 26 95000": ("Put", "23JAN26", 1),
+        "Straddle 19 Nov 25 3050": ("Straddle", "19NOV25", 2),
+        "Strangle 27 Mar 26 90000/95000": ("Strangle", "27MAR26", 2),
+        "CSpd 27 Mar 26 85000/110000": ("Call Spread", "27MAR26", 2),
+        "PSpd 16 Jan 26 95000/93000": ("Put Spread", "16JAN26", 2),
+        "RRCall 30 Jan 26 70000/108000": ("Risk Reversal", "30JAN26", 2),
+        "IFly 26 Jun 26 75000/85000/95000": ("Iron Butterfly", "26JUN26", 4),
+    }
+    for desc, (label, exp, nlegs) in cases.items():
+        p = parse_tape_description(desc)
+        check(f"label {desc!r}", p["label"] == label, p)
+        check(f"expiry {desc!r}", p["expiry"] == exp, p)
+        check(f"legs {desc!r}", len(p["legs"]) == nlegs, p)
+    # Calendar → two expiries joined near/far.
+    cal = parse_tape_description("CCal 27 Feb 26 75000 / 26 Jun 26 75000")
+    check("calendar label", cal["label"] == "Call Calendar", cal)
+    check("calendar joins expiries", cal["expiry"] == "27FEB26/26JUN26", cal)
+    # Custom with explicit signs → per-leg legs extracted.
+    cm = parse_tape_description(
+        "Cstm +1.00 Call 24 Apr 26 78000 -2.00 Call 24 Apr 26 85000")
+    check("custom label", cm["label"] == "Custom", cm)
+    check("custom legs", len(cm["legs"]) == 2, cm)
+    # Unknown head → Custom, doesn't crash.
+    check("unknown head → Custom", parse_tape_description("Frobnicate 1 Jan 26 5")["label"] == "Custom")
+    check("empty → Custom", parse_tape_description("")["label"] == "Custom")
+
+
+def test_tape_venue_label():
+    check("DBT → Deribit", tape_venue_label("BTC OPTION - DBT") == "Deribit")
+    check("PRDX → Paradex", tape_venue_label("ETH OPTION - PRDX") == "Paradex")
+    check("BLSH → Bullish", tape_venue_label("BTC OPTION - BLSH") == "Bullish")
+    check("unknown suffix degrades", tape_venue_label("BTC OPTION - XYZ") == "Xyz")
+    check("no suffix → ?", tape_venue_label("BTC OPTION") == "?")
+
+
+def _trow(desc, side, notl, bid, rfq, prod="BTC OPTION - DBT", qty=100):
+    return {"DATE": "2026-07-23", "TIME": "03:03:53", "PRODUCT": prod,
+            "DESCRIPTION": desc, "QTY": qty, "SIDE": side,
+            "NOTIONAL_VOLUME_USD": notl, "RFQ_ID": rfq,
+            "TRADE_ID": bid + side[:1] + str(notl), "BLOCK_TRADE_ID": bid}
+
+
+def test_build_tape_blocks_notional_is_sum_per_block():
+    # A 4-leg custom block booked as 4 rows repeating the same DESCRIPTION — the
+    # block notional is the Σ of the per-leg NOTIONAL_VOLUME_USD, and the unit size
+    # is the per-row QTY (NOT summed across the repeated legs).
+    desc = ("Cstm -1.00 Put 7 Aug 26 1600 -1.00 Put 7 Aug 26 1700 "
+            "+1.00 Call 7 Aug 26 2000 -1.00 Call 7 Aug 26 2200")
+    rows = [_trow(desc, s, 1_925_970, "bETH", "rETH", prod="ETH OPTION - DBT", qty=1000)
+            for s in ("SELL", "SELL", "SELL", "BUY")]
+    res = build_tape_blocks(rows, min_notional_usd=100_000)
+    check("one block", res["n_blocks"] == 1, res)
+    bp = res["biggest_print"]
+    check("notional = Σ 4 legs = $7.7M", bp["notional_m"] == 7.7, bp)
+    check("unit size = per-row QTY (1000), not 4× = 4000", bp["size"] == 1000, bp)
+    check("custom label", bp["structure"] == "Custom", bp)
+    check("mixed side (buy+sell legs)", bp["side"] == "Mixed", bp)
+
+
+def test_build_tape_blocks_merges_extra_blocks():
+    # Pre-shaped venue-tape blocks (source="venue") enter the pool BEFORE the
+    # min-notional filter and compete for Biggest Print / top-N on equal
+    # underlying-USD terms; each is its own worked order (blocks=1).
+    tape = [_trow("Put 26 Jun 26 55000", "BUY", 6_000_000, "bT", "rT")]
+    extra = [
+        {"block_trade_id": "OKX-1", "rfq_id": "OKX-1",
+         "structure": "Block (unclassified)", "expiry": "", "venue": "OKX",
+         "notional_usd": 18_000_000, "unit_size": 300.0, "side": "",
+         "avg_iv": 62.5, "time_utc": "~12:05",
+         "detail": "x300 62.5v — 3 legs, venue tape (no leg geometry)",
+         "leg_count": 3, "source": "venue"},
+        {"block_trade_id": "OKX-2", "rfq_id": "OKX-2",
+         "structure": "Block (unclassified)", "expiry": "", "venue": "OKX",
+         "notional_usd": 120_000, "unit_size": 2.0, "side": "",
+         "avg_iv": None, "time_utc": "~12:10", "detail": "x2 — 1 legs, venue tape",
+         "leg_count": 1, "source": "venue"},
+    ]
+    res = build_tape_blocks(tape, min_notional_usd=250_000, extra_blocks=extra)
+    check("small venue block filtered by floor", res["n_blocks"] == 2, res["n_blocks"])
+    check("n_venue_blocks counts survivors only", res["n_venue_blocks"] == 1,
+          res["n_venue_blocks"])
+    check("venue block wins biggest print", res["biggest_print"]["notional_m"] == 18.0,
+          res["biggest_print"])
+    check("biggest source = venue", res["biggest_print"]["source"] == "venue",
+          res["biggest_print"])
+    check("each venue block its own worked order",
+          [r["blocks"] for r in res["rows"]] == [1, 1], res["rows"])
+    check("tape row keeps paradigm source", any(r["source"] == "paradigm"
+          for r in res["rows"]), res["rows"])
+    # No extra_blocks → identical behavior to before (n_venue_blocks 0).
+    res2 = build_tape_blocks(tape, min_notional_usd=250_000)
+    check("no extras → n_venue_blocks 0", res2["n_venue_blocks"] == 0, res2)
+    # Venue-blocks-ONLY pool (zero Paradigm rows — a quiet RFQ day with live
+    # exchange prints): the merge must not be conditional on tape rows.
+    res3 = build_tape_blocks([], min_notional_usd=250_000, extra_blocks=[extra[0]])
+    check("venue-only pool ranks", res3["n_blocks"] == 1, res3)
+    check("venue-only biggest print", res3["biggest_print"]["notional_m"] == 18.0, res3)
+    check("venue-only rows render", len(res3["rows"]) == 1, res3)
+
+
+def test_build_tape_blocks_biggest_vs_rfq_rollup():
+    # Biggest print is the single largest BLOCK; Block Flow rows roll up clips by
+    # RFQ_ID. Two Call clips (same RFQ) + one bigger standalone RR block.
+    rows = [
+        _trow("Call 26 Dec 25 104000", "BUY", 1_200_000, "bC1", "rC"),
+        _trow("Call 26 Dec 25 104000", "BUY", 700_000, "bC2", "rC"),
+        _trow("Call 30 Jan 26 108000", "BUY", 900_000, "bRR", "rRR", prod="BTC OPTION - PRDX"),
+        _trow("Put 30 Jan 26 70000", "SELL", 900_000, "bRR", "rRR", prod="BTC OPTION - PRDX"),
+    ]
+    res = build_tape_blocks(rows, min_notional_usd=100_000)
+    check("3 blocks (bC1,bC2,bRR)", res["n_blocks"] == 3, res)
+    check("2 structures (rC rollup + rRR)", res["n_structures"] == 2, res)
+    # Biggest single block: the RR = $1.8M (Σ of its two legs) > the $1.2M Call clip.
+    bp = res["biggest_print"]
+    check("biggest is RR block $1.8M", bp["notional_m"] == 1.8 and bp["structure"] == "Risk Reversal", bp)
+    check("biggest venue Paradex", bp["venue"] == "Paradex", bp)
+    # The Call worked order rolls its two clips into one row (blocks=2).
+    call_row = next(r for r in res["rows"] if "Call" in r["structure"] and r["venue"] == "Deribit")
+    check("Call row rolls 2 clips", call_row["blocks"] == 2, call_row)
+    check("Call row notional Σ clips $1.9M", call_row["notl_m"] == 1.9, call_row)
+
+
+def test_leg_ivs_are_read_at_each_blocks_print_time():
+    """Each leg shows its own mark IV at the print, not an average of the legs at
+    the window's end."""
+    rows = (_diag("a", "r1") + _diag("b", "r2")
+            + [_tape_leg("Call 25 Sep 26 84000", "BUY", 100, 8_000_000, "p", rfq="r3")])
+    rows[2]["TIME"] = rows[3]["TIME"] = "16:00:00"
+    rows[-1]["PRODUCT"] = "BTC OPTION - PRDX"
+    at_a = 1790264710000   # 2026-09-24 15:45:10Z
+    at_b = 1790265600000   # 2026-09-24 16:00:00Z
+    calls = []
+
+    def leg_ivs(requests):
+        calls.append(requests)
+        return {("BTC-25SEP26-80000-C", at_a): 60.0, ("BTC-30OCT26-90000-C", at_a): 40.0,
+                ("BTC-25SEP26-80000-C", at_b): 70.0, ("BTC-30OCT26-90000-C", at_b): 42.0}
+
+    res = build_tape_blocks(rows, leg_ivs=leg_ivs)
+    check("one batched lookup", len(calls) == 1, calls)
+    check("only Deribit legs are requested, at their own print times",
+          calls and set(calls[0]) == {("BTC-25SEP26-80000-C", at_a), ("BTC-30OCT26-90000-C", at_a),
+                                      ("BTC-25SEP26-80000-C", at_b), ("BTC-30OCT26-90000-C", at_b)},
+          calls)
+    diag = next(r for r in res["rows"] if "Diagonal" in r["structure"])
+    check("each leg carries its own IV, weighted across the row's blocks",
+          diag["detail"] == "-1000 25SEP26 80KC 65.0v / +2000 30OCT26 90KC 41.0v", diag["detail"])
+    other = next(r for r in res["rows"] if r["venue"] == "Paradex")
+    check("a non-Deribit leg carries no IV", other["detail"] == "+100 84KC", other["detail"])
+    check("no averaged IV field", "avg_iv" not in diag and "avg_iv" not in res["biggest_print"], diag)
+
+
+def _tape_leg(desc, side, qty, notl, bid, rfq="r1", t="15:45:10"):
+    return {"DATE": "2026-09-24", "TIME": t, "PRODUCT": "BTC OPTION - DBT",
+            "DESCRIPTION": desc, "QTY": qty, "SIDE": side,
+            "NOTIONAL_VOLUME_USD": notl, "RFQ_ID": rfq,
+            "TRADE_ID": f"{bid}-{desc}", "BLOCK_TRADE_ID": bid}
+
+
+def test_ratio_diagonal_shows_legs_as_traded():
+    """A 1x2 diagonal: 500 sold at the front, 1000 bought at the back. It used to
+    render as "Call Diagonal x500" with the ratio and the sides nowhere."""
+    rows = [_tape_leg("Call 25 Sep 26 80000", "SELL", 500, 42_100_000, "b1"),
+            _tape_leg("Call 30 Oct 26 90000", "BUY", 1000, 84_200_000, "b1")]
+    res = build_tape_blocks(rows)
+    row, bp = res["rows"][0], res["biggest_print"]
+    check("1x2 diagonal is named a ratio", row["structure"] == "25SEP26/30OCT26 Call Ratio Diagonal", row)
+    check("detail lists each leg with its signed size",
+          row["detail"] == "-500 25SEP26 80KC / +1000 30OCT26 90KC", row["detail"])
+    check("biggest print carries the same legs", bp.get("detail") == row["detail"], bp)
+
+
+def _diag(bid, rfq, front=500, back=1000, sides=("SELL", "BUY"), prod="BTC OPTION - DBT"):
+    rows = [_tape_leg("Call 25 Sep 26 80000", sides[0], front, front * 84_200, bid, rfq=rfq),
+            _tape_leg("Call 30 Oct 26 90000", sides[1], back, back * 84_200, bid, rfq=rfq)]
+    for r in rows:
+        r["PRODUCT"] = prod
+    return rows
+
+
+def test_same_legs_across_rfqs_are_one_structure():
+    """Four RFQs of one 1x2 diagonal rendered as four "1 block" rows."""
+    rows = [r for i in range(4) for r in _diag(f"b{i}", f"rfq{i}")]
+    res = build_tape_blocks(rows)
+    check("four blocks", res["n_blocks"] == 4, res["n_blocks"])
+    check("one structure", res["n_structures"] == 1, res["n_structures"])
+    row = res["rows"][0]
+    check("row counts four blocks", row["blocks"] == 4, row)
+    check("row notional is the sum", row["notl_m"] == round(4 * 1500 * 84_200 / 1e6, 1), row)
+    check("row legs are summed", row["detail"] == "-2000 25SEP26 80KC / +4000 30OCT26 90KC", row)
+    check("biggest print stays one block", bp_size(res) == 1500 * 84_200, res["biggest_print"])
+
+
+def bp_size(res):
+    return round(res["biggest_print"]["notional_m"] * 1e6, -5)
+
+
+def test_different_legs_stay_separate_structures():
+    rows = (_diag("a", "r1") + _diag("b", "r2", back=500)
+            + _diag("c", "r3", sides=("BUY", "SELL"))
+            + _diag("d", "r4", prod="BTC OPTION - PRDX"))
+    res = build_tape_blocks(rows)
+    check("ratio, side and venue each split a structure", res["n_structures"] == 4, res["rows"])
+    uneven = build_tape_blocks(_diag("a", "r1", front=200, back=300)
+                               + _diag("b", "r2", front=200, back=400))
+    check("a 2:3 and a 1:2 are different structures", uneven["n_structures"] == 2, uneven["rows"])
+    shared = build_tape_blocks(_diag("a", "r1") + _diag("b", "r1", back=500))
+    check("different legs in one RFQ are two structures", shared["n_structures"] == 2, shared["rows"])
+    sizeless = [_tape_leg("Call 25 Sep 26 80000", "", 0, 5_000_000, "a", rfq="r9"),
+                _tape_leg("Call 25 Sep 26 84000", "", 50, 5_000_000, "a", rfq="r9"),
+                _tape_leg("Call 25 Sep 26 86000", "", 70, 4_000_000, "b", rfq="r9"),
+                _tape_leg("Call 25 Sep 26 88000", "", 0, 4_000_000, "b", rfq="r9")]
+    row = build_tape_blocks(sizeless)["rows"][0]
+    check("an RFQ-grouped row keeps its largest block's legs",
+          row["detail"] == "0 80KC / 50 84KC", row)
+
+
+def test_missing_side_is_not_read_as_a_sell():
+    rows = [_tape_leg("Call 25 Sep 26 80000", "", 500, 42_100_000, "b1"),
+            _tape_leg("Call 30 Oct 26 90000", "", 500, 42_100_000, "b1")]
+    row = build_tape_blocks(rows)["rows"][0]
+    check("undisclosed legs still name a diagonal", row["structure"].endswith("Call Diagonal"), row)
+    check("undisclosed legs render unsigned", row["detail"] == "500 25SEP26 80KC / 500 30OCT26 90KC", row)
+
+
+def test_a_leg_that_nets_to_zero_is_not_shown():
+    rows = [_tape_leg("Call 25 Sep 26 80000", "BUY", 100, 8_400_000, "x"),
+            _tape_leg("Call 25 Sep 26 80000", "SELL", 100, 8_400_000, "x"),
+            _tape_leg("Call 25 Sep 26 84000", "SELL", 60, 5_000_000, "x")]
+    row = build_tape_blocks(rows)["rows"][0]
+    check("only the leg left after netting is listed", row["detail"] == "-60 84KC", row)
+    check("the block is named from what was traded", row["structure"] == "25SEP26 Call", row)
+
+
+def test_ratio_labels_for_two_leg_shapes():
+    def legs(*spec):
+        return [{"instrument_name": n, "amount": a, "direction": d} for n, a, d in spec]
+    check("1x2 call spread", classify_structure(legs(
+        ("BTC-25SEP26-84000-C", 100, "buy"), ("BTC-25SEP26-86000-C", 200, "sell"))) == "Call Ratio Spread")
+    check("1x2 put calendar", classify_structure(legs(
+        ("BTC-25SEP26-80000-P", 100, "sell"), ("BTC-30OCT26-80000-P", 200, "buy"))) == "Put Ratio Calendar")
+    check("equal-size diagonal stays a diagonal", classify_structure(legs(
+        ("BTC-25SEP26-80000-C", 100, "sell"), ("BTC-30OCT26-90000-C", 100, "buy"))) == "Call Diagonal")
+
+
+def test_build_tape_blocks_empty():
+    res = build_tape_blocks([])
+    check("empty → no biggest print", res["biggest_print"] is None, res)
+    check("empty → zero blocks", res["n_blocks"] == 0, res)
+    check("empty → no rows", res["rows"] == [], res)
+
+
+def test_atm_reached_by_clamping_is_marked():
+    """_interp reports when it had to clamp to an endpoint. For the wings that
+    answer sets the `*`; for ATM it was computed and thrown away, so a thin
+    chain rendered a clamped endpoint as the ATM figure with nothing to say so
+    — and that figure drives front/back ATM and the term-structure label."""
+    thin = compute_vol_surface({
+        "BTC-5JUN26-90000-C": {"mark_iv": 55.0, "delta": 0.11},
+        "BTC-5JUN26-95000-C": {"mark_iv": 58.0, "delta": 0.07},
+    }, spot=62000)
+    rows = thin["expiries"]
+    check("a chain with no delta near 0.50 marks ATM extrapolated",
+          bool(rows) and rows[0]["atm_extrapolated"] is True, rows)
+
+    full = compute_vol_surface(_surface_tickers(), spot=62000)
+    check("a chain straddling 0.50 does not mark ATM",
+          full["expiries"][0]["atm_extrapolated"] is False, full["expiries"][0])
+
+
+def main():
+    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
+    print(f"Running {len(tests)} test functions...")
+    for t in tests:
+        t()
+    print(f"\n{_passed} checks passed, {_failed} failed")
+    sys.exit(1 if _failed else 0)
+
+
+if __name__ == "__main__":
+    main()
