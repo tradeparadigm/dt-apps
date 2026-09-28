@@ -94,152 +94,46 @@ Bybit's website; no amount of retrying will.
 
 ## Every private request
 
-Four headers, always, and they are coupled — three of them also go into the
-string that gets signed.
-
-```
-X-BAPI-API-KEY:     <api_key from _META>
-X-BAPI-TIMESTAMP:   <milliseconds since epoch>
-X-BAPI-RECV-WINDOW: 5000
-X-BAPI-SIGN:        <the sign- placeholder>
-```
-
-The string to sign is these three values concatenated with the request payload,
-with **no separators at all**:
-
-```
-timestamp + api_key + recv_window + payload
-```
-
-where `payload` is:
-
-- for **GET / DELETE**: the query string exactly as it appears in the URL,
-  without the leading `?` — e.g. `category=linear&symbol=BTCUSDT`
-- for **POST**: the raw request body, byte for byte, exactly as you will send
-  it
-
-**Compute the timestamp ONCE.** The value in `X-BAPI-TIMESTAMP` and the value
-you concatenated must be the same variable, and so must `recv_window`. Building
-one for the header and another for the signed string is the single most common
-way to produce a signature Bybit rejects, and it fails intermittently — the two
-agree whenever they land in the same millisecond.
-
-**Byte-exact matters more than anything else on this page.** Bybit recomputes
-the HMAC over what it received. If you build the JSON body one way for signing
-and let an HTTP library re-serialise it another way when sending — different
-key order, added whitespace, a float rendered differently — the signature is
-over a string Bybit never sees and you get `10004 error sign!`. Serialise the
-body **once**, into a string, sign that string, and send that same string.
-
-### The request
-
-**Check for the helper before you build anything**, then call it for every
-request. Do not paste a block per call, and do not build the request out of
-`curl` — a JSON body inside shell quoting cannot survive an apostrophe or a
-computed value, which is exactly where byte-exactness dies.
+Run the client the app ships. It is at `scripts/bybit.mjs`, beside this file.
 
 ```sh
-ls ~/.openclaw/workspace/tools/bybit/bybit-1.0.6.mjs
-```
+METHOD=GET TARGET='/v5/account/wallet-balance?accountType=UNIFIED' node scripts/bybit.mjs
 
-If that file is there, an earlier chat already wrote it — skip to the calls
-below. If it is not, run this. The `rm` clears any version an older skill
-left, so there is nothing to compare and no way to end up with two:
-
-```sh
-mkdir -p ~/.openclaw/workspace/tools/bybit
-rm -f ~/.openclaw/workspace/tools/bybit/bybit-*.mjs
-cat > ~/.openclaw/workspace/tools/bybit/bybit-1.0.6.mjs <<'EOF'
-const all = Object.keys(process.env).filter(k => (process.env[k] || '').startsWith('sign-bybit'));
-const V = process.env.BYBIT_CRED || all[0];
-if (!V) { console.error('no Bybit sign- credential in the environment'); process.exit(2); }
-if (all.length > 1 && !process.env.BYBIT_CRED) {
-  console.error('several Bybit credentials: ' + all.join(', ') + ' — re-run with BYBIT_CRED=<the one you want>');
-  process.exit(2);
-}
-const KEY = JSON.parse(process.env[V + '_META']).api_key;
-const HDR = 'X-Dime-Sign-' + V.replace(/^CRED_/, '').toLowerCase().replaceAll('_', '-');
-const HOST = /TESTNET/.test(V) ? 'api-testnet.bybit.com'
-           : /DEMO/.test(V)    ? 'api-demo.bybit.com'
-           :                     'api.bybit.com';
-
-const method = (process.env.METHOD || 'GET').toUpperCase();
-const body = process.env.BODY || '';
-// The query lives on TARGET and nowhere else. Sending it on the URL and again
-// in the signed bytes is the mistake this shape exists to prevent.
-const [path, query = ''] = (process.env.TARGET || '').split('?');
-const get = method === 'GET';
-const payload = get ? query : body;
-
-const ts = Date.now().toString();
-const res = await fetch(`https://${HOST}${path}` + (query ? '?' + query : ''), {
-  method,
-  headers: {
-    'X-BAPI-API-KEY': KEY,
-    'X-BAPI-TIMESTAMP': ts,
-    'X-BAPI-RECV-WINDOW': '5000',
-    'X-BAPI-SIGN': process.env[V],
-    [HDR]: Buffer.from(ts + KEY + '5000' + payload).toString('base64'),
-    ...(get ? {} : { 'Content-Type': 'application/json' }),
-  },
-  ...(get ? {} : { body }),
-});
-console.log(res.status, await res.text());
-EOF
-```
-
-Every call after that is one line:
-
-```sh
-METHOD=GET TARGET='/v5/account/wallet-balance?accountType=UNIFIED' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.6.mjs
-
-METHOD=GET TARGET='/v5/position/list?category=linear&settleCoin=USDT' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.6.mjs
+METHOD=GET TARGET='/v5/position/list?category=linear&settleCoin=USDT' node scripts/bybit.mjs
 
 METHOD=POST TARGET=/v5/order/create \
   BODY='{"category":"linear","symbol":"BTCUSDT","side":"Buy","orderType":"Limit","qty":"0.001","price":"50000","timeInForce":"PostOnly"}' \
-  node ~/.openclaw/workspace/tools/bybit/bybit-1.0.6.mjs
+  node scripts/bybit.mjs
 ```
 
 `TARGET` carries the path and, on a GET, its query. A POST leaves `TARGET`
-bare and puts everything in `BODY`. If the account holds more than one Bybit
-credential the script refuses and lists them; pick with
-`BYBIT_CRED=CRED_BYBIT_MAINNET_SECRET`.
+bare and puts everything in `BODY`. The client prints the HTTP status and the
+body. If the account holds more than one Bybit credential it refuses and lists
+them; pick with `BYBIT_CRED=CRED_BYBIT_MAINNET_SECRET`.
 
-Public market data needs none of this — no key, no timestamp, no signature:
+Public market data needs none of this:
 
 ```sh
 curl -sS 'https://api.bybit.com/v5/market/tickers?category=linear&symbol=BTCUSDT'
 ```
 
-**When this block and reality disagree, reality wins.** Run it as given. If
-something in it does not match what you actually find — a variable that is not
-there, a value that is empty, a field the venue stopped returning — change the
-smallest thing that makes it work, run it, and say in one line what you changed
-and why.
+How the signing works is in [references/signing.md](references/signing.md).
+Read it when a call fails, not before.
 
-Do not stop to ask, and do not run it unchanged to prove it fails. Both spend
-the turn on the instruction instead of the call you were asked to make. The
-block is the supported path, not a contract.
+### When this client is wrong
 
-Why it is shaped this way:
+Check `~/.openclaw/workspace/tools/bybit/errata-1.1.0.md` before your first
+call. An earlier chat writes it when this client turns out to be wrong against
+the live venue, and it says what to change. The version in the name is this
+app's version, so a file naming any other version is stale: delete it and
+ignore what it said.
 
-- `payload` is built once and used twice — signed, then sent. Nothing
-  re-serialises it in between, which is the failure this whole page is about.
-- The credential is read from the environment by the block itself, so the api
-  key is never something you type, quote or mask.
-- `HDR` comes from the variable name, never from splitting the placeholder —
-  see the warning in `AGENTS.md`.
-- `res.status` is printed. An empty-bodied 401 and a 200 with an empty result
-  are indistinguishable otherwise.
+When the client is wrong and no errata covers it, fix your own call, get the
+user their answer, then write that file yourself. Say what failed, how you
+knew, and what you changed. Tell the user in one line that you did.
 
-The proxy computes HMAC-SHA256 over your bytes with the secret, writes the hex
-digest into `X-BAPI-SIGN` in place of the placeholder, strips the
-`X-Dime-Sign-` header, and forwards the request. Bybit sees an ordinary signed
-Bybit request.
-
-If you get a 403 from the proxy rather than an error from Bybit, the placeholder
-was not where it was expected — the body of that 403 names the header it
-scanned.
+Never edit `scripts/bybit.mjs`. A publish replaces it, so an edit there is
+lost and the next chat repeats your work.
 
 ## Which calls need signing
 
@@ -276,8 +170,8 @@ then signed, then a path you know is signable as a control:
 
 ```sh
 curl -sS -w '\nHTTP %{http_code}\n' 'https://api.bybit.com/v5/<the path in question>'
-METHOD=GET TARGET='/v5/<the path in question>' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.6.mjs
-METHOD=GET TARGET='/v5/account/wallet-balance?accountType=UNIFIED' node ~/.openclaw/workspace/tools/bybit/bybit-1.0.6.mjs
+METHOD=GET TARGET='/v5/<the path in question>' node scripts/bybit.mjs
+METHOD=GET TARGET='/v5/account/wallet-balance?accountType=UNIFIED' node scripts/bybit.mjs
 ```
 
 - **Same answer signed and unsigned, while the control returns 200** — the
