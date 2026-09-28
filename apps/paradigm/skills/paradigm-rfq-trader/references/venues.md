@@ -75,7 +75,9 @@ Base: `https://api.prod.paradex.trade/v1`. Pull fair value with
 **`kind = OPTION`:**
 
 - `web_fetch .../markets/summary?market=<market>` per leg →
-  `mark_price`, `mark_iv`, `delta`, `vega`.
+  `mark_price`, `mark_iv`, `delta`. There is no top-level `vega`, so compute it.
+- **`mark_iv` is a decimal here**: `0.52153206` means 52.15%. Deribit returns
+  the same quantity as `47.74`. Read the unit before you do arithmetic on it.
 - Pull `<BASE>-USD-PERP` mark for the underlying spot.
 - Aggregate for multi-leg: `structure_mark = Σ (ratio × leg_mark ×
   side_sign)`, net delta = Σ (ratio × δ × side_sign), net vega
@@ -89,8 +91,9 @@ Base: `https://api.prod.paradex.trade/v1`. Pull fair value with
   the public `.../bbo/<market>` endpoint.
 - "Tighten the BBO by Z bps" → quote inside the current Paradex
   best. Flag if it implies a negative spread.
-- "X vol over mark IV" (options only) → bump per-leg IV by X,
-  reprice via BS, re-aggregate.
+- "X vol over mark IV" (options only) → bump per-leg IV by X **vol points**,
+  which is `X / 100` on Paradex's decimal `mark_iv`. Adding 5 to `0.52` quotes
+  552 vol. Reprice via BS and re-aggregate.
 
 ### Settlement check
 
@@ -126,8 +129,10 @@ infix.
 
 - `web_fetch`
   `https://www.deribit.com/api/v2/public/ticker?instrument_name=...` per leg.
-  Returns mark, bid, ask, mark_iv, bid_iv, ask_iv, delta, gamma, theta, vega,
-  open_interest. Public, so it needs no credential.
+  Returns `mark_price`, `best_bid_price`, `best_ask_price`, `mark_iv`,
+  `bid_iv`, `ask_iv`, `open_interest`, and the greeks NESTED under `greeks`
+  (`delta`, `gamma`, `vega`, `theta`, `rho`). There is no top-level `mark`,
+  `bid`, `ask` or `delta`. Public, so it needs no credential.
 - A `deribit__get_ticker` tool returns the same payload. Use it when the host
   has one.
 - Pull `BTC-PERPETUAL` / `ETH-PERPETUAL` mark for underlying spot.
@@ -144,8 +149,8 @@ infix.
 
 - "Y bps over mark" → `price = mark × (1 ± Y/10000)`. "Mark" here
   is the ticker's `mark_price` (in BTC for inverse options).
-- "X vol over mark IV" → bump per-leg IV by X (Deribit's
-  `mark_iv` is a percentage, e.g. `34.52`), reprice via BS,
+- "X vol over mark IV" → bump per-leg IV by X, added straight to Deribit's
+  percentage `mark_iv` (e.g. `47.74`), reprice via BS,
   re-aggregate.
 - "Tighten the BBO" → quote inside Deribit's current best bid/ask.
 
@@ -162,8 +167,9 @@ This skill reads no Deribit account. After the cross:
 - Deribit option prices are in **BTC/ETH terms** for inverse
   options (the common case), not USD. When surfacing dollar
   notional, multiply by the underlying mark.
-- `mark_iv` is in **percentage** form (`34.52` = 34.52%), not
-  decimal — different from OKX which returns `0.3452`.
+- `mark_iv` is in **percentage** form here (`47.74` = 47.74%). Paradex returns
+  the same quantity as a decimal (`0.4774`), so a vol bump is a straight
+  addition on Deribit and a division by 100 first on Paradex.
 - For perps/futures on Deribit, prices ARE in USD.
 
 ---
