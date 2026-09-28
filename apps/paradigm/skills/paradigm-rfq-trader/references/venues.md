@@ -74,8 +74,9 @@ Base: `https://api.prod.paradex.trade/v1`. Pull fair value with
 
 **`kind = OPTION`:**
 
-- `web_fetch .../markets/summary?market=<market>` per leg →
-  `mark_price`, `mark_iv`, `delta`. There is no top-level `vega`, so compute it.
+- `web_fetch .../markets/summary?market=<market>` per leg. Read `mark_price`,
+  `mark_iv` and `delta` at the top level, and `vega` from the nested `greeks`
+  object, which also carries `delta` and `gamma`.
 - **`mark_iv` is a decimal here**: `0.52153206` means 52.15%. Deribit returns
   the same quantity as `47.74`. Read the unit before you do arithmetic on it.
 - Pull `<BASE>-USD-PERP` mark for the underlying spot.
