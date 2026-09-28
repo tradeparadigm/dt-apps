@@ -26,7 +26,7 @@
 schema_version: 1
 
 id: okx
-version: 1.0.0
+version: 1.1.0
 name: OKX
 blurb: Trade spot, perpetuals and options on OKX without your agent seeing any of the three secrets.
 
