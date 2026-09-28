@@ -62,10 +62,10 @@ credential_types:
     label: Access key
     slug: access
     secret_label: Access key
-    # NO DETAIL FIELDS. The signature identifies the desk, so there is nothing
-    # public the agent has to send alongside. A multi-desk key may need a desk
-    # selector, and no header for one is documented, so adding a field for it
-    # would be asking the user to paste a value with nowhere to go.
+    # NO DETAIL FIELDS. The signature identifies the desk, so a single-desk key
+    # needs nothing alongside it. A multi-desk key selects with a
+    # Paradigm-Account header, which the agent writes itself, so it needs no
+    # enrolment field either.
     detail_fields: []
     # NARROWED TO THE AUTHENTICATED SURFACE. Everything the skill calls is
     # under /v2/drfq, all of it authenticated, and nothing public lives there.
