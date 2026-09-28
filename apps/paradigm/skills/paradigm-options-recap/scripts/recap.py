@@ -551,7 +551,7 @@ def load_venue_blocks(csv_dir: str, asset: str) -> list[dict]:
 # never reaches `block` rows at all).
 #
 # For the brokered venues the dedupe is now EXACT where the data allows:
-# blocks.csv (the hot paradigm_trade tape) carries VENUE_BLOCK_TRADE_ID —
+# blocks.csv (the Paradigm execution tape) carries VENUE_BLOCK_TRADE_ID —
 # the venue's OWN block id (Deribit `BLOCK-…`, Bullish otc id), the same id
 # the venue tape's `block_id` column carries — so a venue-tape block that
 # matches a brokered id is the SAME print and is dropped, while a
@@ -1288,7 +1288,7 @@ def render_md(r: dict) -> str:
     # (hot tape never promoted) was indistinguishable from a healthy recap.
     # Rendered explicitly rather than routed through the warning machinery.
     if r.get("block_tape_empty"):
-        L.append("⚠ Block Flow unavailable — the hot paradigm_trade read returned "
+        L.append("⚠ Block Flow unavailable — the paradigm_trade read returned "
                  "no rows. Biggest Print and Block Flow below are NOT a quiet "
                  "market, they are a missing feed.")
         L.append("")

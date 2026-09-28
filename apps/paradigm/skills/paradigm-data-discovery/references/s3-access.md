@@ -62,9 +62,9 @@ here is about inline shell an agent assembles across `exec` calls.)
 `scripts/s3_async.py` lives here, beside `execution_tape.py`, because it is a
 shared reader rather than any one skill's: `read_objects(paths, columns)` signs
 and fetches every object through obstore outside the GIL and returns one Arrow
-table, which DuckDB then reads by replacement scan. Import it the way every cross-skill import here works. Insert
-`paradigm-data-discovery/scripts` on `sys.path`. Never reach sideways into
-another skill's `scripts/`.
+table, which DuckDB then reads by replacement scan. Import it the way every
+cross-skill import here works: insert `paradigm-data-discovery/scripts` on
+`sys.path`. Never reach sideways into another skill's `scripts/`.
 
 Two properties bind its callers:
 

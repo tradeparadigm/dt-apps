@@ -89,10 +89,8 @@ is a scoped, current execution dataset retaining RFQ, trade, block and venue-blo
 IDs, execution time, price, mark, side, quantity and instrument dimensions.
 Its notional USD measure is not option premium turnover.
 
-Before declaring migration complete, verify bounded reads of every required
-prefix with the **Dime runtime identity**, including metadata and current
-execution partitions. Source-bucket existence or a replication configuration
-does not prove that the consumer can read the destination objects.
+A bucket that exists, or a replication configuration, does not prove you can
+read the objects. Test a bounded read of the prefix you need.
 
 ## Available feeds
 

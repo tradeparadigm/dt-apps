@@ -4,8 +4,9 @@ description: >
   Cross-venue analysis of Paradigm RFQ block trades using live market data from
   Deribit, OKX, and Bybit. Invoked as `/analyze <rfq_id> <rfq description>`:
   resolves the rfq_id by searching the Paradigm trade tape via the
-  paradigm-data-discovery skill (the hot paradigm_trade rows, keyed by RFQ_ID)
-  for the cleared-block record, then fetches live marks, IVs, and greeks per venue,
+  paradigm-data-discovery skill (the daily execution partitions, keyed by
+  RFQ_ID) for the cleared-block record, then fetches live marks, IVs, and
+  greeks per venue,
   computes net greeks for multi-leg structures, benchmarks the fill vs mark,
   reports how much of the structure traded over 24h / 7d / 30d and where else
   it printed, reads whether the flow moved the
