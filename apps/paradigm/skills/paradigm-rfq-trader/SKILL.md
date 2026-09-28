@@ -136,10 +136,13 @@ parameter that has no value. The helper takes the whole target, query included.
 **Serialise the body with no spaces** and sign those bytes. Post the same
 bytes. `JSON.stringify` gives you this; re-serialising after signing does not.
 
-**Walk the counterparty pages.** `GET /v2/drfq/counterparties/` answers
-`{count, next, results}`. `next` is a bare cursor token, not a URL, so send it
-back as `?cursor=<token>`. There is no `has_more`: you are done when `next` is
-null. Page one is not the desk list. Stop at 100 pages.
+**Walk the counterparty pages, carrying the filters.**
+`GET /v2/drfq/counterparties/` answers `{count, next, results}`. `next` is a
+bare cursor token, not a URL, so page two is
+`?venues=<venue>&group=LP&cursor=<token>`. **Resend `venues` and `group` on
+every page.** The cursor holds an offset and nothing else, so a request without
+them filters against every desk and hands you page one again. There is no
+`has_more`: you are done when `next` is null. Stop at 100 pages.
 
 **An RFQ body needs six fields and Paradigm refuses it without them.**
 `venue`, `legs`, `quantity`, `account_name`, `counterparties` and
@@ -217,8 +220,9 @@ ambiguous, ask.
 | `rfq_id` | RFQ to quote — fetch it first to learn `venue` + `kind` |
 | `side` | `BUY` (bid) / `SELL` (offer). Two-way = two `POST /v2/drfq/orders/` calls |
 | `price` or `edge` | Absolute price, or an edge spec interpreted per `references/venues.md` for that RFQ's venue |
-| `quantity` | **Required.** It does not default to the RFQ's quantity |
+| `quantity` | **Required, and it has to equal the RFQ's quantity.** Paradigm checks that for a maker and a taker alike |
 | `type` | `LIMIT` (default) or `HIDDEN` |
+| `account_name` | **Required for a maker**, and a missing one is a 400. A taker crossing an existing order may omit it and inherits the RFQ's credential |
 | `time_in_force` | `GOOD_TILL_CANCELED` (rest) or `FILL_OR_KILL` (cross) |
 
 ### Direction — read before building `legs`
@@ -279,9 +283,11 @@ for the session; do not invent IDs.
 1. **Resolve counterparties, then create the RFQ.** Unless the user named
    specific desks, default to every LP eligible for the venue:
    - Call `GET /v2/drfq/counterparties/?venues=<venue>&group=LP` and **page
-     through every result**. The answer is `{count, next, results}`, `next` is
-     a bare cursor token, and you resend it as `?cursor=<token>` until it comes
-     back null. A partial list silently drops LPs.
+     through every result**. The answer is `{count, next, results}`, and `next`
+     is a bare cursor token. Page two is
+     `?venues=<venue>&group=LP&cursor=<token>`, filters and all, until `next`
+     comes back null. Drop the filters and you refilter against every desk and
+     read page one again, which silently drops LPs.
    - Keep the desks whose `groups` carry `LP` and whose `venues` carry this
      venue, and pass their `desk_name` values as `counterparties`. The desk's
      name IS its ticker; there is no `ticker` key. Capture the count `N`.

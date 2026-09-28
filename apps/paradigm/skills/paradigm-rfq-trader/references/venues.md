@@ -41,9 +41,11 @@ broadcast on this path: an empty `counterparties` list is a 400.
 
 1. Call `GET /v2/drfq/counterparties/?venues=PRDX&group=LP` and **page through
    the entire result**. The answer is `{count, next, results}`. `next` is a
-   bare cursor token rather than a URL, so resend it as `?cursor=<token>` until
-   it comes back null. There is no `has_more`. Stopping at page 1 silently
-   drops LPs, which is what "not all LPs got the RFQ" means.
+   bare cursor token rather than a URL, so page two is
+   `?venues=PRDX&group=LP&cursor=<token>`. Carry the filters on every page: the
+   cursor holds an offset only, so a bare `?cursor=` refilters against every
+   desk and returns page one. There is no `has_more`. Stopping at page 1
+   silently drops LPs, which is what "not all LPs got the RFQ" means.
 2. Keep the desks whose `groups` carry `LP` and whose `venues` carry `PRDX`.
    Those two lists are what the endpoint returns per desk. Pass their
    `desk_name` values as `counterparties` to `POST /v2/drfq/rfqs/` and surface
