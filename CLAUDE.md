@@ -3,13 +3,19 @@
 The README says what an app is and what the manifest means. This is the part
 the checker cannot catch.
 
-## Give the agent a helper to cache, not a block to retype
+## Ship the client, or give the agent one to cache
 
 Building a signed request from a description costs an agent real time, and it
 pays that cost again in every chat. Left to itself it writes a throwaway
-script each time — we watched one do it three separate ways in an afternoon.
+script each time. We watched one do it three separate ways in an afternoon.
 
-So a skill whose venue needs signing hands over a helper the agent keeps:
+Ship the client as a file under the skill when you can, the way `bybit` does
+at `skills/bybit-api/scripts/bybit.mjs`. The agent runs it and writes nothing.
+We measured that against the same read task on a live pod: three commands with
+a shipped file, six when the agent copies the same code out of the skill.
+
+The rest of this section covers the older shape, where the skill describes the
+client and the agent keeps its own copy at:
 
 ```
 ~/.openclaw/workspace/tools/<app-id>/<skill-name>/<skill-name>-<app-version>.mjs
