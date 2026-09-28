@@ -75,13 +75,19 @@ d = repo()
 commit(d)
 ok(run(d).returncode == 0, "a manifest-only change passes")
 
-# The manifest-only skip at line 59 is the other half of that branch: with a
-# skill edit beside it the check must still fire.
+# The manifest-only skip at line 59, both halves. With a skill edit beside it
+# the check still fires, and a manifest-only edit passes even with the version
+# untouched. Only the second half dies when the skip is dropped.
 d = repo()
 (d / "apps" / "demo" / "app.yaml").write_text("id: demo\nversion: 1.0.0\nblurb: x\n")
 (d / "apps" / "demo" / "skills" / "demo-api" / "SKILL.md").write_text("---\nname: demo-api\n---\nedited\n")
 commit(d)
 ok(run(d).returncode == 1, "a manifest edit does not excuse a skill edit")
+
+d = repo()
+(d / "apps" / "demo" / "app.yaml").write_text("id: demo\nversion: 1.0.0\nblurb: x\n")
+commit(d)
+ok(run(d).returncode == 0, "a manifest-only edit passes with the version untouched")
 
 # A brand new app has no earlier version to compare against.
 d = repo()

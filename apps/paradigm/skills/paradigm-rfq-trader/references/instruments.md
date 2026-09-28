@@ -4,7 +4,7 @@ Venue-independent reference for the shapes in DRFQv2 payloads.
 **Per-venue instrument naming lives in [`venues.md`](venues.md)**;
 this file is the irreducible reference for `StrategyCodeEnum` (which
 isn't documented in a digestible form anywhere else) plus brief notes
-on the smaller enums the skill writes literally into tool calls.
+on the smaller enums the skill writes literally into a request body.
 
 ## Instrument lookup
 

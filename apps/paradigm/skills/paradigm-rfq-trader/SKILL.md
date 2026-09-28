@@ -46,7 +46,7 @@ everything that varies between settlement venues.
 | `BYB` (Bybit), `BIT` (Bit.com) | Out of scope at this version. Add by appending to `references/venues.md` |
 
 See [`references/venues.md`](references/venues.md) for the per-venue
-recipe (naming, fair-value tools, edge syntax, settlement check).
+recipe (naming, fair-value sources, edge syntax, settlement check).
 
 **Out of scope at this skill version:**
 
@@ -136,9 +136,10 @@ parameter that has no value. The helper takes the whole target, query included.
 **Serialise the body with no spaces** and sign those bytes. Post the same
 bytes. `JSON.stringify` gives you this; re-serialising after signing does not.
 
-**Walk the counterparty pages.** `GET /v2/drfq/counterparties/` is paginated.
-Page one is not the desk list. Follow the cursor to the end before you use it,
-and stop at 100 pages.
+**Walk the counterparty pages.** `GET /v2/drfq/counterparties/` answers
+`{count, next, results}`. `next` is a bare cursor token, not a URL, so send it
+back as `?cursor=<token>`. There is no `has_more`: you are done when `next` is
+null. Page one is not the desk list. Stop at 100 pages.
 
 **An RFQ body needs six fields and Paradigm refuses it without them.**
 `venue`, `legs`, `quantity`, `account_name`, `counterparties` and
@@ -203,11 +204,11 @@ ambiguous, ask.
 | `venue` | `PRDX` or `DBT` (see scope table; ask if unspecified) |
 | `legs` | `{instrument_id, ratio, side, price?}` rows. Outright = 1 leg; spread / straddle / RR = 2 legs; condors etc. = more. `side` defines structure orientation — see **Direction** below |
 | `quantity` | Decimal string in base units |
-| `counterparties` | Desk tickers, and **never empty**. Default to every LP eligible for the venue: `GET /v2/drfq/counterparties/?venues=<venue>&group=LP`, paged to the end, then take the desks whose `groups` carry `LP` and whose `venues` carry this venue. Narrow to named desks only when the user names them. A failed lookup stops the RFQ, because an empty list is a 400 (see Step 3a · 1) |
+| `counterparties` | A list of `desk_name` values, and **never empty**. Default to every LP eligible for the venue: `GET /v2/drfq/counterparties/?venues=<venue>&group=LP`, paged to the end, then take the desks whose `groups` carry `LP` and whose `venues` carry this venue. Narrow to named desks only when the user names them. A failed lookup stops the RFQ, because an empty list is a 400 (see Step 3a · 1) |
 | `is_taker_anonymous` | Hide the taker desk from makers. **Required.** `true` needs at least three `LP` counterparties |
 | `state` | `OPEN` sends it now, `DRAFT` stages it. Optional, and the server defaults it to `OPEN` |
 | `account_name` | The account to bill. **Required**, and a missing one is a 400 |
-| `label` | Idempotency tag, echoed back. Optional |
+| `label` | Your own reference, echoed back. Optional, and nothing deduplicates on it |
 
 **Maker:**
 
@@ -216,7 +217,7 @@ ambiguous, ask.
 | `rfq_id` | RFQ to quote — fetch it first to learn `venue` + `kind` |
 | `side` | `BUY` (bid) / `SELL` (offer). Two-way = two `POST /v2/drfq/orders/` calls |
 | `price` or `edge` | Absolute price, or an edge spec interpreted per `references/venues.md` for that RFQ's venue |
-| `quantity` | Defaults to RFQ quantity |
+| `quantity` | **Required.** It does not default to the RFQ's quantity |
 | `type` | `LIMIT` (default) or `HIDDEN` |
 | `time_in_force` | `GOOD_TILL_CANCELED` (rest) or `FILL_OR_KILL` (cross) |
 
@@ -256,7 +257,7 @@ build it conventionally and short the **package**, never the legs.
 The cross `side` at `POST /v2/drfq/orders/` (Step 3a · 5) is a separate
 matching-mechanics concern — see there.
 
-If anything is ambiguous, ask before calling tools.
+If anything is ambiguous, ask before you call Paradigm.
 
 ## Step 2 — Resolve instrument IDs
 
@@ -278,10 +279,12 @@ for the session; do not invent IDs.
 1. **Resolve counterparties, then create the RFQ.** Unless the user named
    specific desks, default to every LP eligible for the venue:
    - Call `GET /v2/drfq/counterparties/?venues=<venue>&group=LP` and **page
-     through every result**. Follow the cursor, `next` or `has_more` to the
-     end. A partial list silently drops LPs.
+     through every result**. The answer is `{count, next, results}`, `next` is
+     a bare cursor token, and you resend it as `?cursor=<token>` until it comes
+     back null. A partial list silently drops LPs.
    - Keep the desks whose `groups` carry `LP` and whose `venues` carry this
-     venue, and pass their tickers as `counterparties`. Capture the count `N`.
+     venue, and pass their `desk_name` values as `counterparties`. The desk's
+     name IS its ticker; there is no `ticker` key. Capture the count `N`.
    - **A failed or empty lookup stops here.** Paradigm refuses an empty
      `counterparties` list, so say the lookup failed and ask which desks to
      send to. Do not send the RFQ.
@@ -452,7 +455,7 @@ Will call on yes:
 [yes / no / adjust]
 ```
 
-**Responses:** `yes` → call the tool. `no` → abort. `adjust <field>
+**Responses:** `yes` → send the call. `no` → abort. `adjust <field>
 <value>` → re-render. Common adjust verbs:
 
 - Linear: `adjust price`, `adjust quantity`, `adjust edge (bps)`.
@@ -488,7 +491,7 @@ prose. Surface only what the trader acts on:
   `references/venues.md`.
 - The slim confirmation block before any state-changing call (Step 4).
 - A one-line result on success (`rfq_id` / `order_id` / `trade_id`).
-- **Data trace** — one line, the concrete tools actually called, e.g.
+- **Data trace** — one line, the calls you actually made, e.g.
   `instruments → rfq, bbo, orders → create rfq`.
 
 Drop empty sections. Don't restate inputs the user just gave. Never
@@ -519,7 +522,7 @@ invent fair-value numbers when a data source is unreachable — say so.
 ## References
 
 - [`references/venues.md`](references/venues.md) — **per-venue
-  cookbook**: naming, fair-value tools, edge syntax, settlement
+  cookbook**: naming, fair-value sources, edge syntax, settlement
   check. The first place to look when extending the skill.
 - [`references/instruments.md`](references/instruments.md) —
   venue-independent enum semantics (kinds, margin kinds, strategy

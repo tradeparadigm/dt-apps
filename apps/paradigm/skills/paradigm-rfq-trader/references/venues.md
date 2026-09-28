@@ -1,7 +1,7 @@
 # Venues — per-venue cookbook for paradigm-rfq-trader
 
 The skill body is **venue-agnostic**. This file is the per-venue
-recipe: instrument-name format, fair-value tools, settlement
+recipe: instrument-name format, fair-value sources, settlement
 verification, and venue-specific quirks. Adding a new DRFQv2 venue
 means appending a section here in the same shape — the SKILL.md
 workflow stays the same.
@@ -40,13 +40,15 @@ Default to every LP eligible for PRDX, named explicitly. Paradigm has no open
 broadcast on this path: an empty `counterparties` list is a 400.
 
 1. Call `GET /v2/drfq/counterparties/?venues=PRDX&group=LP` and **page through
-   the entire result**. Follow the cursor, `next` or `has_more` to the end.
-   Stopping at page 1 silently drops LPs, which is what "not all LPs got the
-   RFQ" means.
+   the entire result**. The answer is `{count, next, results}`. `next` is a
+   bare cursor token rather than a URL, so resend it as `?cursor=<token>` until
+   it comes back null. There is no `has_more`. Stopping at page 1 silently
+   drops LPs, which is what "not all LPs got the RFQ" means.
 2. Keep the desks whose `groups` carry `LP` and whose `venues` carry `PRDX`.
-   Those two lists are what the endpoint returns per desk. Pass their tickers
-   as `counterparties` to `POST /v2/drfq/rfqs/` and surface the count
-   (`all N PRDX LPs`).
+   Those two lists are what the endpoint returns per desk. Pass their
+   `desk_name` values as `counterparties` to `POST /v2/drfq/rfqs/` and surface
+   the count (`all N PRDX LPs`). The desk name IS the ticker; nothing returns
+   a key called `ticker`.
 
 Narrow to a directed subset only when the user names specific desks.
 
