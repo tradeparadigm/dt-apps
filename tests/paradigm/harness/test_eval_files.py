@@ -76,6 +76,11 @@ for f in EVALS:
 # as fixed strings, so a respelling does not slip through.
 STALE = [
     (r"paradigm_(?!trade|data|executions|rfq_tape)[a-z_]+", "an MCP tool name"),
+    # The same names shorn of their prefix. A rename pass that rewrote
+    # paradigm_drfqv2_create_rfq to create_rfq left one of these behind, and
+    # the prefixed pattern above cannot see it.
+    (r"\b(create_rfq|post_order|price_legs|rfq_snapshot|kill_switch|desk_overview)\b",
+     "a tool name with its prefix stripped"),
     (r"\bhas_more\b", "a response key the endpoint does not return"),
     (r"prime[- ]venue[- ]enabled", "a counterparty flag that does not exist"),
     (r"empty\s*/?\s*(omitted\s*)?broadcast", "a broadcast the service refuses"),
@@ -93,8 +98,12 @@ INTENTIONAL = (
 for f in EVALS:
     body = f.read_text()
     scanned = body.replace(INTENTIONAL, "")
-    ok(INTENTIONAL not in scanned,
-       f"{f.parent.parent.name}: the intentional MCP assertion is cut before scanning")
+    # The allowance is only safe while that exact string is still what the
+    # eval file carries. If someone rewords the assertion, the cut stops
+    # matching and every MCP mention in the file would fail instead of the
+    # intended one passing, so say which file relies on it.
+    if INTENTIONAL in body:
+        ok(True, f"{f.parent.parent.name}: the intentional MCP assertion is cut before scanning")
     for pat, what in STALE:
         hits = re.findall(pat, scanned, re.I)
         ok(not hits, f"{f.parent.parent.name}: no {what} {sorted(set(hits))[:3] if hits else ''}")

@@ -28,8 +28,11 @@ Plus any venue-specific quirks at the end.
 | Product | Format | Example |
 |---|---|---|
 | Perpetual | `<BASE>-USD-PERP` | `BTC-USD-PERP`, `ETH-USD-PERP` |
-| Dated future | `<BASE>-USD-<DDMMMYY>` | `BTC-USD-27JUN26` |
 | Option | `<BASE>-USD-<DDMMMYY>-<STRIKE>-<C\|P>` | `BTC-USD-8MAY26-90000-C` |
+
+Paradex lists no dated futures today, only perpetuals, options and two spot
+markets, so resolve any dated instrument through
+`GET /v2/drfq/instruments/` rather than assembling a name for one.
 
 Day **not** zero-padded. Month uppercase 3-letter. `-USD-` infix is
 the Paradex distinguisher vs Deribit.

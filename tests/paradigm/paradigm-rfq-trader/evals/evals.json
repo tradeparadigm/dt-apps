@@ -126,12 +126,12 @@
     {
       "id": 10,
       "prompt": "send a BTC 8MAY26 90/80 risk reversal RFQ on Paradex, 100 contracts, LP1 and LP2",
-      "expected_output": "A taker option RFQ flow that: (1) resolves both option ids via GET /v2/drfq/instruments/(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-8MAY26-90000-C\") and the matching 80000-P; (2) pulls the Paradex public market-summary endpoint (web_fetch) for each option (mark_price, mark_iv, delta, vega) and for BTC-USD-PERP (spot); (3) computes net structure mark + net delta + net vega; (4) presents a multi-leg confirmation block listing legs with their ids and per-leg references; (5) waits for explicit yes before invoking POST /v2/drfq/rfqs/ with venue=PRDX and two legs.",
+      "expected_output": "A taker option RFQ flow that: (1) resolves both option ids via GET /v2/drfq/instruments/(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-8MAY26-90000-C\") and the matching 80000-P; (2) pulls the Paradex public market-summary endpoint (web_fetch) for each option (mark_price, mark_iv and delta, with vega under greeks) and for BTC-USD-PERP (spot); (3) computes net structure mark + net delta + net vega; (4) presents a multi-leg confirmation block listing legs with their ids and per-leg references; (5) waits for explicit yes before invoking POST /v2/drfq/rfqs/ with venue=PRDX and two legs.",
       "assertions": [
         "Response resolves BOTH option instrument_ids via GET /v2/drfq/instruments/ with venue=PRDX",
         "Response pulls the Paradex public market-summary endpoint (web_fetch, not the BBO endpoint for the options) to get mark_price/mark_iv/greeks per leg",
         "Response also pulls the underlying BTC-USD-PERP mark for spot reference",
-        "Confirmation block shows per-leg mark + IV + delta + vega and an aggregated structure mark / net delta",
+        "Confirmation block shows per-leg mark, implied vol, delta and vega and an aggregated structure mark / net delta",
         "Final POST /v2/drfq/rfqs/ call uses venue=PRDX and two legs with the correct sides (+call -put for a risk reversal)",
         "Response waits for explicit user confirmation before sending POST /v2/drfq/rfqs/"
       ]
@@ -143,7 +143,7 @@
       "assertions": [
         "Response resolves the instrument via GET /v2/drfq/instruments/ with venue=PRDX and venue_instrument_name=BTC-USD-PERP",
         "Because the user named no desks, the flow resolves the LP set via GET /v2/drfq/counterparties/, PAGING THROUGH ALL results (not just page 1), and filters to LP desks eligible for PRDX",
-        "The create_rfq call sends to that explicit full LP list (an empty list is refused by Paradigm, so a failed lookup stops the flow)",
+        "The POST /v2/drfq/rfqs/ sends to that explicit full LP list (an empty list is refused by Paradigm, so a failed lookup stops the flow)",
         "Response does NOT invent or hard-code a narrowed directed subset (e.g. LP1, LP2) when the user named no counterparties",
         "Response pulls Paradex book data via the Paradex public BBO / orderbook endpoints (web_fetch) for fair-value reference",
         "Confirmation block shows the counterparties as all PRDX LPs (e.g. 'all N PRDX LPs') and waits for explicit yes before invoking POST /v2/drfq/rfqs/",
@@ -165,7 +165,7 @@
     {
       "id": 14,
       "prompt": "send a bearish BTC 8MAY26 risk reversal on Paradex \u2014 short the 90000 call, long the 80000 put \u2014 100 contracts, to LP1 and LP2",
-      "expected_output": "A taker option RFQ flow that expresses the user's desired (bearish) exposure directly in the leg sides and then BUYS the configured package, rather than flipping the legs to a 'short' orientation AND submitting a SELL (which would double-negate back to long). The flow: (1) resolves both option ids via GET /v2/drfq/instruments/(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-8MAY26-90000-C\") and the matching 80000-P; (2) configures legs to encode the stated exposure \u2014 SELL the 90000 call, BUY the 80000 put; (3) pulls the Paradex public market-summary endpoint (web_fetch) per option (mark_price, mark_iv, delta, vega) and BTC-USD-PERP for spot; (4) aggregates net structure mark + net delta + net vega; (5) presents a confirmation block whose net direction reads as short/bearish the structure (not a restatement of leg sides) and waits for explicit yes before invoking POST /v2/drfq/rfqs/ with venue=PRDX, two legs, quantity=100, counterparties=[\"LP1\",\"LP2\"] \u2014 submitted as a BUY of the configured package.",
+      "expected_output": "A taker option RFQ flow that expresses the user's desired (bearish) exposure directly in the leg sides and then BUYS the configured package, rather than flipping the legs to a 'short' orientation AND submitting a SELL (which would double-negate back to long). The flow: (1) resolves both option ids via GET /v2/drfq/instruments/(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-8MAY26-90000-C\") and the matching 80000-P; (2) configures legs to encode the stated exposure \u2014 SELL the 90000 call, BUY the 80000 put; (3) pulls the Paradex public market-summary endpoint (web_fetch) per option (mark_price, mark_iv and delta, with vega under greeks) and BTC-USD-PERP for spot; (4) aggregates net structure mark + net delta + net vega; (5) presents a confirmation block whose net direction reads as short/bearish the structure (not a restatement of leg sides) and waits for explicit yes before invoking POST /v2/drfq/rfqs/ with venue=PRDX, two legs, quantity=100, counterparties=[\"LP1\",\"LP2\"] \u2014 submitted as a BUY of the configured package.",
       "assertions": [
         "Response resolves BOTH option instrument_ids via GET /v2/drfq/instruments/ with venue=PRDX",
         "Response encodes the bearish exposure in the leg sides \u2014 SELL the 90000 call and BUY the 80000 put",
@@ -220,7 +220,7 @@
       "assertions": [
         "Response calls GET /v2/drfq/counterparties/ and pages through the ENTIRE paginated result (the next cursor token, filters carried) rather than using only the first page",
         "Response filters the resolved desks to those flagged LP-eligible for PRDX",
-        "The create_rfq call sends to the full resolved LP list, and the confirmation surfaces the count (e.g. 'all N PRDX LPs')",
+        "The POST /v2/drfq/rfqs/ sends to the full resolved LP list, and the confirmation surfaces the count (e.g. 'all N PRDX LPs')",
         "Response pulls Paradex book data via the Paradex public BBO / orderbook endpoints (web_fetch) for fair-value reference",
         "Response presents a confirmation block and waits for explicit yes before invoking POST /v2/drfq/rfqs/"
       ]
