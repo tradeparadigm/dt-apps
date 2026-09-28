@@ -14,8 +14,9 @@ if (all.length > 1 && !process.env.BYBIT_CRED) {
   console.error('several Bybit credentials: ' + all.join(', ') + ' — re-run with BYBIT_CRED=<the one you want>');
   process.exit(2);
 }
-const KEY = JSON.parse(process.env[V + '_META']).api_key;
 const HDR = 'X-Dime-Sign-' + V.replace(/^CRED_/, '').toLowerCase().replaceAll('_', '-');
+
+const KEY = JSON.parse(process.env[V + '_META']).api_key;
 const HOST = /TESTNET/.test(V) ? 'api-testnet.bybit.com'
            : /DEMO/.test(V)    ? 'api-demo.bybit.com'
            :                     'api.bybit.com';

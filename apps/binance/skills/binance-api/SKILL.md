@@ -46,54 +46,46 @@ sign.
 
 ## Every signed request
 
-Binance signs **`totalParams`: the query string concatenated with the request
-body, with no separator between them.** Everything else follows from that.
+Run the client the app ships, at `scripts/binance.mjs` beside this file.
 
+```sh
+METHOD=GET TARGET='/fapi/v3/balance?recvWindow=5000' node scripts/binance.mjs
+
+METHOD=GET TARGET='/api/v3/account' node scripts/binance.mjs
+
+METHOD=POST TARGET='/fapi/v1/order?symbol=BTCUSDT&side=BUY&type=LIMIT&timeInForce=GTC&quantity=0.002&price=50000' node scripts/binance.mjs
 ```
-GET /fapi/v2/balance?timestamp=1790000000000&recvWindow=5000&signature=<placeholder>
-X-Dime-Sign-<label>: <base64 of "timestamp=1790000000000&recvWindow=5000">
-```
 
-1. Build the query string you are going to send, **without** `signature`.
-2. Base64 that exact string into `X-Dime-Sign-<label>`.
-3. Append `&signature=<placeholder>` as the LAST parameter.
-4. Send it. The proxy computes HMAC-SHA256 over your bytes, writes the hex
-   digest in place of the placeholder, strips the `X-Dime-Sign-` header, and
-   forwards.
+`TARGET` is the path and its query, with no `signature` and no `timestamp`. The
+client adds the timestamp, percent-encodes the query, signs that exact string
+and appends the placeholder last. Binance takes parameters in the query string
+on every method, so a POST puts them there too.
 
-**The bytes you sign must be the bytes you send, in order.** The proxy
-substitutes the placeholder without reordering or re-encoding anything else, so
-what arrives at Binance is your query string with one value swapped.
+It picks the host from the path: `/fapi` is USD-M futures, `/api` is spot. It
+cannot tell demo from live that way, so when the credential's name does not say,
+it refuses and asks you to set `BINANCE_HOST`. Guessing there would put a live
+order on a demo key's account.
 
-**Percent-encode before signing.** Since 2026-01-15 Binance requires the payload
-to be percent-encoded *before* the signature is computed; a request signed over
-the raw form is rejected with `-1022`. Encode once, sign the encoded string,
-send the encoded string.
+You never send an API key. Binance's signature does not cover it, so the proxy
+attaches `X-MBX-APIKEY` itself on every signed path. Do not set that header.
 
-**Put `signature` last.** USD-M futures requires it — "make sure the signature
-is the end part of your query string or request body". Spot does not state the
-rule, so always appending it works on both.
+How the signing works is in [references/signing.md](references/signing.md).
+Read it when a call fails, not before.
 
-**Send parameters in the query string, including on POST and DELETE.** Binance
-allows either, and mixing them means the signature has to cover the
-concatenation of both, which is a needless way to get `-1022`. One place, one
-string, one signature. (If a parameter appears in both, Binance uses the query
-string one.)
+### When this client is wrong
 
-`timestamp` is milliseconds. `recvWindow` defaults to 5000 ms and caps at
-60000; futures additionally rejects a timestamp more than 1000 ms ahead of
-server time.
+Check `~/.openclaw/workspace/tools/binance/errata-1.1.0.md` before your first
+call. An earlier chat writes it when this client turns out to be wrong against
+the live venue. The version in the name is this app's version, so a file naming
+any other version is stale: delete it and ignore what it said.
 
-### Worked example
+When the client is wrong and no errata covers it, fix your own call, get the
+user their answer, then write that file yourself. Say what failed, how you knew,
+and what you changed. Tell the user in one line that you did.
 
-Read your USD-M futures balance.
+Never edit `scripts/binance.mjs`. A publish replaces it, so an edit there is
+lost and the next chat repeats your work.
 
-```
-ts=1790000000000
-QS="timestamp=${ts}&recvWindow=5000"
-X-Dime-Sign-<label>: base64(QS)
-GET https://fapi.binance.com/fapi/v3/balance?${QS}&signature=<placeholder>
-```
 
 ## Which calls need signing
 
@@ -207,6 +199,12 @@ Tell the layers apart by the shape of the response, not by guessing.
   placeholder and lists exactly where it looked. The request never reached
   Binance. Read it and retry.
 - **A JSON body with a negative `code`** is Binance.
+- **A key or signature error from Binance can mean the proxy substituted
+  nothing.** When the host or path is outside what your credential covers, the
+  proxy forwards the request untouched and your placeholder arrives at Binance
+  as a literal string. Binance then complains about the key or the signature,
+  and names neither the host nor the credential. Check those before you touch
+  the request.
 - **HTTP 429 / 418** are rate limits: 429 is a violation, 418 is an IP ban for
   continuing after 429s. Bans scale from 2 minutes to 3 days and carry
   `Retry-After`. Back off; do not retry in a loop.
@@ -221,7 +219,7 @@ Tell the layers apart by the shape of the response, not by guessing.
 | `-2010` | order rejected (balance, or a filter such as tick size / step size / notional) |
 | `-2011` | cancel rejected, usually an order that is not on the book |
 | `-2013` | order does not exist |
-| `-2014` | API-key format invalid — the proxy did not attach the key, so check the path is one it covers |
+| `-2014` | no usable `X-MBX-APIKEY` arrived. Three causes, cheapest first: the host is not the one your credential is scoped to, so the proxy passed the request through untouched; the path is outside the credential's routes; or this account enrolled the signing secret and never enrolled the api-key credential, which Binance needs on every signed call |
 | `-2015` | invalid key, IP or permissions — the key lacks the permission, or Binance has an IP allowlist on it |
 
 ## What the key is allowed to do

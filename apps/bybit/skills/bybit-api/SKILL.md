@@ -122,7 +122,7 @@ Read it when a call fails, not before.
 
 ### When this client is wrong
 
-Check `~/.openclaw/workspace/tools/bybit/errata-1.1.0.md` before your first
+Check `~/.openclaw/workspace/tools/bybit/errata-1.1.1.md` before your first
 call. An earlier chat writes it when this client turns out to be wrong against
 the live venue, and it says what to change. The version in the name is this
 app's version, so a file naming any other version is stale: delete it and

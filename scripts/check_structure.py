@@ -547,6 +547,57 @@ def frontmatter(md: str) -> dict[str, str]:
     return got if isinstance(got, dict) else {}
 
 
+# The lines every shipped client repeats. They are the proxy's protocol, not the
+# venue's, so a copy that drifts is a bug we get to find once per app.
+CLIENT_PREAMBLE = """const all = Object.keys(process.env).filter(k => (process.env[k] || '').startsWith('sign-{venue}'));
+const V = process.env.{VENUE}_CRED || all[0];
+if (!V) {{ console.error('no {Venue} sign- credential in the environment'); process.exit(2); }}
+if (all.length > 1 && !process.env.{VENUE}_CRED) {{
+  console.error('several {Venue} credentials: ' + all.join(', ') + ' \u2014 re-run with {VENUE}_CRED=<the one you want>');
+  process.exit(2);
+}}
+const HDR = 'X-Dime-Sign-' + V.replace(/^CRED_/, '').toLowerCase().replaceAll('_', '-');"""
+
+
+def check_client_preamble(app: str, files: list, failures: list[str]) -> None:
+    """A shipped client opens with the proxy protocol, spelled one way."""
+    for f in files:
+        if f.suffix != ".mjs" or f.parent.name != "scripts":
+            continue
+        want = CLIENT_PREAMBLE.format(
+            venue=app, VENUE=app.upper(), Venue=app.capitalize()
+        ).split("\n")
+        got = f.read_text().split("\n")
+        if not any(l.startswith("const all = Object.keys") for l in got):
+            failures.append(f"{f}: no credential preamble; a shipped client starts with one")
+            continue
+        at = next(i for i, l in enumerate(got) if l.startswith("const all = Object.keys"))
+        block = got[at:at + len(want)]
+        if block != want:
+            for i, (a, b) in enumerate(zip(block, want)):
+                if a != b:
+                    failures.append(
+                        f"{f}:{at + i + 1}: this line is the proxy protocol and every "
+                        f"client spells it the same way.\n     got:  {a}\n     want: {b}"
+                    )
+                    break
+
+
+ERRATA_RE = re.compile(r"errata-(?P<version>[0-9]+\.[0-9]+\.[0-9]+)\.md")
+
+
+def check_errata_version(app: str, version: str, files: list, failures: list[str]) -> None:
+    """An errata filename names the version that ships it, or it never expires."""
+    for f in files:
+        if f.suffix != ".md":
+            continue
+        for m in ERRATA_RE.finditer(f.read_text()):
+            if m.group("version") != version:
+                failures.append(
+                    f"{f}: names {m.group(0)} while {app} is {version}. The version in "
+                    "that name is the whole expiry, so a mismatch means an agent reads "
+                    "a note about a bug you have already fixed."
+                )
 def check_helper_versions(
     app: str, version: str, skill: str, files: list[Path], failures: list[str]
 ) -> None:
@@ -636,7 +687,9 @@ def main() -> int:
                 failures.append(f"{entry}: frontmatter has no description")
 
             files = [p for p in d.rglob("*") if p.is_file()]
+            check_client_preamble(app.name, files, failures)
             if version:
+                check_errata_version(app.name, version, files, failures)
                 check_helper_versions(app.name, version, name, files, failures)
             if len(files) > MAX_FILES:
                 failures.append(f"{d}: {len(files)} files, limit {MAX_FILES}")

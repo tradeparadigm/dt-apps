@@ -262,6 +262,12 @@ something to work around by asking for the secret.
 - **403 from the credential proxy**, body naming `placeholder_absent` — you
   called a signed path without putting the placeholder in `OK-ACCESS-SIGN`. The
   body lists where it looked.
+- **A key, passphrase or signature error can mean the proxy substituted
+  nothing.** When the host or path is outside what your credentials cover, the
+  proxy forwards the request untouched, your placeholder arrives at OKX as a
+  literal string, and the two injected headers never arrive at all. OKX then
+  complains about whichever it checks first. Check the host and the path before
+  you touch the request.
 - **`50113 Invalid Sign`** — the string you signed is not what OKX
   reconstructed. In order of likelihood: the query string was left off
   `requestPath`; the timestamp in the header differs from the one you signed;
