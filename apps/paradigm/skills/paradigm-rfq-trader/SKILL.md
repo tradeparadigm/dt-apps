@@ -41,7 +41,7 @@ everything that varies between settlement venues.
 
 | Venue | Status |
 |---|---|
-| `PRDX` (Paradex) | **Primary focus.** Perp, dated future, option |
+| `PRDX` (Paradex) | **Primary focus.** Perp and option. The venue lists no dated futures |
 | `DBT` (Deribit) | Supported. Option is the dominant product; perp/future also supported |
 | `BYB` (Bybit), `BIT` (Bit.com) | Out of scope at this version. Add by appending to `references/venues.md` |
 

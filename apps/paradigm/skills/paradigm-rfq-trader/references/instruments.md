@@ -43,9 +43,9 @@ a fill. Quote any `error` / `reason` / `message` / `code` fields the
 tool payload carries verbatim; the enums above are coarse, so the raw
 payload is where the actionable detail lives.
 
-The same strike can exist as both `INVERSE` and `LINEAR` on the
-same venue — filter on `margin_kind` when resolving by name to
-disambiguate.
+On Deribit the same strike can exist as both `INVERSE` and `LINEAR`, so
+filter on `margin_kind` when resolving by name. Paradex lists no INVERSE
+market, so nothing there needs disambiguating.
 
 ## Strategy codes (`StrategyCodeEnum`)
 

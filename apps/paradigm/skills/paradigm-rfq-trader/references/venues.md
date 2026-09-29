@@ -66,7 +66,7 @@ Paradex exposes a public REST API, so this needs no credential.
 Base: `https://api.prod.paradex.trade/v1`. Pull fair value with
 `web_fetch`:
 
-**`kind = FUTURE` (perp / dated future):**
+**`kind = FUTURE` (a perpetual, since Paradex lists no dated futures):**
 
 - `web_fetch .../bbo/<market>` → best bid/ask.
 - `web_fetch .../markets/summary?market=<market>` → mark + funding +
