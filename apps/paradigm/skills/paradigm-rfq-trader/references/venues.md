@@ -152,11 +152,12 @@ it, and treat an empty ticker as a wrong name before treating it as no data.
   `bid`, `ask` or `delta`. Public, so it needs no credential.
 - A `deribit__get_ticker` tool returns the same payload. Use it when the host
   has one.
-- The same payload carries `index_price` and `underlying_price` for the
-  option's own base, so take spot from there rather than fetching a second
-  instrument. A SOL option returns 119.26 where a BTC one returns 83952.5,
-  and a BTC mark under a SOL option puts the dollar notional out by orders of
-  magnitude.
+- Spot for the option's own base is `index_price` in the same payload, so
+  there is no second instrument to fetch. `underlying_price` beside it is the
+  forward to that expiry, 5% above the index on a long-dated BTC put, so it is
+  the wrong number for a dollar notional.
+- A SOL option returns 119.26 where a BTC one returns 83952.5, and a BTC index
+  under a SOL option puts the notional out by orders of magnitude.
 - When you do want the perpetual itself, it is `BTC-PERPETUAL` or
   `ETH-PERPETUAL` for those two and `<BASE>_USDC-PERPETUAL` for the rest.
   Five of the seven bases with open options are in that second group.
@@ -190,8 +191,8 @@ This skill reads no Deribit account. After the cross:
 ### Quirks
 
 - A coin-margined Deribit option is priced in **BTC or ETH terms**, not USD.
-  When surfacing dollar notional, multiply by that base's own mark. A
-  USDC-margined one is already in USD.
+  When surfacing dollar notional, multiply by `index_price` from the leg's own
+  ticker. A USDC-margined one is already in USD.
 - `mark_iv` is in **percentage** form here (`47.74` = 47.74%). Paradex returns
   the same quantity as a decimal (`0.4774`), so a vol bump is a straight
   addition on Deribit and a division by 100 first on Paradex.
