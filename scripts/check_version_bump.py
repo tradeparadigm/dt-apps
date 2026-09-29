@@ -55,11 +55,14 @@ def main() -> int:
     failures = []
     for app, files in sorted(touched.items()):
         manifest = f"apps/{app}/app.yaml"
-        # Only the manifest changed, or the app is new: nothing to enforce.
-        if files == [manifest] or version_at(merge_base, manifest) is None:
+        # Only the manifest changed: there is no skill edit to strand.
+        if files == [manifest]:
             continue
         before = version_at(merge_base, manifest)
         after = version_at(head, manifest)
+        # A new app has no earlier version, so before and after differ and
+        # nothing is enforced. Both missing means the manifest carries no
+        # version at all, which is a refusal.
         if before == after:
             edited = ", ".join(sorted(f for f in files if f != manifest)[:4])
             failures.append(

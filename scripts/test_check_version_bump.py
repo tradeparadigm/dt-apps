@@ -89,6 +89,16 @@ d = repo()
 commit(d)
 ok(run(d).returncode == 0, "a manifest-only edit passes with the version untouched")
 
+# A new app whose manifest carries no version at all. Nothing to bump, and
+# nothing anyone installs it at.
+d = repo()
+nover = d / "apps" / "nover" / "skills" / "nover-api"
+nover.mkdir(parents=True)
+(d / "apps" / "nover" / "app.yaml").write_text("id: nover\n")
+(nover / "SKILL.md").write_text("---\nname: nover-api\n---\nx\n")
+commit(d)
+ok(run(d).returncode == 1, "a new app with no version is refused")
+
 # A brand new app has no earlier version to compare against.
 d = repo()
 fresh = d / "apps" / "fresh" / "skills" / "fresh-api"

@@ -288,3 +288,22 @@ def test_unusable_trade_ids_are_refused(stub):
     with pytest.raises(RuntimeError, match="duplicate/null trade IDs"):
         reader.read_executions(NOW - timedelta(hours=2), NOW, rfq_id="r_test",
                                s3=stub, now=NOW)
+
+
+def test_the_fill_and_the_mark_do_not_change_places():
+    """paradigm-block-analyst reads PRICE against REF_PRICE to say how far off
+    mark a block traded, so swapping them inverts every offset it publishes."""
+    row = {
+        "rfq_id": "r_1", "block_trade_id": "b_1", "trade_id": "t_1",
+        "venue_block_trade_id": "v_1", "product": "BTC OPTION - DBT",
+        "description": "Call 7 May 26 84000", "asset": "BTC", "quantity": 7,
+        "trade_price": 0.02, "mark_price": 0.011, "taker_side": "SELL",
+        "notional_volume_usd": 58800, "traded_at": 1778329325000,
+        "instrument_kind": "OPTION", "expiry_date": "2026-05-07",
+        "option_kind": "call", "strike_price": 84000,
+    }
+    mapped = reader.calculation_rows([row])[0]
+    assert mapped["PRICE"] == 0.02
+    assert mapped["REF_PRICE"] == 0.011
+    assert mapped["QTY"] == 7
+    assert mapped["SIDE"] == "SELL"

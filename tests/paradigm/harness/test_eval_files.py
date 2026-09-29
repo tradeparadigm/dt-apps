@@ -95,18 +95,20 @@ INTENTIONAL = (
     "environment variables"
 )
 
+_cut = 0
 for f in EVALS:
     body = f.read_text()
     scanned = body.replace(INTENTIONAL, "")
-    # The allowance is only safe while that exact string is still what the
-    # eval file carries. If someone rewords the assertion, the cut stops
-    # matching and every MCP mention in the file would fail instead of the
-    # intended one passing, so say which file relies on it.
     if INTENTIONAL in body:
-        ok(True, f"{f.parent.parent.name}: the intentional MCP assertion is cut before scanning")
+        _cut += 1
     for pat, what in STALE:
         hits = re.findall(pat, scanned, re.I)
         ok(not hits, f"{f.parent.parent.name}: no {what} {sorted(set(hits))[:3] if hits else ''}")
+
+# The cut above is only safe while that exact string is still what an eval
+# file carries. Reword the assertion and the cut stops matching, so every MCP
+# mention fails instead of the intended one passing.
+ok(_cut > 0, f"the intentional MCP assertion still matches an eval file ({_cut})")
 
 print(f"\n{_p} passed, {_f} failed")
 sys.exit(1 if _f else 0)

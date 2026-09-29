@@ -109,8 +109,8 @@ No Paradex account integration at this skill version. After the cross:
 
 ### Quirks
 
-- Same strike can exist as INVERSE *and* LINEAR margin variants —
-  filter on `margin_kind` when resolving by name to disambiguate.
+- Every market is LINEAR. `margin_kind` never disambiguates two markets on
+  one strike here, because there is no INVERSE variant to tell apart.
 
 ---
 

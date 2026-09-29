@@ -101,11 +101,11 @@
     {
       "id": 9,
       "prompt": "create an RFQ to buy a Deribit BTC 8MAY26 straddle for 100 contracts, LP3 and LP4",
-      "expected_output": "A taker option RFQ flow on Deribit (venue=DBT) that: (1) resolves both option ids via GET /v2/drfq/instruments/(venue=\"DBT\", venue_instrument_name=\"BTC-8MAY26-<ATM>-C\") and the matching put \u2014 note Deribit format has no -USD- infix; (2) pulls deribit__get_ticker per leg for mark, mark_iv, delta, vega; (3) pulls BTC-PERPETUAL mark for underlying spot; (4) aggregates net structure mark + net delta + net vega; (5) presents a multi-leg confirmation block showing per-leg references in BTC terms (Deribit's inverse-option convention) plus the underlying spot; (6) waits for explicit yes before invoking POST /v2/drfq/rfqs/ with venue=DBT.",
+      "expected_output": "A taker option RFQ flow on Deribit (venue=DBT) that: (1) resolves both option ids via GET /v2/drfq/instruments/(venue=\"DBT\", venue_instrument_name=\"BTC-8MAY26-<ATM>-C\") and the matching put \u2014 note Deribit format has no -USD- infix; (2) pulls deribit__get_ticker per leg for mark_price, mark_iv and greeks (delta, vega); (3) pulls BTC-PERPETUAL mark for underlying spot; (4) aggregates net structure mark + net delta + net vega; (5) presents a multi-leg confirmation block showing per-leg references in BTC terms (Deribit's inverse-option convention) plus the underlying spot; (6) waits for explicit yes before invoking POST /v2/drfq/rfqs/ with venue=DBT.",
       "assertions": [
         "Response resolves BOTH option instrument_ids via GET /v2/drfq/instruments/ with venue=DBT",
         "Response uses Deribit option naming WITHOUT the -USD- infix (e.g. BTC-8MAY26-STRIKE-C, NOT BTC-USD-8MAY26-...)",
-        "Response calls deribit__get_ticker (or web_fetch to deribit.com public ticker) for per-leg mark/IV/delta/vega \u2014 NOT a Paradex source",
+        "Response calls deribit__get_ticker (or web_fetch to deribit.com public ticker) for per-leg mark_price, mark_iv and greeks \u2014 NOT a Paradex source",
         "Response also pulls BTC-PERPETUAL mark for underlying spot reference",
         "Confirmation block shows per-leg prices in BTC terms (Deribit inverse-option convention), not USD",
         "Final POST /v2/drfq/rfqs/ call uses venue=DBT and two legs (call + put at same strike for a straddle)",
