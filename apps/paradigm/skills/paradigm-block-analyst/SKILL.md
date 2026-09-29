@@ -459,9 +459,9 @@ Spot 62,728 · 60k −4.3% OTM · long near-Γ / short far-vega · max loss at 6
 |  | Detail |
 | --- | --- |
 | Greeks | Δ +0.70 BTC (+5.6%) · Vega −$985/v · Γ long (near) · Θ −$423/d |
-| Fair | −22 bps below mark · Jun60P 46.9v / Sep60P 43.8v · near-far spread 3.0v |
+| Fair | −22 bps below mark · Jun60P 46.9v / Sep60P 43.8v · near-far spread 3.1v |
 | History | 6× 60k PCal today — 2×25 BUY → 4×12.5 SELL, two-way @ ~0.0450 · Jun IV 47.3→46.9v, absorbed · OI Jun 5,225 / Sep 3,644 |
-| Live | Jun60P 0.0220/0.0230 · Sep60P 0.0660/0.0675 · cal screen ~0.0443 mid · fill +7 bps above |
+| Live | Jun60P 0.0220/0.0230 · Sep60P 0.0660/0.0675 · cal screen ~0.0443 mid · fill +8.5 bps above |
 
 **Line 1 — Header, pipe-delimited:**
 `<COIN> <EXPIRY DDMMMYY> <strikes k/k> <ratio a×b> <Structure> | <Buyer|Seller> | <size/leg> BTC | <Paid|Recd> <price> <±N bps> <above|below> mark`

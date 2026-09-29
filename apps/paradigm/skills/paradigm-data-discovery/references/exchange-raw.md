@@ -56,10 +56,12 @@ For historical conversion, require metadata applicable at the event time:
 use an at-or-before snapshot and check intervening changes, or establish that
 the instrument's relevant attributes were unchanged. Do not apply today's
 contract size or units to older events merely because it is the latest row.
-Metadata snapshots have 30-day current-object retention while raw history can
-extend further. The default skill does not support harmonized historical
-analysis beyond 30 days; report older results in native units by venue unless
-an independently verified historical metadata source establishes the conversion.
+Nothing expires `meta/instruments/`, so old snapshots are there to read, but
+the skill still declines a harmonized conversion beyond 30 days: an old
+snapshot says what the instrument looked like when it was written, not that
+nothing changed between then and the event. Report older results in native
+units by venue unless a verified historical metadata source establishes the
+conversion.
 Even inside 30 days, retention is not a coverage guarantee: absent or ambiguous
 applicable metadata means an explicit conversion gap, never a multiplier of 1.
 
@@ -136,7 +138,7 @@ snapshots.
 - OKX: `markVol`, `bidVol`, `askVol`, `markPx`, bid/ask, cash greeks and
   Black-Scholes `deltaBS`/`gammaBS`/`thetaBS`/`vegaBS`, contract/coin/USD OI,
   `idxPx`, `fwdPx`, and `volLv`.
-- Bybit: `markIv`, `bid1Iv`, `ask1Iv`, `markPrice`, bid/ask, greeks,
+- Bybit: `markPriceIv`, `bidIv`, `askIv`, `markPrice`, bid/ask, greeks,
   `openInterest`, `underlyingPrice`, and 24-hour volume/turnover fields.
 - Bullish: `impliedVolatility`, `markPrice`, `bestBid`, `bestAsk`, greeks,
   coin/USD OI, `underlyingPrice`, and screen/OTC volume fields.

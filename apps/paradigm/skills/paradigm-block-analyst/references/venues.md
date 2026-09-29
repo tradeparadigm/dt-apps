@@ -123,7 +123,8 @@ Before calling Bybit options endpoints, follow the Bybit skill Module Router:
   `-USD-` infix is required; without it the venue answers
   `INVALID_REQUEST_PARAMETER`.
 
-**Returns:** timestamp, price, size, side
+**Returns:** `created_at` (milliseconds, not `timestamp`), `price`, `size`,
+`side`, `id`, `market`, `trade_type`
 
 **Known limitations:**
 - Paradex is primarily a perps/options DEX — not all Deribit strikes are listed
@@ -141,7 +142,10 @@ Before calling Bybit options endpoints, follow the Bybit skill Module Router:
 **Base URL:** `https://api.exchange.bullish.com`
 
 **Endpoint for recent trades:**
-`GET /trading-api/v1/trades?symbol=<symbol>&limit=100`
+`GET /trading-api/v1/markets/<symbol>/trades` — 100 rows, keyed
+`tradeId`, `price`, `quantity`, `side`, `createdAtTimestamp`. The flat
+`/trading-api/v1/trades?symbol=` form 404s, which is not the venue saying the
+instrument is unlisted.
 
 **Symbol format:** `BTCUSDC` (no separator); options format: check listing first via
 `GET /trading-api/v1/markets` and match by underlying and expiry.
