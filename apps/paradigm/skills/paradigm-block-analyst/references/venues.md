@@ -79,8 +79,10 @@ Useful windowing params: `start_timestamp` / `end_timestamp` (epoch ms), `count`
 ## Bybit
 
 **Instrument naming:**
-- Options: `BTC-DDMMMYY-STRIKE-C/P` → `BTC-07MAY26-81500-C`
-- Note: day is zero-padded (`07` not `7`)
+- Options: `BTC-DDMMMYY-STRIKE-C/P-USDT` → `BTC-27NOV26-82000-C-USDT`. The
+  `-USDT` suffix is part of every symbol and the day is not zero-padded
+  (`1OCT26`, `9OCT26`). Drop either and the ticker returns an empty list,
+  which reads as a strike Bybit does not list.
 
 **Endpoints (via Bybit skill market module):**
 
@@ -101,7 +103,6 @@ Before calling Bybit options endpoints, follow the Bybit skill Module Router:
 **Known limitations:**
 - Short-dated options (<3 DTE) frequently absent — empty `list` is normal
 - Strike grid is sparser than Deribit, especially for BTC
-- No IV field in ticker response — price only
 - Bybit options volume is significantly lower than Deribit/OKX; treat as reference only
 
 **When Bybit is useful:**
@@ -118,7 +119,9 @@ Before calling Bybit options endpoints, follow the Bybit skill Module Router:
 
 **Instrument naming:**
 - Perpetuals: `BTC-USD-PERP`, `ETH-USD-PERP`
-- Options (where listed): `BTC-DDMMMYY-STRIKE-C/P` — same format as Deribit
+- Options: `BTC-USD-DDMMMYY-STRIKE-C/P` → `BTC-USD-30OCT26-66000-C`. The
+  `-USD-` infix is required; without it the venue answers
+  `INVALID_REQUEST_PARAMETER`.
 
 **Returns:** timestamp, price, size, side
 
@@ -170,10 +173,10 @@ Before calling Bybit options endpoints, follow the Bybit skill Module Router:
 | Feature | Deribit | OKX | Bybit |
 |---|---|---|---|
 | Short-dated options | ✅ Best | ✅ Good | ❌ Often missing |
-| IV in response | ✅ Native | ✅ opt-summary | ❌ No |
-| Greeks in response | ✅ Native | ✅ opt-summary | ❌ No |
+| IV in response | ✅ Native | ✅ opt-summary | ✅ `markIv` |
+| Greeks in response | ✅ Native | ✅ opt-summary | ✅ `delta`, `gamma`, `vega`, `theta` |
 | Strike granularity | Fine | Medium | Sparse |
-| Coin-margined | ✅ Yes | ✅ Yes (the plain name; `_UM` settles USD) | ✅ Yes |
+| Coin-margined | ✅ Yes | ✅ Yes (the plain name; `_UM` settles USD) | ❌ Every option settles USDT |
 | Data source method | `deribit__get_ticker` | `web_fetch` | `web_fetch` (+ skill module) |
 | Paradigm venue code | `DBT` | `OKX` | — |
 

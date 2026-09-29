@@ -129,9 +129,10 @@ do not present exchange-only block flow as complete Paradigm execution coverage.
 
 - Select ticker snapshots at the required time; do not sum repeated
   `option_summary` observations.
-- Group blocks only by real venue identifiers: Deribit/OKX
-  `block_trade_id`, Bullish OTC ids, or a published Bybit block flag without
-  inventing a group id.
+- Group blocks only by real venue identifiers. Normalized rows carry
+  `block_id`, which the raw Deribit and OKX files call `block_trade_id`;
+  Bullish has its OTC ids, and Bybit has a block flag and no group id. Never
+  invent one.
 - Cross-venue coin volume requires venue metadata. Option premium turnover is
   `amount_coin * price * index_price` for coin-quoted venues and
   `amount_coin * price` for USD-quoted venues.
