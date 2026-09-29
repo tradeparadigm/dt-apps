@@ -152,7 +152,11 @@ it, and treat an empty ticker as a wrong name before treating it as no data.
   `bid`, `ask` or `delta`. Public, so it needs no credential.
 - A `deribit__get_ticker` tool returns the same payload. Use it when the host
   has one.
-- Pull `BTC-PERPETUAL` / `ETH-PERPETUAL` mark for underlying spot.
+- Pull the perpetual on the option's own base for underlying spot:
+  `BTC-PERPETUAL` and `ETH-PERPETUAL` for those two, `<BASE>_USDC-PERPETUAL`
+  for everything else. Most open Deribit options are on another base, and
+  a BTC mark under a SOL option gives a dollar notional out by orders of
+  magnitude.
 - Aggregate exactly like the PRDX option case.
 
 **`kind = FUTURE` (perp / dated future):**
@@ -181,9 +185,9 @@ This skill reads no Deribit account. After the cross:
 
 ### Quirks
 
-- Deribit option prices are in **BTC/ETH terms** for inverse
-  options (the common case), not USD. When surfacing dollar
-  notional, multiply by the underlying mark.
+- A coin-margined Deribit option is priced in **BTC or ETH terms**, not USD.
+  When surfacing dollar notional, multiply by that base's own mark. A
+  USDC-margined one is already in USD.
 - `mark_iv` is in **percentage** form here (`47.74` = 47.74%). Paradex returns
   the same quantity as a decimal (`0.4774`), so a vol bump is a straight
   addition on Deribit and a division by 100 first on Paradex.
