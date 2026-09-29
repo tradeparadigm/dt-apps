@@ -456,9 +456,9 @@ Will call on yes:
    "counterparties": ["LP1", "LP2"],
    "is_taker_anonymous": false,            # two LPs, under the 3 LP minimum
    "label": "..."}
-  90000-C  mark 0.021 · IV 58% · Δ +0.34 · vega 9.2
-  80000-P  mark 0.018 · IV 61% · Δ −0.22 · vega 8.1
-  Underlying BTC-USD-PERP mark $96,455 · net structure mark 0.003 · net Δ +0.12
+  90000-C  mark $651 · IV 58% · Δ +0.34 · vega 9.2
+  80000-P  mark $2,922 · IV 61% · Δ −0.22 · vega 8.1
+  Underlying BTC-USD-PERP mark $96,455 · net structure mark $2,271 debit · net Δ +0.12
 [yes / no / adjust]
 ```
 

@@ -25,7 +25,7 @@ The ones with non-obvious dot-notation or non-trivial values:
 | Enum | Values |
 |---|---|
 | `kind` | `OPTION`, `FUTURE` (incl. perp), `LOAN`, `SPOT` |
-| `margin_kind` | `INVERSE` (coin-margined, prices in base) / `LINEAR` (quote-margined) |
+| `margin_kind` | `INVERSE` (coin-margined) / `LINEAR` (quote-margined). It says what the position settles in, not what the price is quoted in: a Deribit inverse OPTION is quoted in the coin, while `BTC-PERPETUAL` is inverse and quoted in USD |
 | RFQ `state` | `OPEN`, `CLOSED`, `DRAFT`. A response may spell these `RFQState.OPEN`; send the bare word |
 | Order `state` | `OPEN`, `CLOSED`, `PENDING`. A response may spell these `OrderState.OPEN`; send the bare word |
 | Order `side` / `type` / `time_in_force` | `BUY`/`SELL`, `LIMIT`/`HIDDEN`, `FILL_OR_KILL`/`GOOD_TILL_CANCELED` |
