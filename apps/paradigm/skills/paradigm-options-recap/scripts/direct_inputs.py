@@ -534,13 +534,12 @@ def run(asset, window, start, end, now=None):
         for venue in list(meta):
             spec_for(venue)
         # metadata() takes one predecessor snapshot at or before the window
-        # start. The catalog keeps 30 days of it, so a long window can begin
-        # before any snapshot exists and every symbol not yet seen is unvaluable
-        # for the early hours — 695,415 unvalued trades in a real 30d run, with
-        # no gap of its own to explain them.
+        # start. A symbol first seen after the window opened has none, so it is
+        # unvaluable for the early hours. A real 30d run left 695,415 unvalued
+        # trades with no gap of its own to explain them.
         for venue, spec in specs.items():
             first = spec["captured_at"].min() if spec.height else None
-            if first is not None and first > start:
+            if first is not None and first < start:
                 meta_gaps.append(
                     f"{recap.venue_name(venue)}: instrument metadata starts {first:%Y-%m-%d %H:%M}Z, after the "
                     f"window opened — trades before that cannot be valued or unit-converted")
