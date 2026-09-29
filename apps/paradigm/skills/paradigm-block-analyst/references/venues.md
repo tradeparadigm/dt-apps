@@ -41,7 +41,8 @@ Useful windowing params: `start_timestamp` / `end_timestamp` (epoch ms), `count`
 
 **Instrument naming:**
 - Options: `BTC-USD-YYMMDD-STRIKE-C/P` → `BTC-USD-260507-81500-C`
-- USDC-margined options: `BTC-USD_UM-DDMMMYY-STRIKE-C/P` (format varies by endpoint)
+- USD-settled twin: `BTC-USD_UM-YYMMDD-STRIKE-C/P`, the same strike quoted in
+  USD rather than in BTC (format varies by endpoint)
 - Spot ticker: `BTC-USDT`
 
 **Endpoints:**
@@ -50,7 +51,7 @@ Useful windowing params: `start_timestamp` / `end_timestamp` (epoch ms), `count`
 |---|---|
 | Single instrument ticker | `GET /api/v5/market/ticker?instId=BTC-USD-260507-81500-C` |
 | Full expiry vol surface (mark IV + greeks for all strikes) | `GET /api/v5/public/opt-summary?uly=BTC-USD&expTime=YYMMDD` |
-| Mark IV + greeks for USDC-margined | `GET /api/v5/public/opt-summary?uly=BTC-USD&expTime=YYMMDD` (returns `_UM` instIds) |
+| Mark IV + greeks for the USD-settled twin | `GET /api/v5/public/opt-summary?uly=BTC-USD&expTime=YYMMDD` (returns `_UM` instIds) |
 
 **Base URL:** `https://www.okx.com`
 
@@ -172,7 +173,7 @@ Before calling Bybit options endpoints, follow the Bybit skill Module Router:
 | IV in response | ✅ Native | ✅ opt-summary | ❌ No |
 | Greeks in response | ✅ Native | ✅ opt-summary | ❌ No |
 | Strike granularity | Fine | Medium | Sparse |
-| Coin-margined | ✅ Yes | ✅ Yes (_UM) | ✅ Yes |
+| Coin-margined | ✅ Yes | ✅ Yes (the plain name; `_UM` settles USD) | ✅ Yes |
 | Data source method | `deribit__get_ticker` | `web_fetch` | `web_fetch` (+ skill module) |
 | Paradigm venue code | `DBT` | `OKX` | — |
 

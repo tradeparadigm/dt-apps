@@ -421,7 +421,7 @@ Will call on yes:
    "is_taker_anonymous": true,             # 14 LPs, so the 3 LP minimum holds
    "label": "..."}
 BUY 500 BTC → all 14 PRDX LPs                 ~$48.23M
-Fair: mid $96,455 · BBO 96,450/96,460 (10 bps) · walk 500 ~$96,612 (+16 bps)
+Fair: mid $96,455 · BBO 96,450/96,460 (1.0 bps) · walk 500 ~$96,612 (+16 bps)
 [yes / no / adjust]
 ```
 
@@ -456,9 +456,9 @@ Will call on yes:
    "counterparties": ["LP1", "LP2"],
    "is_taker_anonymous": false,            # two LPs, under the 3 LP minimum
    "label": "..."}
-  90000-C  mark $651 · IV 58% · Δ +0.34 · vega 9.2
-  80000-P  mark $2,922 · IV 61% · Δ −0.22 · vega 8.1
-  Underlying BTC-USD-PERP mark $96,455 · net structure mark $2,271 debit · net Δ +0.12
+  90000-C  mark $617 · IV 58% · Δ +0.34 · vega 9.2
+  80000-P  mark $2,979 · IV 61% · Δ −0.22 · vega 8.1
+  Underlying BTC-USD-PERP mark $83,923 · net structure mark $2,362 debit · net Δ −0.56
 [yes / no / adjust]
 ```
 

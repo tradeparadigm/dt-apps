@@ -519,8 +519,10 @@ both *against* the taker: token stays neutral, but never render an against-the-t
   fetch `BTC-PERPETUAL` / `ETH-PERPETUAL` mark price from available source;
   delta = ±1.0 per contract.
 - For combo trades (option + perp), compute combined delta including perp leg.
-- OKX uses USDC-margined options (`BTC-USD_UM`); prices are in BTC terms but
-  Greeks may differ slightly from coin-margined Deribit options. Flag when relevant.
+- OKX lists the same strike twice: `BTC-USD-<date>-<strike>-C` settles BTC and
+  quotes in BTC, and the `_UM` name beside it settles USD and quotes in USD.
+  One is the other times spot, so read the suffix before comparing a price to
+  Deribit's.
 - If a venue returns no data, note it in the trace and proceed with available sources.
 - See `references/venues.md` for instrument naming, endpoint quirks, and known gaps.
 - See `references/rfq-lookup.md` for resolving the `rfq_id` by searching the
