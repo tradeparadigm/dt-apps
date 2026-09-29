@@ -128,12 +128,17 @@ No Paradex account integration at this skill version. After the cross:
 Day **not** zero-padded (same convention as Paradex). No `-USD-`
 infix.
 
-BTC and ETH settle in the coin and take the plain name. Everything else
-settles in USDC and takes `_USDC`, so `SOL-26JUN26-200-C` answers
-`instrument not found` and `SOL-PERPETUAL` resolves to an archived market
-while the open one is `SOL_USDC-PERPETUAL`. Resolve the name through
-`GET /v2/drfq/instruments/` rather than assembling it, and treat an empty
-ticker as a wrong name before treating it as no data.
+The prefix decides the settlement currency. `_USDC` settles in USDC, the
+plain name settles in the coin, and BTC and ETH list both: `BTC-29SEP26-74000-C`
+and `BTC_USDC-29SEP26-74000-C` are two live markets on one strike. Every other
+asset lists only the `_USDC` form, so `SOL-26JUN26-200-C` answers `instrument
+not found` and `SOL-PERPETUAL` resolves to an archived market while the open
+one is `SOL_USDC-PERPETUAL`.
+
+So a wrong prefix on SOL fails at the lookup, and a wrong prefix on BTC
+resolves and settles the block in a currency the user did not ask for.
+Resolve the name through `GET /v2/drfq/instruments/` rather than assembling
+it, and treat an empty ticker as a wrong name before treating it as no data.
 
 ### Fair value
 
