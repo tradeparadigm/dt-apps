@@ -43,9 +43,10 @@ a fill. Quote any `error` / `reason` / `message` / `code` fields the
 tool payload carries verbatim; the enums above are coarse, so the raw
 payload is where the actionable detail lives.
 
-On Deribit the same strike can exist as both `INVERSE` and `LINEAR`, so
-filter on `margin_kind` when resolving by name. Paradex lists no INVERSE
-market, so nothing there needs disambiguating.
+A Deribit name already picks the margin kind, so there is nothing to filter
+after a name lookup. What to get right is the prefix: `BTC-29SEP26-74000-C`
+settles in BTC and `BTC_USDC-29SEP26-74000-C` settles in USDC. Paradex lists
+no INVERSE market at all.
 
 ## Strategy codes (`StrategyCodeEnum`)
 
