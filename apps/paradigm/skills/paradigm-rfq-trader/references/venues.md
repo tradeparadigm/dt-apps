@@ -152,11 +152,14 @@ it, and treat an empty ticker as a wrong name before treating it as no data.
   `bid`, `ask` or `delta`. Public, so it needs no credential.
 - A `deribit__get_ticker` tool returns the same payload. Use it when the host
   has one.
-- Pull the perpetual on the option's own base for underlying spot:
-  `BTC-PERPETUAL` and `ETH-PERPETUAL` for those two, `<BASE>_USDC-PERPETUAL`
-  for everything else. Most open Deribit options are on another base, and
-  a BTC mark under a SOL option gives a dollar notional out by orders of
+- The same payload carries `index_price` and `underlying_price` for the
+  option's own base, so take spot from there rather than fetching a second
+  instrument. A SOL option returns 119.26 where a BTC one returns 83952.5,
+  and a BTC mark under a SOL option puts the dollar notional out by orders of
   magnitude.
+- When you do want the perpetual itself, it is `BTC-PERPETUAL` or
+  `ETH-PERPETUAL` for those two and `<BASE>_USDC-PERPETUAL` for the rest.
+  Five of the seven bases with open options are in that second group.
 - Aggregate exactly like the PRDX option case.
 
 **`kind = FUTURE` (perp / dated future):**
@@ -169,7 +172,8 @@ it, and treat an empty ticker as a wrong name before treating it as no data.
 ### Edge syntax
 
 - "Y bps over mark" → `price = mark × (1 ± Y/10000)`. "Mark" here
-  is the ticker's `mark_price` (in BTC for inverse options).
+  is the ticker's `mark_price`, in the option's own coin when it is
+  coin-margined and in USD when it is USDC-margined.
 - "X vol over mark IV" → bump per-leg IV by X, added straight to Deribit's
   percentage `mark_iv` (e.g. `47.74`), reprice via BS,
   re-aggregate.
