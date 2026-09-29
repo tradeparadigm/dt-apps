@@ -136,7 +136,7 @@ snapshots.
 - OKX: `markVol`, `bidVol`, `askVol`, `markPx`, bid/ask, cash greeks and
   Black-Scholes `deltaBS`/`gammaBS`/`thetaBS`/`vegaBS`, contract/coin/USD OI,
   `idxPx`, `fwdPx`, and `volLv`.
-- Bybit: `markPriceIv`, `bidIv`, `askIv`, `markPrice`, bid/ask, greeks,
+- Bybit: `markIv`, `bid1Iv`, `ask1Iv`, `markPrice`, bid/ask, greeks,
   `openInterest`, `underlyingPrice`, and 24-hour volume/turnover fields.
 - Bullish: `impliedVolatility`, `markPrice`, `bestBid`, `bestAsk`, greeks,
   coin/USD OI, `underlyingPrice`, and screen/OTC volume fields.
