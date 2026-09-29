@@ -123,9 +123,17 @@ No Paradex account integration at this skill version. After the cross:
 | Option | `<BASE>-<DDMMMYY>-<STRIKE>-<C\|P>` | `BTC-8MAY26-90000-C`, `ETH-10MAY26-2375-P` |
 | Future | `<BASE>-<DDMMMYY>` | `BTC-27JUN26` |
 | Perpetual | `<BASE>-PERPETUAL` | `BTC-PERPETUAL` |
+| USDC-margined | `<BASE>_USDC-…`, same tail | `SOL_USDC-31JUL26-88-C`, `SOL_USDC-PERPETUAL` |
 
 Day **not** zero-padded (same convention as Paradex). No `-USD-`
 infix.
+
+BTC and ETH settle in the coin and take the plain name. Everything else
+settles in USDC and takes `_USDC`, so `SOL-26JUN26-200-C` answers
+`instrument not found` and `SOL-PERPETUAL` resolves to an archived market
+while the open one is `SOL_USDC-PERPETUAL`. Resolve the name through
+`GET /v2/drfq/instruments/` rather than assembling it, and treat an empty
+ticker as a wrong name before treating it as no data.
 
 ### Fair value
 
