@@ -79,8 +79,9 @@ Exclude expired instruments at the comparison anchor and report observed time.
 5. Normalise IV, amount, premium turnover, and OI with event-time-applicable instrument
    metadata before combining venues. If a conversion cannot be proved, keep
    the result venue-local and label the native unit.
-   Follow the catalog's 30-day metadata-history limit; raw availability alone
-   does not establish that a historical conversion is supported.
+   Beyond 30 days the catalog declines the conversion: an old metadata
+   snapshot says what an instrument looked like when it was written, not that
+   nothing changed since. Raw availability alone does not establish one.
 6. A missing or unreadable source is not a quiet market. Name the missing
    section or field; do not estimate, simulate, or fill it from a stale object.
 7. When the prompt supplies fixture or injected evidence, treat those values as
