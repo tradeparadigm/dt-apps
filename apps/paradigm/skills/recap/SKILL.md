@@ -14,7 +14,7 @@ metadata:
 
 # Recap
 
-This skill picks the recap. It writes none of its own.
+Pick the recap skill here. Write no recap in this skill.
 
 ## Step 1 — read the session context
 
@@ -30,11 +30,11 @@ and any other token the user gave. Relay its output as the whole answer.
 
 ## When there is no `recap_skill`
 
-Say that the session does not name a recap skill, and ask which venue the
-user wants. Do not pick one.
+Say that the session names no recap skill, and ask which venue the user
+wants. Do not pick one.
 
-## What this skill never does
+## Never
 
-- Name a venue of its own accord. The host states it.
+- Name a venue yourself. The host states it.
 - Fall back to a venue when the key is missing.
 - Merge two venues into one recap. One session names one skill.

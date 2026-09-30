@@ -14,7 +14,7 @@ metadata:
 
 # Analyze
 
-This skill picks the analyst. It does no analysis of its own.
+Pick the analyst here. Do no analysis in this skill.
 
 ## Step 1 — read the session context
 
@@ -34,13 +34,13 @@ snapshot, belongs to that skill. Pass it on.
 
 ## When there is no `analyze_skill`
 
-Say that the session does not name an analyst, and ask which venue the trade
-is on. Do not pick one. A wrong venue produces numbers that look right and
-describe a different market, which is worse than asking.
+Say that the session names no analyst, and ask which venue the trade is on.
+Do not pick one. A wrong venue produces numbers that look right and describe
+a different market, and asking costs one turn.
 
-## What this skill never does
+## Never
 
-- Name a venue of its own accord. The host states it.
+- Name a venue yourself. The host states it.
 - Fall back to a venue when the key is missing.
 - Answer from the description in the command. That string is a label the user
-  saw, and the analyst resolves the real trade.
+  saw. The analyst resolves the real trade.
