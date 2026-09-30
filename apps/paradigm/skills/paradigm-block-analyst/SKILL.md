@@ -478,8 +478,9 @@ offset = `(|net_fill| − |net_mark|) × 10000` (bps coin / % USD): positive ⇒
 `below mark`, deterministically — identical fills print identical signs. When the two land on opposite
 sides of zero, a debit filled where the mark said credit, the magnitudes are not comparable: use
 `(net_fill − net_mark) × 10000`, which is what the taker gave up. `|net_mark|` still picks the unit,
-bps or percent, exactly as above. Debit above and credit below are
-both *against* the taker: token stays neutral, but never render an against-the-taker fill as edge.
+bps or percent, exactly as above. Where both are the same kind, a debit above mark and a credit below
+mark are both *against* the taker: token stays neutral, but never render an against-the-taker fill as
+edge. Across zero the sign already says it, positive against and negative for.
 **Single-leg is unchanged** — the precomputed `OFFSET_BPS`, verbatim. Example — RRPut 25 Sep 26
 55000/75000, Seller: Recd **0.0009** net credit vs mark **0.0015** → **−6 bps below mark**.
 
