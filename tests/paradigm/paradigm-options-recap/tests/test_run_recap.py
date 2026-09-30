@@ -119,7 +119,7 @@ def test_partition_plan_is_explicit_and_hot_free():
 
 def test_render_queries_keep_their_coverage_expectations():
     """The render path rebuilds each Query; dropping a field there silently
-    disabled hour-level coverage on the one path /paradigm-options-recap actually runs."""
+    disabled hour-level coverage on the one path /paradigm_options_recap actually runs."""
     start = dt.datetime(2026, 8, 30, 10, 0, tzinfo=dt.timezone.utc)
     end = dt.datetime(2026, 8, 30, 13, 0, tzinfo=dt.timezone.utc)
     plain = {q.name: q for q in collector.build_queries("BTC", start, end)}

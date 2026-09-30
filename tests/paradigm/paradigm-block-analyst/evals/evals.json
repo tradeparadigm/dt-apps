@@ -5,10 +5,10 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "/paradigm-block-analyst rfq_8f3a21 BTC 7MAY26 84000 Call\n\n(paradigm-data-discovery → paradigm_trade_tape_slim WHERE RFQ_ID='rfq_8f3a21' returned: {\"DATE\": \"2026-05-02\", \"TIME\": \"14:22:05\", \"AUCTION\": \"RFQ\", \"PRODUCT\": \"BTC OPTION - DBT\", \"DESCRIPTION\": \"Call 7 May 26 84000\", \"QTY\": 50, \"PRICE\": 0.0122, \"REF_PRICE\": 0.0118, \"SIDE\": \"BUY\", \"QUOTE_CURRENCY\": \"BTC\", \"NOTIONAL_VOLUME_USD\": 58800, \"RFQ_ID\": \"rfq_8f3a21\", \"TRADE_ID\": \"t_1\", \"BLOCK_TRADE_ID\": \"b_1\"})",
+      "prompt": "/paradigm_block_analyst rfq_8f3a21 BTC 7MAY26 84000 Call\n\n(paradigm-data-discovery → paradigm_trade_tape_slim WHERE RFQ_ID='rfq_8f3a21' returned: {\"DATE\": \"2026-05-02\", \"TIME\": \"14:22:05\", \"AUCTION\": \"RFQ\", \"PRODUCT\": \"BTC OPTION - DBT\", \"DESCRIPTION\": \"Call 7 May 26 84000\", \"QTY\": 50, \"PRICE\": 0.0122, \"REF_PRICE\": 0.0118, \"SIDE\": \"BUY\", \"QUOTE_CURRENCY\": \"BTC\", \"NOTIONAL_VOLUME_USD\": 58800, \"RFQ_ID\": \"rfq_8f3a21\", \"TRADE_ID\": \"t_1\", \"BLOCK_TRADE_ID\": \"b_1\"})",
       "expected_output": "A terse block trade analysis. Two plain-text lines (header + view), then a table with Greeks, Fair, History, Live rows. Header identifies the BTC outright call at 84000 for 7MAY26, taker Buyer, 50 contracts, fill 0.0122 above mark 0.0118. View line states spot and moneyness. Table rows: Greeks delta in BTC, theta in $/d; Fair bps vs mark and call IV; History recurrence data; Live bid/ask.",
       "assertions": [
-        "Response handles the /paradigm-block-analyst <rfq_id> command form — treats rfq_8f3a21 as the trade to analyse rather than asking what it is",
+        "Response handles the /paradigm_block_analyst <rfq_id> command form — treats rfq_8f3a21 as the trade to analyse rather than asking what it is",
         "Response identifies the instrument as a BTC call at the 84000 strike expiring 7 May 26",
         "Response reports the fill as 0.0122 BTC paid against a 0.0118 mark, an offset of +4 bps above mark",
         "Response gives the structure size as 50",
@@ -19,10 +19,10 @@
     },
     {
       "id": 2,
-      "prompt": "/paradigm-block-analyst rfq_77c10b risk reversal, long 90k call short 80k put, 7 May 26\n\n(paradigm-data-discovery → paradigm_trade_tape_slim WHERE RFQ_ID='rfq_77c10b' returned: {\"DATE\": \"2026-05-02\", \"TIME\": \"09:11:40\", \"AUCTION\": \"RFQ\", \"PRODUCT\": \"BTC OPTION - DBT\", \"DESCRIPTION\": \"RRCall 7 May 26 80000/90000\", \"QTY\": 100, \"PRICE\": 0.0045, \"REF_PRICE\": 0.0041, \"SIDE\": \"BUY\", \"QUOTE_CURRENCY\": \"BTC\", \"NOTIONAL_VOLUME_USD\": 379000, \"RFQ_ID\": \"rfq_77c10b\", \"TRADE_ID\": \"t_2\", \"BLOCK_TRADE_ID\": \"b_2\"})",
+      "prompt": "/paradigm_block_analyst rfq_77c10b risk reversal, long 90k call short 80k put, 7 May 26\n\n(paradigm-data-discovery → paradigm_trade_tape_slim WHERE RFQ_ID='rfq_77c10b' returned: {\"DATE\": \"2026-05-02\", \"TIME\": \"09:11:40\", \"AUCTION\": \"RFQ\", \"PRODUCT\": \"BTC OPTION - DBT\", \"DESCRIPTION\": \"RRCall 7 May 26 80000/90000\", \"QTY\": 100, \"PRICE\": 0.0045, \"REF_PRICE\": 0.0041, \"SIDE\": \"BUY\", \"QUOTE_CURRENCY\": \"BTC\", \"NOTIONAL_VOLUME_USD\": 379000, \"RFQ_ID\": \"rfq_77c10b\", \"TRADE_ID\": \"t_2\", \"BLOCK_TRADE_ID\": \"b_2\"})",
       "expected_output": "A terse block trade analysis. Two plain-text lines (header + view), then a table with Greeks, Fair, History, Live rows. Header identifies BTC Risk Reversal, taker long 90k-C / short 80k-P, fill 0.0045 above mark 0.0041. View line describes directional exposure. Table rows include Greeks with net delta, Fair with per-leg IVs, Live with leg bid/ask.",
       "assertions": [
-        "Response handles the /paradigm-block-analyst <rfq_id> command form — treats rfq_77c10b as the trade to analyse",
+        "Response handles the /paradigm_block_analyst <rfq_id> command form — treats rfq_77c10b as the trade to analyse",
         "Response correctly identifies the structure as a risk reversal on the 7 May 26 expiry, 80000 put against 90000 call",
         "Response reports the fill as 0.0045 BTC paid against a 0.0041 mark, an offset of +4 bps above mark",
         "Response gives the structure size as 100",
@@ -47,7 +47,7 @@
     },
     {
       "id": 4,
-      "prompt": "/paradigm-block-analyst rfq_rr55x75 RRPut 25 Sep 26 55000/75000 + perp\n\n(paradigm-data-discovery → paradigm_trade_tape_slim WHERE RFQ_ID='rfq_rr55x75' returned 3 rows: [{\"DATE\": \"2026-07-15\", \"TIME\": \"06:50:01\", \"AUCTION\": \"RFQ\", \"PRODUCT\": \"BTC OPTION - DBT\", \"DESCRIPTION\": \"RRPut  25 Sep 26  55000/75000 +0.31…  Perpetual  65,000\", \"QTY\": 100, \"PRICE\": 0.0177, \"REF_PRICE\": 0.0176, \"SIDE\": \"SELL\", \"QUOTE_CURRENCY\": \"BTC\", \"NOTIONAL_VOLUME_USD\": 6491801, \"RFQ_ID\": \"rfq_rr55x75\", \"TRADE_ID\": \"t_4a\", \"BLOCK_TRADE_ID\": \"b_4\", \"OFFSET_BPS\": 1.0}, {\"DATE\": \"2026-07-15\", \"TIME\": \"06:50:01\", \"AUCTION\": \"RFQ\", \"PRODUCT\": \"BTC OPTION - DBT\", \"DESCRIPTION\": \"RRPut  25 Sep 26  55000/75000 +0.31…  Perpetual  65,000\", \"QTY\": 100, \"PRICE\": 0.0168, \"REF_PRICE\": 0.0161, \"SIDE\": \"BUY\", \"QUOTE_CURRENCY\": \"BTC\", \"NOTIONAL_VOLUME_USD\": 6491801, \"RFQ_ID\": \"rfq_rr55x75\", \"TRADE_ID\": \"t_4b\", \"BLOCK_TRADE_ID\": \"b_4\", \"OFFSET_BPS\": 7.0}, {\"DATE\": \"2026-07-15\", \"TIME\": \"06:50:01\", \"AUCTION\": \"RFQ\", \"PRODUCT\": \"BTC PERPETUAL - DBT\", \"DESCRIPTION\": \"RRPut  25 Sep 26  55000/75000 +0.31…  Perpetual  65,000\", \"QTY\": 207000, \"PRICE\": 65000, \"REF_PRICE\": 64955.57, \"SIDE\": \"SELL\", \"QUOTE_CURRENCY\": \"BTC\", \"NOTIONAL_VOLUME_USD\": 2070000, \"RFQ_ID\": \"rfq_rr55x75\", \"TRADE_ID\": \"t_4c\", \"BLOCK_TRADE_ID\": \"b_4\"}])",
+      "prompt": "/paradigm_block_analyst rfq_rr55x75 RRPut 25 Sep 26 55000/75000 + perp\n\n(paradigm-data-discovery → paradigm_trade_tape_slim WHERE RFQ_ID='rfq_rr55x75' returned 3 rows: [{\"DATE\": \"2026-07-15\", \"TIME\": \"06:50:01\", \"AUCTION\": \"RFQ\", \"PRODUCT\": \"BTC OPTION - DBT\", \"DESCRIPTION\": \"RRPut  25 Sep 26  55000/75000 +0.31…  Perpetual  65,000\", \"QTY\": 100, \"PRICE\": 0.0177, \"REF_PRICE\": 0.0176, \"SIDE\": \"SELL\", \"QUOTE_CURRENCY\": \"BTC\", \"NOTIONAL_VOLUME_USD\": 6491801, \"RFQ_ID\": \"rfq_rr55x75\", \"TRADE_ID\": \"t_4a\", \"BLOCK_TRADE_ID\": \"b_4\", \"OFFSET_BPS\": 1.0}, {\"DATE\": \"2026-07-15\", \"TIME\": \"06:50:01\", \"AUCTION\": \"RFQ\", \"PRODUCT\": \"BTC OPTION - DBT\", \"DESCRIPTION\": \"RRPut  25 Sep 26  55000/75000 +0.31…  Perpetual  65,000\", \"QTY\": 100, \"PRICE\": 0.0168, \"REF_PRICE\": 0.0161, \"SIDE\": \"BUY\", \"QUOTE_CURRENCY\": \"BTC\", \"NOTIONAL_VOLUME_USD\": 6491801, \"RFQ_ID\": \"rfq_rr55x75\", \"TRADE_ID\": \"t_4b\", \"BLOCK_TRADE_ID\": \"b_4\", \"OFFSET_BPS\": 7.0}, {\"DATE\": \"2026-07-15\", \"TIME\": \"06:50:01\", \"AUCTION\": \"RFQ\", \"PRODUCT\": \"BTC PERPETUAL - DBT\", \"DESCRIPTION\": \"RRPut  25 Sep 26  55000/75000 +0.31…  Perpetual  65,000\", \"QTY\": 207000, \"PRICE\": 65000, \"REF_PRICE\": 64955.57, \"SIDE\": \"SELL\", \"QUOTE_CURRENCY\": \"BTC\", \"NOTIONAL_VOLUME_USD\": 2070000, \"RFQ_ID\": \"rfq_rr55x75\", \"TRADE_ID\": \"t_4c\", \"BLOCK_TRADE_ID\": \"b_4\"}])",
       "expected_output": "A terse block trade analysis of a delta-hedged put risk reversal resolved from per-leg tape rows. Header: Seller, net credit Recd 0.0009 (sold leg 0.0177 minus bought leg 0.0168), offset −6 bps below mark (net fill credit 0.0009 vs net mark credit 0.0015) — NOT the per-leg +1 or +7 values, and not '+6 bps'. Perp row treated as the delta hedge, excluded from the premium netting. table with Greeks (net incl. perp hedge), Fair repeating −6 bps below mark with per-leg IVs, History, Live.",
       "assertions": [
         "Response nets the two option legs to a package price of 0.0009 BTC received, rather than quoting a single leg's price",
@@ -61,7 +61,7 @@
     },
     {
       "id": 5,
-      "prompt": "/paradigm-block-analyst rfq_cstm2x1 custom put ratio 24 Jul\n\n(paradigm-data-discovery → paradigm_trade_tape_slim WHERE RFQ_ID='rfq_cstm2x1' returned 2 rows: [{\"DATE\": \"2026-07-15\", \"TIME\": \"06:48:10\", \"AUCTION\": \"RFQ\", \"PRODUCT\": \"BTC OPTION - DBT\", \"DESCRIPTION\": \"Cstm  -2.00  Put  24 Jul 26  59000       +1.00  Put  24 Jul 26  65000\", \"QTY\": 40, \"PRICE\": 0.0023, \"REF_PRICE\": 0.0021, \"SIDE\": \"BUY\", \"QUOTE_CURRENCY\": \"BTC\", \"NOTIONAL_VOLUME_USD\": 1291204, \"RFQ_ID\": \"rfq_cstm2x1\", \"TRADE_ID\": \"t_5a\", \"BLOCK_TRADE_ID\": \"b_5\", \"OFFSET_BPS\": 2.0}, {\"DATE\": \"2026-07-15\", \"TIME\": \"06:48:10\", \"AUCTION\": \"RFQ\", \"PRODUCT\": \"BTC OPTION - DBT\", \"DESCRIPTION\": \"Cstm  -2.00  Put  24 Jul 26  59000       +1.00  Put  24 Jul 26  65000\", \"QTY\": 20, \"PRICE\": 0.0210, \"REF_PRICE\": 0.0212, \"SIDE\": \"SELL\", \"QUOTE_CURRENCY\": \"BTC\", \"NOTIONAL_VOLUME_USD\": 1291204, \"RFQ_ID\": \"rfq_cstm2x1\", \"TRADE_ID\": \"t_5b\", \"BLOCK_TRADE_ID\": \"b_5\", \"OFFSET_BPS\": -2.0}])",
+      "prompt": "/paradigm_block_analyst rfq_cstm2x1 custom put ratio 24 Jul\n\n(paradigm-data-discovery → paradigm_trade_tape_slim WHERE RFQ_ID='rfq_cstm2x1' returned 2 rows: [{\"DATE\": \"2026-07-15\", \"TIME\": \"06:48:10\", \"AUCTION\": \"RFQ\", \"PRODUCT\": \"BTC OPTION - DBT\", \"DESCRIPTION\": \"Cstm  -2.00  Put  24 Jul 26  59000       +1.00  Put  24 Jul 26  65000\", \"QTY\": 40, \"PRICE\": 0.0023, \"REF_PRICE\": 0.0021, \"SIDE\": \"BUY\", \"QUOTE_CURRENCY\": \"BTC\", \"NOTIONAL_VOLUME_USD\": 1291204, \"RFQ_ID\": \"rfq_cstm2x1\", \"TRADE_ID\": \"t_5a\", \"BLOCK_TRADE_ID\": \"b_5\", \"OFFSET_BPS\": 2.0}, {\"DATE\": \"2026-07-15\", \"TIME\": \"06:48:10\", \"AUCTION\": \"RFQ\", \"PRODUCT\": \"BTC OPTION - DBT\", \"DESCRIPTION\": \"Cstm  -2.00  Put  24 Jul 26  59000       +1.00  Put  24 Jul 26  65000\", \"QTY\": 20, \"PRICE\": 0.0210, \"REF_PRICE\": 0.0212, \"SIDE\": \"SELL\", \"QUOTE_CURRENCY\": \"BTC\", \"NOTIONAL_VOLUME_USD\": 1291204, \"RFQ_ID\": \"rfq_cstm2x1\", \"TRADE_ID\": \"t_5b\", \"BLOCK_TRADE_ID\": \"b_5\", \"OFFSET_BPS\": -2.0}])",
       "expected_output": "A terse block trade analysis of a −2/+1 put ratio (long 2× 59000 P per short 1× 65000 P, per the leg QTYs 40 vs 20). Package qty-weights the legs 2:1 against the base (smallest) QTY of 20: net fill = 2×0.0023 − 0.0210 = −0.0164 credit, net mark = 2×0.0021 − 0.0212 = −0.0170 → header Seller, Recd 0.0164, −6 bps below mark. Not a per-leg ±2 bps value. yaml block with the four bracket rows.",
       "assertions": [
         "Response reports a net package price of 0.0164 BTC received — the 2:1 qty-weighted net of the legs, not a single leg's price",
@@ -76,11 +76,11 @@
   ],
   "trigger_evals": [
     {
-      "query": "/paradigm-block-analyst rfq_8f3a21 BTC 7MAY26 84000 Call",
+      "query": "/paradigm_block_analyst rfq_8f3a21 BTC 7MAY26 84000 Call",
       "should_trigger": true
     },
     {
-      "query": "/paradigm-block-analyst rfq_12345 long straddle 90k 7may26",
+      "query": "/paradigm_block_analyst rfq_12345 long straddle 90k 7may26",
       "should_trigger": true
     },
     {
@@ -126,7 +126,7 @@
   ],
   "trigger_evals_validation": [
     {
-      "query": "/paradigm-block-analyst rfq_99 BTC 27JUN26 100k/120k call spread",
+      "query": "/paradigm_block_analyst rfq_99 BTC 27JUN26 100k/120k call spread",
       "should_trigger": true
     },
     {

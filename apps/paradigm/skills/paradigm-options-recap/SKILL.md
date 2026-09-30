@@ -2,11 +2,11 @@
 name: paradigm-options-recap
 description: >
   Options market recap for a requested or default window, invoked via
-  /paradigm-options-recap. Parses "/paradigm-options-recap [asset] [options]
-  [window]" (e.g. "/paradigm-options-recap btc options 8h")
+  /paradigm_options_recap. Parses "/paradigm_options_recap [asset] [options]
+  [window]" (e.g. "/paradigm_options_recap btc options 8h")
   and builds the fixed four-section recap — Snapshot, Biggest Print, Block
   Flow, Vol Surface — from bounded raw exchange venue files and source tapes,
-  never from Dime hot files. Use when the user types /paradigm-options-recap
+  never from Dime hot files. Use when the user types /paradigm_options_recap
   or asks for a market recap, an options flow summary, "what happened in BTC options",
   "last Xh of flow", or what the vol surface looks like. Dataset inventory,
   schema and historical lookups belong to paradigm-data-discovery. The output format
@@ -25,7 +25,7 @@ metadata:
 
 ## Command
 
-`/paradigm-options-recap [asset] [options] [window]` is order-independent.
+`/paradigm_options_recap [asset] [options] [window]` is order-independent.
 Default to BTC and 24h; `options` is a no-op token. Accept `Nm`, `Nh`, and `Nd` windows, and state
 the actual interval queried rather than silently capping or changing it.
 
