@@ -475,7 +475,9 @@ over the OPTION legs only (perp/hedge rows excluded), `net_fill = Σ (sign × qt
 `sign` +1 BUY / −1 SELL, qty-weight = leg QTY ÷ base (smallest) QTY; `> 0` = **debit** (Buyer), `< 0` =
 **credit** (Seller); display `|net_fill|` after `Paid`/`Recd`. Same netting on `REF_PRICE` → `net_mark`;
 offset = `(|net_fill| − |net_mark|) × 10000` (bps coin / % USD): positive ⇒ `above mark`, negative ⇒
-`below mark`, deterministically — identical fills print identical signs. Debit above and credit below are
+`below mark`, deterministically — identical fills print identical signs. When the two land on opposite
+sides of zero, a debit filled where the mark said credit, the magnitudes are not comparable: take
+`net_fill − net_mark` over `|net_mark|` instead, which is what the taker gave up. Debit above and credit below are
 both *against* the taker: token stays neutral, but never render an against-the-taker fill as edge.
 **Single-leg is unchanged** — the precomputed `OFFSET_BPS`, verbatim. Example — RRPut 25 Sep 26
 55000/75000, Seller: Recd **0.0009** net credit vs mark **0.0015** → **−6 bps below mark**.

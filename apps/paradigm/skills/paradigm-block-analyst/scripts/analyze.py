@@ -217,7 +217,7 @@ def _run(args):
     # to (PRICE − REF_PRICE) × 10000 (backward compatible).
     fill_net = ac.struct_net(fill, "PRICE")
     ref_net = ac.struct_net(fill, "REF_PRICE")
-    off = ac.offset(abs(fill_net), abs(ref_net), quote) if ref_net else {"txt": "n/a"}
+    off = ac.package_offset(fill_net, ref_net, quote)
 
     # recurrence: HIST blocks clustered by BLOCK_TRADE_ID
     blocks = {}

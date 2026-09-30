@@ -291,7 +291,13 @@ def legs_from_rows(rows: list[dict]):
 
 def net_cash(rows: list[dict]) -> float:
     """Signed premium the taker paid: +PRICE for BUY legs, −PRICE for SELL legs,
-    scaled by QTY. >0 → net debit (taker paid). <0 → net credit (taker received)."""
+    scaled by QTY. >0 → net debit (taker paid). <0 → net credit (taker received).
+
+    Perp and future rows are dropped, the same ones struct_net drops. A delta
+    hedge executes at spot, so a 50-lot perp at 62,000 beside a 0.06 straddle
+    swamps the premium and flips the taker from Buyer to Seller, with every
+    greek sign flipped behind it."""
+    rows, _base, _size = _package(rows)
     tot = 0.0
     for r in rows:
         px = _f(r.get("PRICE"))
@@ -507,6 +513,24 @@ def leg_key(l: dict) -> str:
 
 
 _STABLE_QUOTES = {"USD", "USDC", "USDT"}
+
+
+def package_offset(fill_net: float, ref_net: float, quote: str = "") -> dict:
+    """Fill against mark for a package, positive when the fill was richer.
+
+    |net_fill| against |net_mark| is the display convention, and it only holds
+    while both are the same kind. A debit filled where the mark said credit
+    costs the taker both the premium and the credit, and comparing magnitudes
+    reads that as cheaper than mark: 0.001 paid against 0.002 received prints
+    −10 bps where the taker gave up 0.003. Compare the signed pair there, over
+    the mark's own magnitude.
+    """
+    if fill_net is None or ref_net is None or not ref_net:
+        return {"txt": "n/a", "sign": 0}
+    if (fill_net > 0) != (ref_net > 0):
+        base = abs(ref_net)
+        return offset(base + (fill_net - ref_net), base, quote)
+    return offset(abs(fill_net), abs(ref_net), quote)
 
 
 def offset(price: float, ref: float, quote: str = "") -> dict:

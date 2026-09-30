@@ -481,5 +481,31 @@ for _row in ("Greeks", "Fair", "History", "Live"):
 ok(_rendered(ratio_rows).count("⚠ ×N INFERRED") == 0,
    "and an unambiguous one says nothing")
 
+# ── a delta hedge is not premium ──────────────────────────────────────────────
+# The perp leg executes at spot, so summing it swamps the option premium: a
+# 0.06 straddle beside a 50-lot perp at 62,000 read as a 3.1m credit, which
+# printed the taker as Seller with every greek sign flipped behind it.
+_hedged = [{"PRODUCT": "BTC OPTION - DBT", "SIDE": "BUY", "QTY": 50, "PRICE": 0.06,
+            "DESCRIPTION": "SD 25 Dec 26 90000"},
+           {"PRODUCT": "BTC OPTION - DBT", "SIDE": "BUY", "QTY": 50, "PRICE": 0.06,
+            "DESCRIPTION": "SD 25 Dec 26 90000"},
+           {"PRODUCT": "BTC PERPETUAL - DBT", "SIDE": "SELL", "QTY": 50, "PRICE": 62000,
+            "DESCRIPTION": "SD 25 Dec 26 90000"}]
+ok(ac.net_cash(_hedged) > 0, "hedged straddle is still a debit")
+ok(ac.net_cash(_hedged) == ac.net_cash(_hedged[:2]), "and the hedge changes nothing")
+_p_sd = ac.parse_description("SD 25 Dec 26 90000")
+_legs_sd, _side_sd, _ = ac.apply_orientation(_p_sd, _hedged)
+ok(_side_sd == "Buyer", "so the taker reads as Buyer")
+ok(all(l["sign"] == 1 for l in _legs_sd), "and both legs are long")
+
+# ── a fill and a mark on opposite sides of zero ───────────────────────────────
+# |fill| against |mark| only compares like with like. A risk reversal paid at a
+# 0.001 debit where the mark was a 0.002 credit gave up 0.003, and the magnitude
+# rule printed it as 10 bps cheaper than mark.
+ok(ac.package_offset(0.001, -0.002, "BTC")["val"] == 30.0, "debit against a credit mark is +30 bps")
+ok(ac.package_offset(0.0450, 0.0443, "BTC")["val"] == 7.0, "two debits still compare on magnitude")
+ok(ac.package_offset(-0.0009, -0.0015, "BTC")["val"] == -6.0, "and so do two credits")
+ok(ac.package_offset(0.001, 0, "BTC")["txt"] == "n/a", "no mark, no offset")
+
 print(f"\n{_p} passed, {_f} failed")
 sys.exit(1 if _f else 0)
