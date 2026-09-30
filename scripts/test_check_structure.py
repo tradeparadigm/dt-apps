@@ -600,6 +600,46 @@ class TestDefaultInstall(unittest.TestCase):
         self.assertNotEqual(code, 0, out)
         self.assertIn("exclusive_credential_types", out)
 
+class TestCommandClaim(unittest.TestCase):
+    """A description claims this skill's own command and no other.
+
+    openclaw gives every user-invocable skill a command named after the skill,
+    with every character outside [a-z0-9_] turned into an underscore, and the
+    bare-command lookup compares against that exactly. A skill that describes
+    some other verb is describing a command nothing registers, so it reaches
+    the skill only when the model guesses from the prose. Two of ours did.
+    """
+
+    def described(self, text):
+        return lambda src: src.replace(
+            "  nothing and is never published.", f"  nothing and is never published. {text}"
+        )
+
+    def test_its_own_command_is_accepted(self):
+        code, out = check(skill=self.described("Run /example_api to use it."))
+        self.assertEqual(code, 0, out)
+
+    def test_an_invented_command_is_refused(self):
+        code, out = check(skill=self.described("Invoked as /analyze <id>."))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("claims /analyze", out)
+        self.assertIn("/example_api", out)
+
+    def test_the_hyphenated_spelling_is_refused(self):
+        code, out = check(skill=self.described("Invoked as /example-api."))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("claims /example-api", out)
+
+    def test_a_slash_inside_a_word_is_not_a_claim(self):
+        code, out = check(skill=self.described("Covers calls/puts and buy/sell."))
+        self.assertEqual(code, 0, out)
+
+    def test_a_bucket_path_is_not_a_claim(self):
+        code, out = check(
+            skill=self.described("Reads s3://dt-venue-data/normalized/trades.")
+        )
+        self.assertEqual(code, 0, out)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
