@@ -220,7 +220,8 @@ ambiguous, ask.
 |---|---|
 | `rfq_id` | RFQ to quote — fetch it first to learn `venue` + `kind` |
 | `side` | `BUY` (bid) / `SELL` (offer). Two-way = two `POST /v2/drfq/orders/` calls |
-| `price` or `edge` | Absolute price, or an edge spec interpreted per `references/venues.md` for that RFQ's venue |
+| `price` or `edge` | Absolute price, or an edge spec interpreted per `references/venues.md` for that RFQ's venue. A taker sends the package price here; a maker's is derived from the leg prices |
+| `legs` | `{instrument_id, price}` per RFQ leg. **Maker only, and required there.** A taker cross sends none |
 | `quantity` | **Required, and it has to equal the RFQ's quantity.** Paradigm checks that for a maker and a taker alike |
 | `type` | `LIMIT` (default) or `HIDDEN` |
 | `account_name` | **Required for a maker**, and a missing one is a 400. A taker crossing an existing order may omit it and inherits the RFQ's credential |
@@ -326,8 +327,11 @@ for the session; do not invent IDs.
    on a slower cadence than the quote poll.
 4. **Confirmation gate** (see below). Wait for explicit `yes`.
 5. **Cross** — `POST /v2/drfq/orders/` with `rfq_id`, `side`,
-   `"type": "LIMIT"`, `"time_in_force": "FILL_OR_KILL"`, `price`, `quantity`
-   and `legs`. `side` is opposite the resting order being taken: lift an
+   `"type": "LIMIT"`, `"time_in_force": "FILL_OR_KILL"`, `price` and
+   `quantity`. **No `legs` on a taker cross.** A cross prices the structure,
+   so `price` is the package price and the service ignores any legs you send;
+   send them anyway and each one needs a `price` of its own or the call is a
+   400 before it gets that far. `side` is opposite the resting order taken: lift an
    offer to BUY, hit a bid to SELL. That is also what decides which way you
    hold the package, because the create body has no side of its own, so read
    Direction before you pick it and do not flip the legs as well.
@@ -375,8 +379,11 @@ for the session; do not invent IDs.
 5. **Confirmation gate**. Wait for explicit `yes`.
 6. **Post** — `POST /v2/drfq/orders/` with `rfq_id`, `side`, `account_name`,
    `"type": "LIMIT"`, `"time_in_force": "GOOD_TILL_CANCELED"`, `price`,
-   `quantity` and `legs`. A maker order without `account_name` is a 400.
-   Two-way = two calls.
+   `quantity` and `legs`. A maker's legs are `{instrument_id, price}` pairs,
+   one per RFQ leg, and each price has to be above zero. They are what prices
+   the quote: Paradigm replaces the top-level `price` with the sum of
+   `leg.price × ratio` over the strategy legs. A maker order without
+   `account_name` is a 400, and so is one without `legs`. Two-way = two calls.
 7. **Manage lifecycle** — poll each 1–3 s:
    - `GET /v2/drfq/orders/?rfq_id=...` — surface when no longer
      top-of-book.
@@ -480,10 +487,8 @@ Will call on yes:
    "side": "SELL",                         # SELL = short the spread you built
    "type": "LIMIT",
    "time_in_force": "FILL_OR_KILL",
-   "price": "0.0042",
-   "quantity": "100",
-   "legs": [{"instrument_id": 50121, "ratio": 1, "side": "BUY"},    # 90000-C
-            {"instrument_id": 50177, "ratio": 1, "side": "SELL"}]}  # 95000-C
+   "price": "0.0042",                      # the package price, no legs
+   "quantity": "100"}
 SHORT the 90/95 call spread · Recd 0.0042 · 100x    ~$35.2K
 Fair: net mark 0.0040 · +2 bps above mark
 [yes / no / adjust]
