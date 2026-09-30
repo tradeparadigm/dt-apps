@@ -19,7 +19,7 @@
 schema_version: 1
 
 id: paradigm
-version: 1.0.1
+version: 1.0.2
 name: Paradigm
 blurb: Trade institutional blocks and analyse the tape, with keys your agent never sees.
 

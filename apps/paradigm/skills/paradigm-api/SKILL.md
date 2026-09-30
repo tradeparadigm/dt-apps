@@ -107,7 +107,7 @@ request. Do not paste a block per call, and do not build the request out of
 computed value, which is exactly where byte-exactness dies.
 
 ```sh
-ls ~/.openclaw/workspace/tools/paradigm/paradigm-api/paradigm-api-1.0.1.mjs
+ls ~/.openclaw/workspace/tools/paradigm/paradigm-api/paradigm-api-1.0.2.mjs
 ```
 
 If that file is there, an earlier chat already wrote it, so skip to the calls
@@ -117,7 +117,7 @@ below. If it is not, run this:
 rm -rf ~/.openclaw/workspace/tools/paradigm/paradigm-api
 mkdir -p ~/.openclaw/workspace/tools/paradigm/paradigm-api
 find ~/.openclaw/workspace/tools/paradigm -maxdepth 1 -name '*.mjs' -delete
-cat > ~/.openclaw/workspace/tools/paradigm/paradigm-api/paradigm-api-1.0.1.mjs <<'EOF'
+cat > ~/.openclaw/workspace/tools/paradigm/paradigm-api/paradigm-api-1.0.2.mjs <<'EOF'
 // Two credentials, and they have to be the same Paradigm key on the same
 // environment. The variable NAME is what says so: it is derived from the label,
 // and the two labels differ only in their last component. The placeholder VALUE
@@ -222,7 +222,7 @@ the access key, the signature, the headers and the transport are all correct,
 and it changes nothing.
 
 ```sh
-H=~/.openclaw/workspace/tools/paradigm/paradigm-api/paradigm-api-1.0.1.mjs
+H=~/.openclaw/workspace/tools/paradigm/paradigm-api/paradigm-api-1.0.2.mjs
 
 METHOD=GET TARGET=/v2/drfq/echo/ node $H
 

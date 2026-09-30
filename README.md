@@ -54,11 +54,39 @@ underscores back to hyphens.
 
 Write that string and nothing else. A skill that describes some other verb is
 describing a command nothing registers, and the model reaches it only by
-reading the description and guessing. Two of ours claimed `/analyze` and
-`/recap` that way.
+reading the description and guessing. `paradigm-block-analyst` and
+`paradigm-options-recap` both did that, claiming `/analyze` and `/recap`,
+until those became skills of their own.
 
 Whatever sends the command has to send the same string. For the block analyst
 that is the trade tape in DIME Terminal.
+
+## Session context
+
+A host states its situation once per connection, as a `<session-context>`
+block of `key=value` pairs joined by `;`. A skill reads it. The vocabulary:
+
+| Key | Value |
+|---|---|
+| `host_app` | which app the user is in: `paradigm`, `paradex`, `standalone` |
+| `analyze_skill` | the skill `/analyze` follows |
+| `recap_skill` | the skill `/recap` follows |
+| `output_style` | how the host wants answers written |
+
+`analyze` and `recap` are the two skills that read it. Each one picks the
+venue's analyst or recap from that block and follows it, so neither names a
+venue and a new host needs no change here. A host that states no target gets
+told so, because guessing a venue produces numbers that describe a different
+market.
+
+A host sends the block once per connection and does not change it for the
+life of the agent. Keep it to what situation the user is in. Anything exact,
+large or secret belongs in a tool call.
+
+`analyze` and `recap` sit in the paradigm app because an app with no venue
+carries no environment and no credential type, which both this checker and
+the server refuse. That app installs by default, so every account has the two
+commands. An account that uninstalls it loses them.
 
 ## Versioning
 
