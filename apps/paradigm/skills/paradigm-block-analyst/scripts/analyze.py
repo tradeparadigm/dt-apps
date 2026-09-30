@@ -211,10 +211,11 @@ def _run(args):
     # Net package offset (SKILL Step 7, the ONE convention) — per structure unit, unit by quote.
     # struct_net weights each option leg by its QTY relative to the structure's base unit, so a
     # 1×2×1 fly's body counts twice (net = +wing − 2×body + wing); a plain per-row sum over-states
-    # it. The offset compares |net_fill| vs |net_mark| — the displayed Paid/Recd magnitude — so a
-    # positive result always means the fill was richer than mark (above), negative cheaper (below),
-    # deterministically, regardless of debit/credit. Never a per-leg OFFSET_BPS. Single-leg reduces
-    # to (PRICE − REF_PRICE) × 10000 (backward compatible).
+    # it. package_offset compares |net_fill| vs |net_mark| — the displayed Paid/Recd magnitude — so
+    # a positive result always means the fill was richer than mark (above), negative cheaper
+    # (below), deterministically, regardless of debit/credit. It compares the signed pair instead
+    # when the two straddle zero, where magnitudes say nothing. Never a per-leg OFFSET_BPS.
+    # Single-leg reduces to (PRICE − REF_PRICE) × 10000 (backward compatible).
     fill_net = ac.struct_net(fill, "PRICE")
     ref_net = ac.struct_net(fill, "REF_PRICE")
     off = ac.package_offset(fill_net, ref_net, quote)

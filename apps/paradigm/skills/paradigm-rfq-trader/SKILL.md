@@ -323,11 +323,11 @@ for the session; do not invent IDs.
 4. **Confirmation gate** (see below). Wait for explicit `yes`.
 5. **Cross** — `POST /v2/drfq/orders/` with `rfq_id`, `side`,
    `"type": "LIMIT"`, `"time_in_force": "FILL_OR_KILL"`, `price`, `quantity`
-   and `legs`. `side` is opposite the resting order being taken.
-   This cross `side` is matching mechanics (lift an offer = BUY, hit a
-   bid = SELL) and is independent of the structure's long/short
-   orientation, which the leg sides already fixed at create-time (see
-   Direction). Response is async-first (`state: OrderState.PENDING`) — poll
+   and `legs`. `side` is opposite the resting order being taken: lift an
+   offer to BUY, hit a bid to SELL. That is also what decides which way you
+   hold the package, because the create body has no side of its own, so read
+   Direction before you pick it and do not flip the legs as well.
+   Response is async-first (`state: OrderState.PENDING`) — poll
    `GET /v2/drfq/orders/` and branch on the terminal state:
    - **`CLOSED`** → fetch `trade_id` from `GET /v2/drfq/trades/` and match on the RFQ,
      then follow the venue's settlement-check recipe in `references/venues.md`.
