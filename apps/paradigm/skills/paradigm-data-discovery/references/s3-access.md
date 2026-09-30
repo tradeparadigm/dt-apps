@@ -75,7 +75,7 @@ Two properties bind its callers:
   `_concat` is zero-copy where the schemas match, so the concatenation itself
   costs nothing; what costs is that every object's rows are resident at once,
   and `CONCURRENCY` and `BATCH` bound only the raw bodies and the single batch
-  being parsed. The second copy is the caller's: `/recap` keeps the returned
+  being parsed. The second copy is the caller's: `/paradigm_options_recap` keeps the returned
   table alive as a replacement scan while DuckDB materialises a result that, in
   render mode, is every row. Cost scales with objects read, not with wall time —
   a 30-day window peaks near 6 GiB against a 4 GiB production container.

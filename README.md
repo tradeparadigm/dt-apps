@@ -42,6 +42,52 @@ The bare venue name is deliberately left free. `bybit` belongs to whoever
 writes a skill called that — including a user's own — and the app id already
 carries the venue's identity, so the skill file does not need to claim it.
 
+## Commands
+
+openclaw gives every user-invocable skill a slash command, and
+`user-invocable` defaults to true. The command is the skill's `name`,
+lowercased, with every character outside `a-z0-9_` turned into an underscore
+and the result cut to 32 characters. So `paradigm-block-analyst` answers
+`/paradigm_block_analyst`. The hyphenated spelling matches nothing; only
+`/skill paradigm-block-analyst` also works, because that lookup folds
+underscores back to hyphens.
+
+Write that string and nothing else. A skill that describes some other verb is
+describing a command nothing registers, and the model reaches it only by
+reading the description and guessing. `paradigm-block-analyst` and
+`paradigm-options-recap` both described `/analyze` and `/recap` that way,
+until those became skills of their own.
+
+Whatever sends the command has to send the same string. For the block analyst
+that is the trade tape in DIME Terminal.
+
+## Session context
+
+A host states its situation once per connection, as a `<session-context>`
+block of `key=value` pairs joined by `;`. The vocabulary:
+
+| Key | Value |
+|---|---|
+| `host_app` | which app the user is in: `paradigm`, `paradex`, `standalone` |
+| `analyze_skill` | the skill `/analyze` follows |
+| `recap_skill` | the skill `/recap` follows |
+| `output_style` | how the host wants answers written |
+
+`analyze` and `recap` are the two skills built on it. Each one names the
+venue's analyst or recap from that block and follows it, so neither names a
+venue itself and a new host needs no change here. Where a host states no
+target, the command asks the user, because guessing a venue produces numbers
+that describe a different market.
+
+A host sends the block once per connection and does not change it for the
+life of the agent. Keep it to what situation the user is in. Anything exact,
+large or secret belongs in a tool call.
+
+`analyze` and `recap` sit in the paradigm app because an app with no venue
+has no environment and no credential type, which this checker and the server
+both reject. That app installs by default, so every account has the two
+commands. An account that uninstalls it loses them.
+
 ## Versioning
 
 `version:` in `apps/<id>/app.yaml` is the app's version, and it is the only
@@ -108,6 +154,8 @@ that made the mistake:
   nobody can enrol;
 - every skill directory holds a `SKILL.md` whose frontmatter `name` matches
   it, with a description, inside the file-count and size limits;
+- a skill's description claims that skill's own command and no other. See
+  Commands below;
 - the version in a cached helper's filename matches the app's `version:`.
   Nothing in the consumer reads that path, because it is an instruction the
   agent follows rather than a field anything parses. So a bump the filename does

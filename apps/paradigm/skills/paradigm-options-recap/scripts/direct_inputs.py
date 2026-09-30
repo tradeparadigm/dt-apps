@@ -322,7 +322,7 @@ def inputs(totals, evidence, specs, gaps, coverage=None):
 # CONTINUOUS: it writes every period, so a missing hour there is a dead feed.
 # exchange-raw.md has said to check a companion feed since before this skill
 # existed; nothing implemented it, and the result was that every coverage
-# warning /recap emitted was a false alarm. Measured over 30 days: Bullish
+# warning /paradigm_options_recap emitted was a false alarm. Measured over 30 days: Bullish
 # traded in 341 of 720 hours and was reported as 53% missing, while its quote
 # feed was 720/720 intact.
 # A window is LIVE while its final hour is still being written. Producers write

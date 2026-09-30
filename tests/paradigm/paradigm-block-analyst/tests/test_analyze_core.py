@@ -47,7 +47,7 @@ ok(ac.offset(140.87, 173.37, "BTC")["txt"] == "-18.7%", "dollar premium → perc
 ok(ac.offset(0.53, 0.50, "USDC")["txt"] == "+6%", "sub-$1 USDC premium → percent, not +300 bps")
 ok(ac.offset(0.53, 0.50, "USD")["unit"] == "%", "sub-$1 USD premium → percent unit")
 
-# ── single-leg SOL call (real: /analyze … Call 31 Jul 26 88) ───────────────────
+# ── single-leg SOL call (real: /paradigm_block_analyst … Call 31 Jul 26 88) ───────────────────
 p = ac.parse_description("Call 31 Jul 26 88")
 ok(p["code"] == "CL" and len(p["legs"]) == 1, "single call parsed")
 lg = p["legs"][0]
@@ -65,7 +65,7 @@ legs2, _, _ = ac.apply_orientation(p2, [{"SIDE": "SELL", "PRICE": 264.07, "QTY":
 gk = {ac.leg_key(l): {"delta": 0.1, "vega": 1.0, "gamma": 0.0, "theta": -0.1} for l in legs2[:3]}
 ok(ac.net_greeks(legs2, gk, 5) == {}, "missing one leg's greeks → {} not a 3-leg partial sum")
 
-# ── iron condor (real: /analyze … ICondor 10 Jul 26 54000/56000/66000/67000) ───
+# ── iron condor (real: /paradigm_block_analyst … ICondor 10 Jul 26 54000/56000/66000/67000) ───
 p = ac.parse_description("ICondor  10 Jul 26  54000/56000/66000/67000")
 ok(p["code"] == "CO" and len(p["legs"]) == 4, "iron condor parsed to 4 legs")
 rows = [{"SIDE": "BUY", "PRICE": 65.56, "QTY": 5}, {"SIDE": "SELL", "PRICE": 81.48, "QTY": 5},

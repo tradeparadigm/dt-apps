@@ -78,7 +78,7 @@ Publication is atomic per object, not across days; replication may expose mixed
 generations, so a single unknown or lagging day makes the whole read's coverage
 incomplete rather than averaging against healthier days.
 
-`/recap` returns the requested asset's option legs in
+`/paradigm_options_recap` returns the requested asset's option legs in
 `evidence.paradigm_executions`, retaining explicit source errors alongside
 independently available market evidence; it never falls back to hot.
 
