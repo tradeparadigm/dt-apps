@@ -3,8 +3,9 @@ name: paradex-trade-analyst
 description: >
   Analysis of a Paradex trade the user ALREADY MADE, against live Paradex
   market data. Invoked as `/paradex_trade_analyst <fill_id> <market side size price>`,
-  which the trade history sends when a user asks to analyse a fill. Resolves
-  the fill from the Paradex REST API via the
+  which the trade history sends when a user asks to analyse a fill, and which
+  the `analyze` skill routes to when the session context names this venue.
+  Resolves the fill from the Paradex REST API via the
   paradex-api skill, benchmarks the fill price against the mark and the book
   at the time, reports the position the fill left behind, and states funding
   paid or received over the holding period. Use when the user asks to analyse,

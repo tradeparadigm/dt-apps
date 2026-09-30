@@ -12,8 +12,9 @@ description: >
   it printed, reads whether the flow moved the
   vol surface, and outputs a concise analysis. Use when
   the user runs `/paradigm_block_analyst <rfq_id> ...`, pastes a Paradigm
-  block trade JSON, or asks to analyze, benchmark, or get market color on a Paradigm RFQ
-  execution. Covers outright calls/puts (CL/PL), strangles (SN), straddles (ST),
+  block trade JSON, or names Paradigm as the venue. The `analyze` skill
+  reaches this one when the session names it, so a bare request to analyse a
+  trade goes there rather than here. Covers outright calls/puts (CL/PL), strangles (SN), straddles (ST),
   butterflies (BF), condors (CO), calendars (CA), risk reversals (RR), covered
   calls, and custom multi-leg combos (CM). Also handles perp combos.
 compatibility: Resolves the rfq_id against the Paradigm execution tape's daily
@@ -36,10 +37,12 @@ Bybit market data.
 ## Trigger
 
 Fire when the user runs `/paradigm_block_analyst <rfq_id> <rfq description>`,
-pastes a Paradigm
-block trade JSON object, or references a specific trade from the tape (e.g.
-"analyze this", "what's this trade doing", "benchmark the fill", "pull live
-greeks").
+pastes a Paradigm block trade JSON object, or asks about a specific Paradigm
+RFQ execution by name.
+
+The `analyze` skill also reaches this one, when the session context names it.
+A bare "analyze this" or "benchmark the fill" belongs to that skill, which
+reads which venue the user is looking at. Do not claim those on your own.
 
 ## Step 0 — Resolve the RFQ
 

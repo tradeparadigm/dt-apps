@@ -7,8 +7,9 @@ description: >
   and builds the fixed four-section recap — Snapshot, Biggest Print, Block
   Flow, Vol Surface — from bounded raw exchange venue files and source tapes,
   never from Dime hot files. Use when the user types /paradigm_options_recap
-  or asks for a market recap, an options flow summary, "what happened in BTC options",
-  "last Xh of flow", or what the vol surface looks like. Dataset inventory,
+  or names Paradigm options as the market they want a recap of. The `recap`
+  skill reaches this one when the session names it, so a bare request for a
+  recap goes there rather than here. Dataset inventory,
   schema and historical lookups belong to paradigm-data-discovery. The output format
   is fixed — always the same four sections in the same order.
 compatibility: >
