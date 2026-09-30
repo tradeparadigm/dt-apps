@@ -18,13 +18,15 @@
     {
       "id": 2,
       "prompt": "quote rfq_12345 at 2 bps over the Paradex mid, sell side, full size",
-      "expected_output": "A maker quoting flow that: (1) calls GET /v2/drfq/rfqs/{id}/ with /bbo/ and /orders/(rfq_id=\"rfq_12345\") to read the RFQ instrument + current BBO; (2) fetches the on-screen mid from the Paradex public BBO endpoint (web_fetch) on the same instrument; (3) computes ask = mid * (1 + 2/10000); (4) presents a confirmation block with the planned POST /v2/drfq/orders/ call (side=SELL, type=LIMIT, time_in_force=GOOD_TILL_CANCELED, computed price, quantity matching RFQ); (5) waits for explicit yes before calling the tool.",
+      "expected_output": "A maker quoting flow that: (1) calls GET /v2/drfq/rfqs/{id}/ with /bbo/ and /orders/(rfq_id=\"rfq_12345\") to read the RFQ instrument + current BBO; (2) fetches the on-screen mid from the Paradex public BBO endpoint (web_fetch) on the same instrument; (3) computes ask = mid * (1 + 2/10000), rounded to the instrument's min_tick_size; (4) presents a confirmation block with the planned POST /v2/drfq/orders/ call (side=SELL, type=LIMIT, time_in_force=GOOD_TILL_CANCELED, account_name, quantity matching the RFQ, and legs as {instrument_id, price} per RFQ leg, which is what prices a maker order); (5) waits for explicit yes before calling the tool.",
       "assertions": [
         "Response identifies this as a maker quote flow against rfq_12345 with side=SELL",
         "Response calls GET /v2/drfq/rfqs/{id}/ with /bbo/ and /orders/ to read the RFQ instrument before pricing",
         "Response fetches the mid from the Paradex public BBO endpoint via web_fetch (NOT a Deribit / Bybit / OKX source) on the matching Paradex instrument",
-        "Response applies the +2 bps edge to the Paradex mid and shows the computed quote price",
+        "Response applies the +2 bps edge to the Paradex mid and shows the computed quote price, on the instrument's tick",
         "Response presents a POST /v2/drfq/orders/ payload with side=SELL, type=LIMIT, time_in_force=GOOD_TILL_CANCELED",
+        "Response includes account_name, which a maker order is refused without",
+        "Response includes legs as {instrument_id, price} per RFQ leg, since a maker order without legs is refused",
         "Response waits for explicit user confirmation before invoking POST /v2/drfq/orders/"
       ]
     },

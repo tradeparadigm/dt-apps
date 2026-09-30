@@ -380,7 +380,10 @@ for the session; do not invent IDs.
 6. **Post** — `POST /v2/drfq/orders/` with `rfq_id`, `side`, `account_name`,
    `"type": "LIMIT"`, `"time_in_force": "GOOD_TILL_CANCELED"`, `price`,
    `quantity` and `legs`. A maker's legs are `{instrument_id, price}` pairs,
-   one per RFQ leg, and each price has to be above zero. They are what prices
+   one per RFQ leg. Each price has to be above zero and a whole multiple of
+   that instrument's tick: off-tick answers `Leg price must be specified in
+   increments of <tick>`, and `min_tick_size` from the instrument lookup is
+   the number to round to. They are what prices
    the quote: Paradigm replaces the top-level `price` with the sum of
    `leg.price × ratio` over the strategy legs. A maker order without
    `account_name` is a 400, and so is one without `legs`. Two-way = two calls.
