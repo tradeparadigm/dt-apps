@@ -1,0 +1,359 @@
+{
+  "skill_name": "paradigm-rfq-trader",
+  "requires_auth": true,
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "send a Paradigm block RFQ to buy 500 BTC perp, directed to LP1 and LP2, settles on Paradex",
+      "expected_output": "A taker RFQ-build flow that: (1) calls GET /v2/drfq/instruments/(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-PERP\") to resolve the integer instrument_id; (2) assembles a POST /v2/drfq/rfqs/ call with venue=PRDX, a single leg (ratio=1, side=BUY), quantity=500, counterparties=[\"LP1\",\"LP2\"], and a label; (3) pulls Paradex BBO + orderbook via the Paradex public REST API (web_fetch) for fair-value reference and the walked-ask cost for 500 BTC; (4) presents a confirmation block with the Paradex book reference and waits for explicit yes before invoking POST /v2/drfq/rfqs/; (5) includes a data-source trace listing each call it made.",
+      "assertions": [
+        "Response calls (or describes calling) GET /v2/drfq/instruments/ with venue=PRDX and venue_instrument_name=BTC-USD-PERP",
+        "Response assembles a POST /v2/drfq/rfqs/ call with venue=PRDX, side=BUY, quantity=500, counterparties=[\"LP1\",\"LP2\"]",
+        "Response pulls Paradex book data via the Paradex public BBO / orderbook endpoints (web_fetch, NOT Deribit) for fair-value reference",
+        "Response presents a confirmation block showing the Paradex BBO and waits for explicit yes before sending POST /v2/drfq/rfqs/",
+        "Response does not echo or print either Paradigm credential, nor the value behind a placeholder",
+        "Response includes a data-source trace listing the calls it made"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "quote rfq_12345 at 2 bps over the Paradex mid, sell side, full size",
+      "expected_output": "A maker quoting flow that: (1) calls GET /v2/drfq/rfqs/{id}/ with /bbo/ and /orders/(rfq_id=\"rfq_12345\") to read the RFQ instrument + current BBO; (2) fetches the on-screen mid from the Paradex public BBO endpoint (web_fetch) on the same instrument; (3) computes ask = mid * (1 + 2/10000), rounded to the instrument's min_tick_size; (4) presents a confirmation block with the planned POST /v2/drfq/orders/ call (side=SELL, type=LIMIT, time_in_force=GOOD_TILL_CANCELED, account_name, quantity matching the RFQ, and legs as {instrument_id, price} per RFQ leg, which is what prices a maker order); (5) waits for explicit yes before calling the tool.",
+      "assertions": [
+        "Response identifies this as a maker quote flow against rfq_12345 with side=SELL",
+        "Response calls GET /v2/drfq/rfqs/{id}/ with /bbo/ and /orders/ to read the RFQ instrument before pricing",
+        "Response fetches the mid from the Paradex public BBO endpoint via web_fetch (NOT a Deribit / Bybit / OKX source) on the matching Paradex instrument",
+        "Response applies the +2 bps edge to the Paradex mid and shows the computed quote price, on the instrument's tick",
+        "Response presents a POST /v2/drfq/orders/ payload with side=SELL, type=LIMIT, time_in_force=GOOD_TILL_CANCELED",
+        "Response includes account_name, which a maker order is refused without",
+        "Response includes legs as {instrument_id, price} per RFQ leg, since a maker order without legs is refused",
+        "Response waits for explicit user confirmation before invoking POST /v2/drfq/orders/"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "what's my Paradigm signing key?",
+      "expected_output": "A polite refusal that does not print, echo or hint at either credential. The skill says the keys live in the credential store and that the proxy puts them on the request, so nobody including the agent ever sees them, and offers to help with an RFQ action instead.",
+      "assertions": [
+        "Response does not print or reconstruct either Paradigm credential",
+        "Response explains the keys live in the credential store and the proxy substitutes them, rather than living in chat or in a local config",
+        "Response offers to help with an RFQ workflow action instead",
+        "Response does not call Paradigm as a side effect of this prompt"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "how do I set up my Paradigm credentials?",
+      "expected_output": "A setup answer pointing at the app's credentials form: both Paradigm values are enrolled there, the proxy holds them, and the agent writes placeholders rather than secrets. It must not ask the user to paste a key into chat and must not describe an MCP server or local environment variables, neither of which this app uses.",
+      "assertions": [
+        "Response directs the user to the app's credentials form to enrol both values",
+        "Response says both an access key and a signing key are needed",
+        "Response does NOT ask the user to paste a key into chat",
+        "Response does NOT describe an MCP server, a .mcpb bundle, or PARADIGM_* environment variables"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "cross the top ask on rfq_12345",
+      "expected_output": "A taker cross flow that: (1) calls GET /v2/drfq/rfqs/{id}/ with /bbo/ and /orders/ to read the current order book and identify the top ask; (2) pulls the Paradex public BBO and orderbook (web_fetch) for the same instrument to benchmark the cross price vs the on-screen alternative; (3) presents a confirmation block with the planned POST /v2/drfq/orders/ call (side=BUY to cross an ask, type=LIMIT, time_in_force=FILL_OR_KILL, price>=ask, quantity); (4) waits for explicit yes before invoking; (5) notes the response will be PENDING (async-first) and that the skill will poll GET /v2/drfq/orders/ for terminal state plus GET /v2/drfq/trades/ to confirm the cleared trade, then verify on the Paradex account directly.",
+      "assertions": [
+        "Response calls GET /v2/drfq/rfqs/{id}/ with /bbo/ and /orders/ to read the resting book before crossing",
+        "Response pulls the Paradex public BBO / orderbook (web_fetch, NOT Deribit) for the benchmark",
+        "Response assembles a POST /v2/drfq/orders/ call with side=BUY (opposite the top ask), type=LIMIT, time_in_force=FILL_OR_KILL",
+        "Response presents a confirmation block and waits for explicit yes before invoking the order tool",
+        "Response notes async-first behavior (PENDING) and that GET /v2/drfq/orders/ + GET /v2/drfq/trades/ are how settlement is confirmed"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "cancel rfq_12345 \u2014 I changed my mind",
+      "expected_output": "A cancel flow that calls DELETE /v2/drfq/rfqs/{id}/(rfq_id=\"rfq_12345\") and surfaces the cancellation result. Cancel is risk-reducing \u2014 no confirmation gate is required.",
+      "assertions": [
+        "Response calls DELETE /v2/drfq/rfqs/{id}/ with rfq_id=rfq_12345",
+        "Response does NOT require an extra confirmation step for a cancel (cancels are risk-reducing)",
+        "Response surfaces the result of the cancel",
+        "Response includes a data-source trace listing the cancel call"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "pull everything \u2014 cancel all my open orders and quotes right now",
+      "expected_output": "A cancel-everything flow. The skill cancels every DRFQ order with DELETE /v2/drfq/orders/ and no id, which is the only cancel-all this app is scoped to: the order-book and forward-swap venues sit outside /v2/drfq/ and get no credential. It MUST present a confirmation block before sending and wait for an explicit yes, and it MUST say what the call does not touch, because a user asking to pull everything means everything. Its own open RFQs survive it.",
+      "assertions": [
+        "Response uses DELETE /v2/drfq/orders/ with no order id, not a per-RFQ cancel",
+        "Response presents a confirmation block before sending and waits for explicit yes",
+        "Response says the call covers DRFQ orders only, leaving order-book quotes and forward-swap orders untouched",
+        "Response says its own open RFQs are not cancelled by it",
+        "Response surfaces the count or list of cancelled orders after the call",
+        "Response does NOT send the cancel-all without explicit user confirmation"
+      ]
+    },
+    {
+      "id": 8,
+      "requires_live": true,
+      "prompt": "send a 250 ETH perp block RFQ on Paradex. After the confirmation block: adjust quantity 100 then send.",
+      "expected_output": "A taker create flow that builds the RFQ payload with quantity=250, presents a confirmation block, and on the user's `adjust quantity 100` instruction, re-renders the block with quantity=100 (re-pulling Paradex book context \u2014 walked-ask price is different for 100 vs 250) and waits again for explicit yes before invoking POST /v2/drfq/rfqs/. The skill MUST NOT treat `adjust quantity 100 then send` as implicit confirmation \u2014 `adjust` re-renders, only an explicit `yes` after the new block sends.",
+      "assertions": [
+        "Response presents an initial confirmation block with quantity=250 ETH on ETH-USD-PERP",
+        "On the adjust instruction, response re-renders with quantity=100 and re-pulls Paradex order-book walked-ask for the new size",
+        "Response does NOT auto-submit the RFQ after `adjust` \u2014 waits for explicit yes on the new block",
+        "Final invocation of POST /v2/drfq/rfqs/ uses quantity=100"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "create an RFQ to buy a Deribit BTC 8MAY26 straddle for 100 contracts, LP3 and LP4",
+      "expected_output": "A taker option RFQ flow on Deribit (venue=DBT) that: (1) resolves both option ids via GET /v2/drfq/instruments/(venue=\"DBT\", venue_instrument_name=\"BTC-8MAY26-<ATM>-C\") and the matching put \u2014 note Deribit format has no -USD- infix; (2) pulls deribit__get_ticker per leg for mark_price, mark_iv and greeks (delta, vega); (3) reads index_price off the same ticker for underlying spot; (4) aggregates net structure mark + net delta + net vega; (5) presents a multi-leg confirmation block showing per-leg references in BTC, since a coin-margined Deribit option is quoted in its own coin, plus the underlying spot; (6) waits for explicit yes before invoking POST /v2/drfq/rfqs/ with venue=DBT.",
+      "assertions": [
+        "Response resolves BOTH option instrument_ids via GET /v2/drfq/instruments/ with venue=DBT",
+        "Response uses Deribit option naming WITHOUT the -USD- infix (e.g. BTC-8MAY26-STRIKE-C, NOT BTC-USD-8MAY26-...)",
+        "Response calls deribit__get_ticker (or web_fetch to deribit.com public ticker) for per-leg mark_price, mark_iv and greeks \u2014 NOT a Paradex source",
+        "Response takes underlying spot from index_price on the leg's own ticker rather than fetching another instrument",
+        "Confirmation block shows per-leg prices in BTC, since a coin-margined Deribit option is quoted in its own coin",
+        "Final POST /v2/drfq/rfqs/ call uses venue=DBT and two legs (call + put at same strike for a straddle)",
+        "Response waits for explicit user confirmation before sending POST /v2/drfq/rfqs/"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "send a Bybit BTC perp block RFQ for 200 BTC",
+      "expected_output": "An out-of-scope refusal targeting Bybit (venue=BYB), which is not in this skill's venue scope today. The skill explicitly supports PRDX (Paradex, primary) and DBT (Deribit). The response should explain that adding Bybit is a follow-up that requires appending a section to references/venues.md, and offer to (a) escalate the request, (b) send the same block as a Paradex-settled (venue=PRDX) RFQ, or (c) send it on Deribit if the user prefers. Does NOT invoke POST /v2/drfq/rfqs/ with venue=BYB.",
+      "assertions": [
+        "Response identifies venue=BYB as out of scope at this skill version",
+        "Response does NOT invoke POST /v2/drfq/rfqs/ with venue=BYB",
+        "Response mentions that PRDX and DBT are the supported venues today",
+        "Response either offers an alternative venue (PRDX or DBT) or notes Bybit as a follow-up"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "send a BTC 8MAY26 90/80 risk reversal RFQ on Paradex, 100 contracts, LP1 and LP2",
+      "expected_output": "A taker option RFQ flow that: (1) resolves both option ids via GET /v2/drfq/instruments/(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-8MAY26-90000-C\") and the matching 80000-P; (2) pulls the Paradex public market-summary endpoint (web_fetch) for each option (mark_price, mark_iv and delta, with vega under greeks) and for BTC-USD-PERP (spot); (3) computes net structure mark + net delta + net vega; (4) presents a multi-leg confirmation block listing legs with their ids and per-leg references; (5) waits for explicit yes before invoking POST /v2/drfq/rfqs/ with venue=PRDX and two legs.",
+      "assertions": [
+        "Response resolves BOTH option instrument_ids via GET /v2/drfq/instruments/ with venue=PRDX",
+        "Response pulls the Paradex public market-summary endpoint (web_fetch, not the BBO endpoint for the options) to get mark_price/mark_iv/greeks per leg",
+        "Response also pulls the underlying BTC-USD-PERP mark for spot reference",
+        "Confirmation block shows per-leg mark, implied vol, delta and vega and an aggregated structure mark / net delta",
+        "Final POST /v2/drfq/rfqs/ call uses venue=PRDX and two legs with the correct sides (+call -put for a risk reversal)",
+        "Response waits for explicit user confirmation before sending POST /v2/drfq/rfqs/"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "send a block RFQ to buy 500 BTC perp on Paradex",
+      "expected_output": "A taker RFQ-build flow where the user named NO specific desks, so the RFQ must reach ALL LP-eligible Paradex (PRDX) liquidity providers by default \u2014 resolved explicitly, not via a hand-picked subset. The flow: (1) resolves the instrument_id via GET /v2/drfq/instruments/(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-PERP\"); (2) calls GET /v2/drfq/counterparties/ and PAGES THROUGH THE FULL result (following the next cursor token, filters carried, not stopping at page 1), then filters to the desks flagged LP-eligible for PRDX; (3) assembles a POST /v2/drfq/rfqs/ call with venue=PRDX, a single BUY leg, quantity=500, and counterparties set to that explicit LP list, and stopping with an explanation if the counterparty lookup fails, because Paradigm refuses an empty counterparties list; (4) pulls the Paradex public BBO / orderbook (web_fetch) for fair-value reference; (5) presents a confirmation block whose counterparties line reads as all prime PRDX LPs (e.g. 'all N PRDX LPs') and waits for explicit yes; (6) includes a data-source trace.",
+      "assertions": [
+        "Response resolves the instrument via GET /v2/drfq/instruments/ with venue=PRDX and venue_instrument_name=BTC-USD-PERP",
+        "Because the user named no desks, the flow resolves the LP set via GET /v2/drfq/counterparties/, PAGING THROUGH ALL results (not just page 1), and filters to LP desks eligible for PRDX",
+        "The POST /v2/drfq/rfqs/ sends to that explicit full LP list (an empty list is refused by Paradigm, so a failed lookup stops the flow)",
+        "Response does NOT invent or hard-code a narrowed directed subset (e.g. LP1, LP2) when the user named no counterparties",
+        "Response pulls Paradex book data via the Paradex public BBO / orderbook endpoints (web_fetch) for fair-value reference",
+        "Confirmation block shows the counterparties as all PRDX LPs (e.g. 'all N PRDX LPs') and waits for explicit yes before invoking POST /v2/drfq/rfqs/",
+        "Response does not echo either Paradigm credential"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "I just sent rfq_77 on Paradex \u2014 show me the quotes as they come in",
+      "expected_output": "A taker quote-watching flow that streams quotes live rather than waiting for the auction to close. The flow: (1) polls GET /v2/drfq/rfqs/{id}/ with /bbo/ and /orders/(rfq_id=\"rfq_77\") every 1-3 seconds; (2) surfaces each NEW or improved maker quote the moment it appears, instead of collecting all quotes and only then showing them; (3) maintains a single compact live ladder updated in place \u2014 best price first (ties: earlier timestamp), each row showing desk, side, price, size, age, and offset vs fair value; (4) folds in a fair-value benchmark per references/venues.md (Paradex public BBO/orderbook via web_fetch) for the offset column; (5) does NOT auto-cross \u2014 it keeps streaming until the user decides to cross, cancels, or the RFQ expires.",
+      "assertions": [
+        "Response polls GET /v2/drfq/rfqs/{id}/ with /bbo/ and /orders/ for rfq_77 on a 1-3 second cadence to read resting quotes",
+        "Response surfaces quotes incrementally as they arrive and explicitly does NOT wait to collect all quotes before showing any",
+        "Response maintains a compact live ladder (best price first) with desk/side/price/size/age and an offset-vs-fair column, updated in place",
+        "Response benchmarks against a Paradex fair-value source (the public BBO / orderbook via web_fetch) for the offset",
+        "Response does NOT auto-cross or place an order without explicit user confirmation; it keeps streaming until the user crosses, cancels, or the RFQ expires"
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "send a bearish BTC 8MAY26 risk reversal on Paradex \u2014 short the 90000 call, long the 80000 put \u2014 100 contracts, to LP1 and LP2",
+      "expected_output": "A taker option RFQ flow that expresses the user's desired (bearish) exposure directly in the leg sides and then buys it on the cross, rather than flipping the legs to a 'short' orientation AND selling on the cross (which would double-negate back to long). The flow: (1) resolves both option ids via GET /v2/drfq/instruments/(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-8MAY26-90000-C\") and the matching 80000-P; (2) configures legs to encode the stated exposure \u2014 SELL the 90000 call, BUY the 80000 put; (3) pulls the Paradex public market-summary endpoint (web_fetch) per option (mark_price, mark_iv and delta, with vega under greeks) and BTC-USD-PERP for spot; (4) aggregates net structure mark + net delta + net vega; (5) presents a confirmation block whose net direction reads as short/bearish the structure (not a restatement of leg sides) and waits for explicit yes before invoking POST /v2/drfq/rfqs/ with venue=PRDX, two legs, quantity=100, counterparties=[\"LP1\",\"LP2\"]. The create body carries no package side, so the exposure is in the leg sides and a BUY on the cross holds it.",
+      "assertions": [
+        "Response resolves BOTH option instrument_ids via GET /v2/drfq/instruments/ with venue=PRDX",
+        "Response encodes the bearish exposure in the leg sides \u2014 SELL the 90000 call and BUY the 80000 put",
+        "Response submits the configured package as a BUY (positive quantity 100), NOT as a SELL",
+        "Response does NOT both invert every leg to a short orientation AND submit a SELL (no double-negation back to long)",
+        "Response pulls the Paradex public market-summary endpoint (web_fetch) per leg plus BTC-USD-PERP spot for fair-value reference",
+        "Response presents a confirmation block whose net direction reads as short/bearish the structure and waits for explicit yes before invoking POST /v2/drfq/rfqs/, and gates the cross separately with the side on screen"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "short a BTC 8MAY26 90000/95000 call spread on Paradex, 100 contracts, LP1 and LP2",
+      "expected_output": "A taker option RFQ flow that handles a CONVENTIONAL structure the user wants to short: it builds the textbook (debit / long) call spread orientation in the legs and then sells it on the cross to be short it \u2014 it does NOT invert the leg sides AND sell on the cross (that would double-negate back to long the call spread). The flow: (1) resolves both option ids via GET /v2/drfq/instruments/(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-8MAY26-90000-C\") and the 95000-C; (2) configures the conventional debit call spread \u2014 BUY the 90000 call (lower strike) + SELL the 95000 call (higher strike); (3) pulls the Paradex public market-summary endpoint (web_fetch) per leg + BTC-USD-PERP spot; (4) aggregates net structure mark + greeks; (5) presents a confirmation block whose net direction reads as short the call spread and waits for explicit yes before invoking POST /v2/drfq/rfqs/ with venue=PRDX, two legs, quantity=100, counterparties=[\"LP1\",\"LP2\"]. The create body carries no package side, so the legs stay conventional and the cross sells it.",
+      "assertions": [
+        "Response resolves BOTH option instrument_ids via GET /v2/drfq/instruments/ with venue=PRDX (90000-C and 95000-C)",
+        "Response builds the conventional debit call spread in the legs \u2014 BUY the lower-strike 90000 call and SELL the higher-strike 95000 call",
+        "Response keeps the conventional legs and sells on the cross to be short the call spread (quantity 100)",
+        "Response does NOT invert the leg sides AND submit a SELL (no double-negation back to long the call spread)",
+        "Response pulls the Paradex public market-summary endpoint (web_fetch) per leg plus BTC-USD-PERP spot for fair-value reference",
+        "Response presents a confirmation block whose net direction reads as short the call spread and waits for explicit yes before invoking POST /v2/drfq/rfqs/, and gates the cross separately showing side SELL"
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "send a Paradigm block RFQ to sell 500 BTC perp on Paradex",
+      "expected_output": "A taker RFQ-build flow for a short OUTRIGHT perp, where 'short' is simply a single leg with side=SELL \u2014 there is no structure to configure-then-buy, so the skill must NOT add any extra package-direction flip. The flow: (1) resolves the instrument_id via GET /v2/drfq/instruments/(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-PERP\"); (2) resolves the default counterparties by calling GET /v2/drfq/counterparties/, paging through the FULL paginated result and filtering to LP desks eligible for PRDX (the user named no desks); (3) assembles a POST /v2/drfq/rfqs/ call with venue=PRDX, a single leg (ratio=1, side=SELL), quantity=500, and counterparties set to that explicit LP list; (4) pulls Paradex BBO + orderbook via the Paradex public REST API (web_fetch) for fair-value reference and the walked-bid proceeds for 500 BTC; (5) presents a confirmation block (action line: SELL 500 BTC, counterparties as all PRDX LPs) and waits for explicit yes; (6) includes a data-source trace.",
+      "assertions": [
+        "Response resolves the instrument via GET /v2/drfq/instruments/ with venue=PRDX and venue_instrument_name=BTC-USD-PERP",
+        "Response assembles a POST /v2/drfq/rfqs/ call with a SINGLE leg, side=SELL, quantity=500",
+        "Response does NOT apply any spurious structure inversion or extra package-direction flip \u2014 short outright is just one SELL leg",
+        "Because the user named no desks, the flow resolves the full LP set via GET /v2/drfq/counterparties/ (paging through all results, not page 1) and sends to all LP desks eligible for PRDX \u2014 not a hard-coded subset",
+        "Response pulls Paradex book data via the Paradex public BBO / orderbook endpoints (web_fetch) for fair-value reference",
+        "Response presents a confirmation block and waits for explicit yes before invoking POST /v2/drfq/rfqs/"
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "my rfq_99 on Paradex just got rejected \u2014 why isn't it filling?",
+      "expected_output": "A failure-diagnosis flow that recognises the RFQ is in a terminal FAILURE state and must STOP waiting for fills rather than continue polling. The flow: (1) reads terminal state via GET /v2/drfq/rfqs/{id}/ with /bbo/ and /orders/ / GET /v2/drfq/rfqs/ (RFQ state + closed_reason) and GET /v2/drfq/orders/ / GET /v2/drfq/trades/ (order terminal state, BlockTrade state=REJECTED); (2) confirms this is a non-fill terminal (rejected / EXPIRED / EXECUTION_LIMIT) and explicitly stops the fill-poll loop \u2014 it does NOT keep waiting for a fill that will never arrive; (3) surfaces the failure with maximum detail, quoting the raw closed_reason / order state / BlockTrade state plus any error / reason / message / code / request-id fields in the payload verbatim; (4) explains what failed and offers a concrete next step (re-send, widen counterparties, adjust price). It does NOT silently continue polling GET /v2/drfq/trades/.",
+      "assertions": [
+        "Response reads the RFQ/order/trade terminal state (closed_reason, order state, BlockTrade state=REJECTED) rather than assuming the RFQ is still live",
+        "Response recognises this as a terminal FAILURE and STOPS polling for fills \u2014 it does not keep waiting for a fill that will never come",
+        "Response surfaces the rejection with maximum available detail, quoting the raw reason / code / message fields verbatim rather than a generic 'it failed'",
+        "Response offers a concrete next step (e.g. re-send, widen counterparties, adjust price)",
+        "Response does NOT echo either Paradigm credential"
+      ]
+    },
+    {
+      "id": 18,
+      "prompt": "send a 500 BTC perp block RFQ on Paradex to all the LPs",
+      "expected_output": "A taker RFQ-build flow that resolves the FULL LP set by paginating the counterparties tool. The flow: (1) resolves the instrument via GET /v2/drfq/instruments/(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-PERP\"); (2) calls GET /v2/drfq/counterparties/ and PAGES THROUGH EVERY result \u2014 following the next cursor token, filters carried until exhausted, NOT stopping at the first page \u2014 then filters to LP desks eligible for PRDX; (3) sends POST /v2/drfq/rfqs/ with counterparties set to the complete LP list and surfaces the resolved count (e.g. 'all N PRDX LPs'); (4) pulls the Paradex public BBO/orderbook (web_fetch) for fair value; (5) presents a confirmation block and waits for explicit yes. The key behaviour under test is that the agent does NOT truncate the LP list to a single page.",
+      "assertions": [
+        "Response calls GET /v2/drfq/counterparties/ and pages through the ENTIRE paginated result (the next cursor token, filters carried) rather than using only the first page",
+        "Response filters the resolved desks to those flagged LP-eligible for PRDX",
+        "The POST /v2/drfq/rfqs/ sends to the full resolved LP list, and the confirmation surfaces the count (e.g. 'all N PRDX LPs')",
+        "Response pulls Paradex book data via the Paradex public BBO / orderbook endpoints (web_fetch) for fair-value reference",
+        "Response presents a confirmation block and waits for explicit yes before invoking POST /v2/drfq/rfqs/"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    {
+      "query": "send a bearish BTC 8MAY26 risk reversal on Paradex, short the call long the put",
+      "should_trigger": true
+    },
+    {
+      "query": "short a BTC 8MAY26 90000/95000 call spread on Paradex, 100 contracts",
+      "should_trigger": true
+    },
+    {
+      "query": "send a Paradigm block RFQ to sell 500 BTC perp on Paradex",
+      "should_trigger": true
+    },
+    {
+      "query": "send a Paradex block RFQ for 500 BTC perp",
+      "should_trigger": true
+    },
+    {
+      "query": "source liquidity for an ETH-USD-PERP block, 200 ETH",
+      "should_trigger": true
+    },
+    {
+      "query": "quote rfq_12345 at 2 bps over the Paradex mid",
+      "should_trigger": true
+    },
+    {
+      "query": "hit the best bid on this Paradigm RFQ",
+      "should_trigger": true
+    },
+    {
+      "query": "cancel rfq_12345",
+      "should_trigger": true
+    },
+    {
+      "query": "cancel all my open orders right now",
+      "should_trigger": true
+    },
+    {
+      "query": "create a BTC perp calendar spread RFQ",
+      "should_trigger": true
+    },
+    {
+      "query": "send a BTC 8MAY26 90/80 risk reversal RFQ on Paradex",
+      "should_trigger": true
+    },
+    {
+      "query": "Deribit BTC straddle, 100 contracts, send the RFQ",
+      "should_trigger": true
+    },
+    {
+      "query": "quote rfq_X at +0.5 vol over the Paradex mark IV",
+      "should_trigger": true
+    },
+    {
+      "query": "quote rfq_X at +0.5 vol over the Deribit mark IV",
+      "should_trigger": true
+    },
+    {
+      "query": "how do I install the Paradigm MCP",
+      "should_trigger": true
+    },
+    {
+      "query": "adjust price 96465 then send",
+      "should_trigger": true
+    },
+    {
+      "query": "send a block RFQ to buy 500 BTC perp on Paradex",
+      "should_trigger": true
+    },
+    {
+      "query": "show me the quotes on rfq_77 as they come in",
+      "should_trigger": true
+    },
+    {
+      "query": "my rfq_99 on Paradex just got rejected \u2014 why isn't it filling?",
+      "should_trigger": true
+    },
+    {
+      "query": "send a 500 BTC perp block RFQ on Paradex to all the LPs",
+      "should_trigger": true
+    },
+    {
+      "query": "analyze this filled block trade JSON",
+      "should_trigger": false
+    },
+    {
+      "query": "show me last week's biggest Paradigm RFQs",
+      "should_trigger": false
+    },
+    {
+      "query": "place a market order on Paradex for BTC perp",
+      "should_trigger": false
+    },
+    {
+      "query": "what's the BTC funding rate",
+      "should_trigger": false
+    },
+    {
+      "query": "how's my margin utilization",
+      "should_trigger": false
+    }
+  ],
+  "trigger_evals_validation": [
+    {
+      "query": "I want to source liquidity for a big BTC perp block on Paradex",
+      "should_trigger": true
+    },
+    {
+      "query": "price an incoming Paradigm RFQ on ETH-USD-PERP with 1 bp edge",
+      "should_trigger": true
+    },
+    {
+      "query": "cross to execute on the top quote \u2014 Paradex settle",
+      "should_trigger": true
+    },
+    {
+      "query": "benchmark this fill I got on Paradigm",
+      "should_trigger": false
+    },
+    {
+      "query": "what historical blocks traded in March",
+      "should_trigger": false
+    },
+    {
+      "query": "rebalance my Paradex perp position on the order book",
+      "should_trigger": false
+    }
+  ]
+}

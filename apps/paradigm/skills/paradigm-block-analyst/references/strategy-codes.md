@@ -1,0 +1,34 @@
+# Strategy Codes — Paradigm Block Analyst
+
+Maps `strategy_code` field values from the Paradigm block trade JSON to structure types.
+
+| Code | Name | Description |
+|---|---|---|
+| `CL` | Outright Call | Single call option leg |
+| `PL` | Outright Put | Single put option leg |
+| `SN` | Strangle | OTM call + OTM put, same expiry, different strikes |
+| `ST` | Straddle | ATM call + ATM put, same expiry, same strike |
+| `BF` | Butterfly | Three-strike spread (long wings, short body or vice versa); displayed as Call/Put/Iron Butterfly per leg composition |
+| `CO` | Condor | Four-strike spread; wider wings than butterfly |
+| `CA` | Calendar | Same strike, different expiries (long back / short front or reverse) |
+| `CCal` | Call Calendar | Calendar built from calls (tape `DESCRIPTION` prefix `CCal`) |
+| `PCal` | Put Calendar | Calendar built from puts (tape `DESCRIPTION` prefix `PCal`) |
+| `RR` | Risk Reversal | Long OTM call + short OTM put (or reverse), same expiry |
+| `CM` | Custom | Arbitrary multi-leg combination not covered by named structures (DRFQ code `CM`) |
+
+**Calendar direction (tape `DESCRIPTION` lists near expiry first, far second):**
+- `SIDE=BUY` → **long calendar**: long far / short near, pays debit, long vega, short near-gamma.
+- `SIDE=SELL` → **short (reverse) calendar**: short far / long near, receives credit, short vega,
+  long near-gamma, pays theta. Sanity-check against the `MARK_OFFSET` sign (credit ⇒ Seller).
+
+Resolve direction once from `SIDE` + this convention; do not re-derive it multiple ways.
+
+## Perp Combo Legs
+
+When a tape row's `PRODUCT` says `PERPETUAL` (e.g. `BTC PERPETUAL - DBT`,
+`ETH PERPETUAL - DBT`), the trade contains one or more perpetual futures legs
+alongside option legs.
+
+- Perp delta = ±1.0 per contract (sign from taker direction)
+- Use `BTC-PERPETUAL` / `ETH-PERPETUAL` instrument names on Deribit for mark price
+- Include perp leg in net delta calculation

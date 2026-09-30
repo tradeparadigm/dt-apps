@@ -1,0 +1,216 @@
+# Venues — per-venue cookbook for paradigm-rfq-trader
+
+The skill body is **venue-agnostic**. This file is the per-venue
+recipe: instrument-name format, fair-value sources, settlement
+verification, and venue-specific quirks. Adding a new DRFQv2 venue
+means appending a section here in the same shape — the SKILL.md
+workflow stays the same.
+
+Currently in scope: **PRDX (Paradex, primary)** and **DBT (Deribit)**.
+
+Each venue section answers four questions, in this order:
+
+1. **Naming** — how venue-native instrument names look (for the
+   `GET /v2/drfq/instruments/` lookup).
+2. **Fair value** — which tool(s) to call to benchmark a quote or
+   ranking, by `instrument.kind`.
+3. **Edge syntax** — what "+X over mark" means on this venue.
+4. **Settlement check** — how to verify the cleared trade landed.
+
+Plus any venue-specific quirks at the end.
+
+---
+
+## PRDX — Paradex (primary focus)
+
+### Naming
+
+| Product | Format | Example |
+|---|---|---|
+| Perpetual | `<BASE>-USD-PERP` | `BTC-USD-PERP`, `ETH-USD-PERP` |
+| Option | `<BASE>-USD-<DDMMMYY>-<STRIKE>-<C\|P>` | `BTC-USD-8MAY26-90000-C` |
+
+Paradex lists no dated futures today, only perpetuals, options and two spot
+markets, so resolve any dated instrument through
+`GET /v2/drfq/instruments/` rather than assembling a name for one.
+
+Day **not** zero-padded. Month uppercase 3-letter. `-USD-` infix is
+the Paradex distinguisher vs Deribit.
+
+### Counterparties / LP coverage
+
+Default to every LP eligible for PRDX, named explicitly. Paradigm has no open
+broadcast on this path: an empty `counterparties` list is a 400.
+
+1. Call `GET /v2/drfq/counterparties/?venues=PRDX&group=LP` and **page through
+   the entire result**. The answer is `{count, next, results}`. `next` is a
+   bare cursor token rather than a URL, so page two is
+   `?venues=PRDX&group=LP&cursor=<token>`. Carry the filters on every page: the
+   cursor holds an offset only, so a bare `?cursor=` refilters against every
+   desk and returns page one. There is no `has_more`. Stopping at page 1
+   silently drops LPs, which is what "not all LPs got the RFQ" means.
+2. Keep the desks whose `groups` carry `LP` and whose `venues` carry `PRDX`.
+   Those two lists are what the endpoint returns per desk. Pass their
+   `desk_name` values as `counterparties` to `POST /v2/drfq/rfqs/` and surface
+   the count (`all N PRDX LPs`). The desk name IS the ticker; nothing returns
+   a key called `ticker`.
+
+Narrow to a directed subset only when the user names specific desks.
+
+When the lookup fails or comes back empty, stop and ask which desks to send
+to. An empty list does not broadcast, it errors.
+
+### Fair value
+
+Paradex exposes a public REST API, so this needs no credential.
+Base: `https://api.prod.paradex.trade/v1`. Pull fair value with
+`web_fetch`:
+
+**`kind = FUTURE` (a perpetual, since Paradex lists no dated futures):**
+
+- `web_fetch .../bbo/<market>` → best bid/ask.
+- `web_fetch .../markets/summary?market=<market>` → mark + funding +
+  24h stats.
+- `web_fetch .../orderbook/<market>` → walk the book for the full RFQ
+  size. This is the implicit "what would I get on-screen?" benchmark
+  that every RFQ price should be compared against.
+
+**`kind = OPTION`:**
+
+- `web_fetch .../markets/summary?market=<market>` per leg. Read `mark_price`,
+  `mark_iv` and `delta` at the top level, and `vega` from the nested `greeks`
+  object, which also carries `delta` and `gamma`.
+- **`mark_iv` is a decimal here**: `0.52153206` means 52.15%. Deribit returns
+  the same quantity as `47.74`. Read the unit before you do arithmetic on it.
+- Pull `<BASE>-USD-PERP` mark for the underlying spot.
+- Aggregate for multi-leg: `structure_mark = Σ (ratio × leg_mark ×
+  side_sign)`, net delta = Σ (ratio × δ × side_sign), net vega
+  similar.
+- BS / IV math itself: use standard Black-Scholes greek formulas.
+
+### Edge syntax
+
+- "Y bps over mid" → `price = mid × (1 + Y/10000)` (ask) or
+  `× (1 - Y/10000)` (bid). Mid = `(best_bid + best_ask) / 2` from
+  the public `.../bbo/<market>` endpoint.
+- "Tighten the BBO by Z bps" → quote inside the current Paradex
+  best. Flag if it implies a negative spread.
+- "X vol over mark IV" (options only) → bump per-leg IV by X **vol points**,
+  which is `X / 100` on Paradex's decimal `mark_iv`. Adding 5 to `0.52` quotes
+  552 vol. Reprice via BS and re-aggregate.
+
+### Settlement check
+
+No Paradex account integration at this skill version. After the cross:
+
+- Surface `trade_id` from `GET /v2/drfq/trades/`.
+- Tell the user the block will appear on their Paradex account and
+  to verify there directly.
+
+### Quirks
+
+- Every market is LINEAR. `margin_kind` never disambiguates two markets on
+  one strike here, because there is no INVERSE variant to tell apart.
+
+---
+
+## DBT — Deribit
+
+### Naming
+
+| Product | Format | Example |
+|---|---|---|
+| Option | `<BASE>-<DDMMMYY>-<STRIKE>-<C\|P>` | `BTC-8MAY26-90000-C`, `ETH-10MAY26-2375-P` |
+| Future | `<BASE>-<DDMMMYY>` | `BTC-27JUN26` |
+| Perpetual | `<BASE>-PERPETUAL` | `BTC-PERPETUAL` |
+| USDC-margined | `<BASE>_USDC-…`, same tail | `SOL_USDC-31JUL26-88-C`, `SOL_USDC-PERPETUAL` |
+
+Day **not** zero-padded (same convention as Paradex). No `-USD-`
+infix.
+
+The prefix decides the settlement currency. `_USDC` settles in USDC, the
+plain name settles in the coin, and BTC and ETH list both: `BTC-29SEP26-74000-C`
+and `BTC_USDC-29SEP26-74000-C` are two live markets on one strike. Every other
+asset lists only the `_USDC` form, so `SOL-26JUN26-200-C` answers `instrument
+not found` and `SOL-PERPETUAL` resolves to an archived market while the open
+one is `SOL_USDC-PERPETUAL`.
+
+So a wrong prefix on SOL fails at the lookup, and a wrong prefix on BTC
+resolves and settles the block in a currency the user did not ask for.
+Resolve the name through `GET /v2/drfq/instruments/` rather than assembling
+it, and treat an empty ticker as a wrong name before treating it as no data.
+
+### Fair value
+
+**`kind = OPTION` (the dominant Deribit RFQ product):**
+
+- `web_fetch`
+  `https://www.deribit.com/api/v2/public/ticker?instrument_name=...` per leg.
+  Returns `mark_price`, `best_bid_price`, `best_ask_price`, `mark_iv`,
+  `bid_iv`, `ask_iv`, `open_interest`, and the greeks NESTED under `greeks`
+  (`delta`, `gamma`, `vega`, `theta`, `rho`). There is no top-level `mark`,
+  `bid`, `ask` or `delta`. Public, so it needs no credential.
+- A `deribit__get_ticker` tool returns the same payload. Use it when the host
+  has one.
+- Spot for the option's own base is `index_price` in the same payload, so
+  there is no second instrument to fetch. `underlying_price` beside it is the
+  forward to that expiry, 5% above the index on a long-dated BTC put, so it is
+  the wrong number for a dollar notional.
+- A SOL option returns 119.26 where a BTC one returns 83952.5, and a BTC index
+  under a SOL option puts the notional out by orders of magnitude.
+- When you do want the perpetual itself, it is `BTC-PERPETUAL` or
+  `ETH-PERPETUAL` for those two and `<BASE>_USDC-PERPETUAL` for the rest.
+  Five of the seven bases with open options are in that second group.
+- Aggregate exactly like the PRDX option case.
+
+**`kind = FUTURE` (perp / dated future):**
+
+- The same public ticker endpoint for the instrument. Returns mark and BBO.
+- Cross-venue check vs Paradex via the public `.../bbo/<market>`
+  endpoint is optional; Deribit's own book is the relevant benchmark
+  since the trade settles there.
+
+### Edge syntax
+
+- "Y bps over mark" → `price = mark × (1 ± Y/10000)`. "Mark" here
+  is the ticker's `mark_price`, in the option's own coin when it is
+  coin-margined and in USD when it is USDC-margined.
+- "X vol over mark IV" → bump per-leg IV by X, added straight to Deribit's
+  percentage `mark_iv` (e.g. `47.74`), reprice via BS,
+  re-aggregate.
+- "Tighten the BBO" → quote inside Deribit's current best bid/ask.
+
+### Settlement check
+
+This skill reads no Deribit account. After the cross:
+
+- Surface `trade_id` from `GET /v2/drfq/trades/`.
+- Tell the user the block will appear on their Deribit account and
+  to verify there directly.
+
+### Quirks
+
+- A coin-margined Deribit option is priced in **BTC or ETH terms**, not USD.
+  When surfacing dollar notional, multiply by `index_price` from the leg's own
+  ticker. A USDC-margined one is already in USD.
+- `mark_iv` is in **percentage** form here (`47.74` = 47.74%). Paradex returns
+  the same quantity as a decimal (`0.4774`), so a vol bump is a straight
+  addition on Deribit and a division by 100 first on Paradex.
+- For perps/futures on Deribit, prices ARE in USD.
+
+---
+
+## Adding a new venue (future scope)
+
+To extend the skill to `BYB` (Bybit), `BIT` (Bit.com), or any
+future DRFQv2 venue:
+
+1. Append a section to this file in the same four-part shape.
+2. If the venue needs a new fair-value source, list
+   it under "Compatibility" in `SKILL.md`.
+3. No changes to the SKILL.md workflow body — Step 2/3a/3b/4 all
+   delegate to this file.
+
+Strategy codes and product kinds (`OPTION` / `FUTURE` / `LOAN` /
+`SPOT`) are venue-independent — see
+[`instruments.md`](instruments.md) for the full strategy-code table.

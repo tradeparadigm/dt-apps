@@ -1,0 +1,113 @@
+# Paradigm.
+#
+# TWO CREDENTIALS AT ONCE. Every authenticated Paradigm call carries three
+# headers: an Authorization bearer, a timestamp, and an HMAC-SHA256 signature
+# over the request. The bearer and the signing key are separate secrets and both
+# are required on every call, so exclusive_credential_types is false.
+#
+# OKX and Binance are already in this group, and OKX needs three at once. What
+# the field separates is whether a venue's credential types are alternatives or
+# halves: Paradex, Derive and Bybit set it true because theirs are alternatives,
+# and enrolling one of those replaces the other.
+#
+# Two credentials on one host works because the proxy applies every entry whose
+# rule matches, each with its own placeholder, up to eight signatures per
+# request. What breaks is a credential whose rule matches a request the agent
+# did not mean it for, since the matching rule is also the rule that REQUIRES
+# the placeholder. Hence the narrowing below.
+
+schema_version: 1
+
+id: paradigm
+version: 1.0.0
+name: Paradigm
+blurb: Trade institutional blocks and analyse the tape, with keys your agent never sees.
+
+# Read-write: the RFQ surface creates and cancels quotes. Beta: nothing on
+# Paradigm has been through the credential proxy before this.
+access: read-write
+maturity: beta
+
+# EVERY ACCOUNT GETS THIS WITHOUT ASKING. These skills reached every pod by a
+# git clone until now, so without this an account that never clicks Install
+# ends up with fewer skills than it had. Uninstalling keeps it uninstalled.
+default_install: true
+
+description: |
+  Paradigm is an institutional liquidity network for crypto derivatives.
+
+  Install this and your agent can call the DRFQv2 REST API through the
+  credential proxy, analyse a filled block against live venue data, query the
+  historical trade tape, and write an options flow recap. It also adds
+  Paradigm to the credentials form, so you enrol the two values Paradigm
+  issues without filling in the signing details by hand.
+
+  You need both credentials. The access key identifies the desk and the
+  signature proves the request, and we send both on every authenticated call.
+
+  The three data skills read market data from S3 using the permissions your
+  pod already has. Without those, they report an access error rather than a
+  result.
+
+environments:
+  - id: mainnet
+    label: Mainnet
+    host: api.prod.paradigm.trade
+  - id: testnet
+    label: Testnet
+    host: api.testnet.paradigm.trade
+
+# FALSE: these two are halves of one credential. See the header.
+exclusive_credential_types: false
+
+credential_types:
+  # The bearer. A string the venue compares, so the proxy forwards it and the
+  # agent never sees it.
+  - id: access-key
+    label: Access key
+    slug: access
+    secret_label: Access key
+    # NO DETAIL FIELDS. The signature identifies the desk, so a single-desk key
+    # needs nothing alongside it. A multi-desk key selects with a
+    # Paradigm-Account header, which the agent writes itself, so it needs no
+    # enrolment field either.
+    detail_fields: []
+    # NARROWED TO THE AUTHENTICATED SURFACE. Everything the skill calls is
+    # under /v2/drfq, all of it authenticated, and nothing public lives there.
+    # Leaving it unnarrowed would demand the placeholder on every request to
+    # this host, including ones that want no credential at all.
+    #
+    # No method narrowing: a listing is a GET, an RFQ is a POST and a cancel is
+    # a DELETE, and all three are authenticated.
+    routes:
+      - path: /v2/drfq/*
+    delivery:
+      mode: replace
+    summary: >-
+      Sets: the placeholder is swapped for the access key in any request
+      header, on every path under /v2/drfq.
+
+  # The signing key. Paradigm issues it base64-encoded and the HMAC is taken
+  # over the DECODED bytes, which is what key_encoding says. Guessing is not
+  # available: a printable secret whose length is a multiple of four is also
+  # valid base64 and decodes to unrelated bytes.
+  - id: signing-key
+    label: Signing key
+    slug: signing
+    secret_label: Signing key
+    detail_fields: []
+    routes:
+      - path: /v2/drfq/*
+    # match_headers names the one header the signature goes in. The default
+    # scans every header, and Paradigm has exactly one home for it, so naming
+    # it keeps the scan off headers that have no business being rewritten.
+    delivery:
+      mode: sign
+      scheme: hmac-sha256
+      encoding: base64
+      key_encoding: base64
+      match_headers: [Paradigm-API-Signature]
+    summary: >-
+      Sets: signing credential, HMAC-SHA256 over the base64-decoded key,
+      base64, substituted into the Paradigm-API-Signature header, on every path
+      under /v2/drfq.
