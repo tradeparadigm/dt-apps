@@ -75,7 +75,10 @@ for f in EVALS:
 # old world marks the correct behaviour as a failure. Matched as patterns, not
 # as fixed strings, so a respelling does not slip through.
 STALE = [
-    (r"paradigm_(?!trade|data|executions|rfq_tape)[a-z_]+", "an MCP tool name"),
+    # block_analyst and options_recap are slash commands, not tool names:
+    # OpenClaw turns a skill's hyphens into underscores to name its command.
+    (r"paradigm_(?!trade|data|executions|rfq_tape|block_analyst|options_recap)[a-z_]+",
+     "an MCP tool name"),
     # The same names shorn of their prefix. A rename pass that rewrote
     # paradigm_drfqv2_create_rfq to create_rfq left one of these behind, and
     # the prefixed pattern above cannot see it.
