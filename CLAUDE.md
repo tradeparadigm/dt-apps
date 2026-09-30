@@ -96,23 +96,13 @@ the call, and the venue names whatever it checks first — a signature on Bybit,
 `AGENTS.md` in dime-terminal carries this rule for every app; repeat it in a
 skill only where the venue makes it easy to get wrong.
 
-## A skill's command is its own name, never one we invented
+## Renaming a command means changing whatever sends it
 
-OpenClaw gives every user-invocable skill a slash command, and `user-invocable`
-defaults to true. The name comes from the skill's `name`, lowercased with every
-character outside `a-z0-9_` turned into an underscore and the result cut to 32
-characters (`sanitizeSkillCommandName`). So `paradigm-block-analyst` answers
-`/paradigm_block_analyst`, with underscores. The hyphenated spelling matches
-nothing; only `/skill paradigm-block-analyst` also works, because that lookup
-folds underscores back to hyphens.
-
-Write that string in the skill and nothing else. Two of ours described
-`/analyze` and `/recap`, which are registered nowhere — they worked because the
-model read the description and guessed. That guess gets worse with every skill
-added, and a second app describing the same verb leaves nothing to choose on.
-
-Whatever sends the command has to send the same string. For the block analyst
-that is the trade tape in mono (`ui/desktop/src/features/terminal/build-trade-prompt.ts`).
+The README says what a skill's command is and CI checks it. The half no checker
+here can see is the caller. The block analyst's command arrives from the trade
+tape in mono (`ui/desktop/src/features/terminal/build-trade-prompt.ts`), which
+this repository cannot read, so a rename that lands alone leaves that button
+sending a string nothing answers. Change both.
 
 ## Run it before merging
 
