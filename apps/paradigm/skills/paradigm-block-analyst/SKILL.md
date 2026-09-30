@@ -2,7 +2,7 @@
 name: paradigm-block-analyst
 description: >
   Cross-venue analysis of Paradigm RFQ block trades using live market data from
-  Deribit, OKX, and Bybit. Invoked as `/paradigm-analyze <rfq_id> <rfq description>`:
+  Deribit, OKX, and Bybit. Invoked as `/paradigm-block-analyst <rfq_id> <rfq description>`:
   resolves the rfq_id by searching the Paradigm trade tape via the
   paradigm-data-discovery skill (the daily execution partitions, keyed by
   RFQ_ID) for the cleared-block record, then fetches live marks, IVs, and
@@ -11,8 +11,8 @@ description: >
   reports how much of the structure traded over 24h / 7d / 30d and where else
   it printed, reads whether the flow moved the
   vol surface, and outputs a concise analysis. Use when
-  the user runs `/paradigm-analyze <rfq_id> ...`, pastes a Paradigm block trade JSON,
-  or asks to analyze, benchmark, or get market color on a Paradigm RFQ
+  the user runs `/paradigm-block-analyst <rfq_id> ...`, pastes a Paradigm
+  block trade JSON, or asks to analyze, benchmark, or get market color on a Paradigm RFQ
   execution. Covers outright calls/puts (CL/PL), strangles (SN), straddles (ST),
   butterflies (BF), condors (CO), calendars (CA), risk reversals (RR), covered
   calls, and custom multi-leg combos (CM). Also handles perp combos.
@@ -35,17 +35,19 @@ Bybit market data.
 
 ## Trigger
 
-Fire when the user runs `/paradigm-analyze <rfq_id> <rfq description>`, pastes a Paradigm
+Fire when the user runs `/paradigm-block-analyst <rfq_id> <rfq description>`,
+pastes a Paradigm
 block trade JSON object, or references a specific trade from the tape (e.g.
 "analyze this", "what's this trade doing", "benchmark the fill", "pull live
 greeks").
 
 ## Step 0 — Resolve the RFQ
 
-> **`/paradigm-analyze <rfq_id>` ALWAYS executes Step 0 tape resolution via
+> **`/paradigm-block-analyst <rfq_id>` ALWAYS executes Step 0 tape resolution via
 > `paradigm-data-discovery`. Absent injected block-trade context is NOT a stop
 > condition — the tape lookup is the PRIMARY path; injected context is only a
-> fallback. Never answer `/paradigm-analyze` from the `<rfq description>` string alone,
+> fallback. Never answer `/paradigm-block-analyst` from the `<rfq description>`
+> string alone,
 > and never claim "no context loaded" without first querying
 > the Paradigm trade tape (suffix-matched per
 > [`references/rfq-lookup.md`](references/rfq-lookup.md)).**
@@ -100,9 +102,10 @@ Steps 1–7 below are the **contract the script implements** and the **fallback*
 are unavailable (then follow them by hand — the manual tape recipe is in
 [`references/rfq-lookup.md`](references/rfq-lookup.md)). You normally never need them on the live path.
 
-The input is **`/paradigm-analyze <rfq_id> <rfq description>`**. Split it:
+The input is **`/paradigm-block-analyst <rfq_id> <rfq description>`**. Split it:
 
-- **`<rfq_id>`** — the first token after `/paradigm-analyze`. This is the authoritative
+- **`<rfq_id>`** — the first token after `/paradigm-block-analyst`. This is
+  the authoritative
   key. **Resolve it with the single combined tape read in
   [`references/rfq-lookup.md`](references/rfq-lookup.md)** — that one `exec`
   scans the tape **once** and returns BOTH the cleared block (`FILL`
@@ -407,7 +410,7 @@ total_pnl           = mark_pnl_per_unit × quantity × spot_price
 
 Only compute P&L when asked or when the trade was previously analyzed in session. **Otherwise do
 not do P&L math even in your reasoning** — no mark-to-close, no per-leg vol-move P&L attribution.
-On a fresh `/paradigm-analyze` the block has no P&L token, so computing it is pure wasted thinking time
+On a fresh `/paradigm-block-analyst` the block has no P&L token, so computing it is pure wasted thinking time
 (and on multi-leg it has overrun the output budget). Skip it entirely unless the user asks.
 
 ## Step 7 — Output Format

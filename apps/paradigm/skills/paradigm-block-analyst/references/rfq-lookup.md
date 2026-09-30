@@ -1,6 +1,6 @@
 # Resolve an RFQ by `rfq_id` — Paradigm trade tape via paradigm-data-discovery
 
-The block analyst's input is `/paradigm-analyze <rfq_id> <rfq description>`. The `rfq_id`
+The block analyst's input is `/paradigm-block-analyst <rfq_id> <rfq description>`. The `rfq_id`
 is the authoritative key. **Resolve it by searching the Paradigm trade tape** —
 this file is the complete, self-contained recipe (credentials need no bootstrap:
 DuckDB resolves the pod's IRSA identity itself, see the preamble below) for
