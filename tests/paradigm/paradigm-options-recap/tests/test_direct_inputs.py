@@ -753,3 +753,16 @@ def test_the_tape_tail_gap_states_a_fact_not_an_instruction():
     assert direct.tape_coverage_gap({"coverage_complete": True}) is None
     assert "last 1 min" in direct.tape_coverage_gap({"coverage_complete": False,
                                                          "coverage_shortfall_seconds": 12})
+
+
+def test_metadata_that_begins_mid_window_is_a_gap():
+    """metadata() returns the snapshot at or before the window start, so a
+    first snapshot after it means the early trades have nothing to value them
+    with. Every venue with a predecessor trips the other way round."""
+    late = direct.metadata_gap("Bybit", START + timedelta(minutes=30), START)
+    assert late is not None
+    assert "instrument metadata starts 2026-09-08 08:30Z" in late
+
+    assert direct.metadata_gap("Bybit", START - timedelta(days=60), START) is None
+    assert direct.metadata_gap("Bybit", START, START) is None
+    assert direct.metadata_gap("Bybit", None, START) is None
