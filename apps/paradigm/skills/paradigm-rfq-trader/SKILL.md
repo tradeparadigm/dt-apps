@@ -298,9 +298,13 @@ for the session; do not invent IDs.
    - With `is_taker_anonymous: true`, Paradigm needs at least three LPs. With
      fewer, either send `false` or add desks, and say which you did.
 
-   Then `POST /v2/drfq/rfqs/` with all six required fields. Capture `rfq_id`.
-   Show: id, venue, legs, quantity, counterparties (`all N PRDX LPs` or the
-   named desks), expiry.
+   Then gate it (Step 4) and, on `yes`, `POST /v2/drfq/rfqs/` with all six
+   required fields. Capture `rfq_id`. Show: id, venue, legs, quantity,
+   counterparties (`all N PRDX LPs` or the named desks), expiry.
+
+   The create asks for quotes and the cross is what trades, so both are
+   gated and they are two different blocks. The second is where the user
+   sees `side`, which is what decides long or short.
 2. **Stream quotes live** — every 1 to 3 s poll all three of
    `GET /v2/drfq/rfqs/{rfq_id}/`, `GET /v2/drfq/rfqs/{rfq_id}/bbo/` and
    `GET /v2/drfq/rfqs/{rfq_id}/orders/`. There is no composite call, so one
@@ -397,9 +401,9 @@ skill covers how to tell them apart.
 
 The block has two parts: (1) the **assembled call** — the exact method, path
 and body that will run on `yes`, fully resolved (integer `instrument_id`s,
-leg sides, `quantity`, `counterparties`, `venue`, `time_in_force`, and the
-desk when the key covers more than one); and (2) a one-line **fair-value**
-reference. Showing the assembled call is what
+leg sides, `quantity`, `counterparties`, `venue`, and the desk when the key
+covers more than one; on a cross, `rfq_id`, `side`, `price` and
+`time_in_force`); and (2) a one-line **fair-value** reference. Showing the assembled call is what
 "live-money confirmation" means — the user sees precisely what will be
 submitted. Assemble it *now*, before the gate; do not defer assembly to
 after `yes`.
@@ -462,6 +466,31 @@ Will call on yes:
   Underlying BTC-USD-PERP mark $83,923 · net structure mark $2,362 debit · net Δ −0.56
 [yes / no / adjust]
 ```
+
+The cross is a separate gate, and the one that fills. `side` is the field the
+user has to see, because it is what decides which way they end up holding the
+structure:
+
+```
+CONFIRM CROSS — MAINNET (CRED_PARADIGM_MAINNET_ACCESS) — taker
+BTC 8MAY26 90/95 call spread · PRDX · rfq_a1b2
+Will call on yes:
+  POST /v2/drfq/orders/
+  {"rfq_id": "rfq_a1b2",
+   "side": "SELL",                         # SELL = short the spread you built
+   "type": "LIMIT",
+   "time_in_force": "FILL_OR_KILL",
+   "price": "0.0042",
+   "quantity": "100",
+   "legs": [{"instrument_id": 50121, "ratio": 1, "side": "BUY"},    # 90000-C
+            {"instrument_id": 50177, "ratio": 1, "side": "SELL"}]}  # 95000-C
+SHORT the 90/95 call spread · Recd 0.0042 · 100x    ~$35.2K
+Fair: net mark 0.0040 · +2 bps above mark
+[yes / no / adjust]
+```
+
+Fill or kill means there is nothing to amend after `yes`, so the price and the
+side on screen are the ones that trade.
 
 **Responses:** `yes` → send the call. `no` → abort. `adjust <field>
 <value>` → re-render. Common adjust verbs:

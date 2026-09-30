@@ -172,7 +172,7 @@
         "Response submits the configured package as a BUY (positive quantity 100), NOT as a SELL",
         "Response does NOT both invert every leg to a short orientation AND submit a SELL (no double-negation back to long)",
         "Response pulls the Paradex public market-summary endpoint (web_fetch) per leg plus BTC-USD-PERP spot for fair-value reference",
-        "Response presents a confirmation block whose net direction reads as short/bearish the structure and waits for explicit yes before invoking POST /v2/drfq/rfqs/"
+        "Response presents a confirmation block whose net direction reads as short/bearish the structure and waits for explicit yes before invoking POST /v2/drfq/rfqs/, and gates the cross separately with the side on screen"
       ]
     },
     {
@@ -185,7 +185,7 @@
         "Response keeps the conventional legs and sells on the cross to be short the call spread (quantity 100)",
         "Response does NOT invert the leg sides AND submit a SELL (no double-negation back to long the call spread)",
         "Response pulls the Paradex public market-summary endpoint (web_fetch) per leg plus BTC-USD-PERP spot for fair-value reference",
-        "Response presents a confirmation block whose net direction reads as short the call spread and waits for explicit yes before invoking POST /v2/drfq/rfqs/"
+        "Response presents a confirmation block whose net direction reads as short the call spread and waits for explicit yes before invoking POST /v2/drfq/rfqs/, and gates the cross separately showing side SELL"
       ]
     },
     {
