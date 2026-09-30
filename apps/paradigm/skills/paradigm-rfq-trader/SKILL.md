@@ -146,8 +146,9 @@ them filters against every desk and hands you page one again. There is no
 
 **An RFQ body needs six fields and Paradigm refuses it without them.**
 `venue`, `legs`, `quantity`, `account_name`, `counterparties` and
-`is_taker_anonymous`. `state` has a server default of `OPEN`, and `label` is
-the only other optional one. Write enum values bare: `OPEN`, not
+`is_taker_anonymous`. `state` has a server default of `OPEN`; `label` and
+`max_price_deviation` are the other optional ones, and a non-positive
+deviation is refused because it would reject every quote. Write enum values bare: `OPEN`, not
 `RFQState.OPEN`, and `MAKER`, not `AuctionRole.MAKER`.
 
 **`counterparties` can never be empty.** Paradigm answers `At least one
@@ -227,39 +228,39 @@ ambiguous, ask.
 
 ### Direction — read before building `legs`
 
-Leg `side` values define the *structure*; the package you submit defines
-the *direction you hold it*. To go **long** a structure, configure the
-leg sides so the package IS the position the user wants and submit it as
-a **BUY** (positive quantity). Do **not** also flip every leg to a
-"short" orientation and then SELL — that double-negates back to long
-(the common bug).
+**A create body carries no package side.** `RFQCreateSerializer` takes
+`account_name`, `counterparties`, `is_taker_anonymous`, `legs`, `quantity`,
+`venue`, and optionally `label`, `state` and `max_price_deviation`. Direction
+lives in the leg sides, where `side` is required on every leg, and in the
+`side` you send when you cross at `POST /v2/drfq/orders/`.
 
-Use **SELL on the package only** when you built a *conventional /
-textbook* structure and the user wants its inverse — e.g. "short call
-spread" = build the conventional debit call spread (BUY lower call +
-SELL higher call), then SELL the package.
+So configure the leg sides to BE the position the user wants, and cross on
+the side that lifts or hits the quote you want. Do **not** flip every leg to a
+"short" orientation *and* cross on the opposite side: that double-negates back
+to long (the common bug).
+
+Where a structure has a conventional build, keep it and let the cross carry
+the inverse — "short call spread" is the conventional debit call spread in the
+legs (BUY lower call + SELL higher call), sold when you cross.
 
 - Bullish call spread → BUY lower-strike call + SELL higher-strike call,
-  submit **BUY**. "Short call spread" → same legs, submit **SELL**.
+  cross **BUY**. "Short call spread" → same legs, cross **SELL**.
 - Bearish put spread → BUY higher-strike put + SELL lower-strike put,
-  submit **BUY**.
-- Bullish risk reversal (e.g. 90/80) → BUY 90 call + SELL 80 put, submit
-  **BUY**. Bearish → SELL call + BUY put in the legs, submit **BUY**.
+  cross **BUY**.
+- Bullish risk reversal (e.g. 90/80) → BUY 90 call + SELL 80 put, cross
+  **BUY**. Bearish → SELL call + BUY put in the legs, cross **BUY**.
 - **Outright** (1 leg) → no structure to orient: short = a single leg
-  `side=SELL`; don't also flip a package direction.
+  `side=SELL`; don't also flip the cross.
 
 **Worked example — "short a 90000/95000 call spread"** (the textbook case
 the bug bites): the *conventional* structure is the debit call spread, so
-build it conventionally and short the **package**, never the legs.
+build it conventionally and sell it on the cross, never invert the legs.
 
 - legs: `BUY 90000-C` (lower strike) **+** `SELL 95000-C` (higher strike)
-- package: submit **SELL** to be short it.
-- Do **not** invert to `SELL 90000-C + BUY 95000-C` *and* submit SELL — that
+- cross: `side` SELL, to be short it.
+- Do **not** invert to `SELL 90000-C + BUY 95000-C` *and* cross SELL — that
   double-negates back to long the call spread. The lower strike is always
   the BUY leg in the conventional build.
-
-The cross `side` at `POST /v2/drfq/orders/` (Step 3a · 5) is a separate
-matching-mechanics concern — see there.
 
 If anything is ambiguous, ask before you call Paradigm.
 
