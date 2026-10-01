@@ -1,20 +1,17 @@
 ---
 name: paradex-structure-analyst
 description: >
-  Analysis of a Paradex options structure the user is CONSIDERING, not one
-  they have traded. Invoked as `/paradex_structure_analyst structure <product>
-  <n> legs`, which the Paradex order builder sends from its Analyze with DT
-  button, and the legs arrive as hidden context. Prices the structure at live
-  marks, says what it costs or collects to put on, draws the payoff, and
-  proposes changes the user can load straight back into the builder. Use when
-  the user asks what a structure costs, whether it is priced well, or what a
-  different strike or expiry would do. A trade that already filled belongs to
-  paradex-trade-analyst. Paradigm RFQ blocks belong to
+  Draws the payoff for a Paradex options structure the user is CONSIDERING,
+  not one they have traded. Invoked as `/paradex_structure_analyst structure
+  <product> <n> legs`, which the Paradex order builder sends from its Analyze
+  with DT button, and the legs arrive as hidden context. Draws the chart and
+  says what the structure costs, in one pass, with no venue reads. Use when
+  the user asks about a structure in the order builder. A trade that already
+  filled belongs to paradex-trade-analyst. Paradigm RFQ blocks belong to
   paradigm-block-analyst.
 compatibility: >
-  Reads public Paradex market data only, so it needs NO credential. Marks,
-  books and the instrument list are all public. Reports what it could not read
-  rather than estimating.
+  Reads nothing. Everything it needs arrives in the message, so it needs no
+  credential, no helper and no network.
 metadata:
   author: tradeparadigm
   version: "1.0"
@@ -22,36 +19,60 @@ metadata:
 
 # Paradex structure analyst
 
-Prices an options structure nobody has traded yet, and shows what it would
-pay.
+Draws the payoff for a structure the order builder is holding.
 
-## Input
+## The first answer is a take, not a drawing
+
+The user is looking at this payoff already. Drawing it back is worthless.
+Tell them what the trade IS and whether it is any good.
+
+Answer in ONE pass: no commands, no files, no API calls, no other skill.
+Everything below is in the message.
+
+Four or five lines, no headings, no chart:
+
+- What it is betting on, in plain words, and how far spot has to travel.
+  Breakeven minus spot, as a number and a percentage.
+- What it costs if nothing happens. The premium is the whole loss, and with
+  a near expiry most of it goes in hours rather than days — say so.
+- The one thing that would change your mind about it: the expiry is tomorrow,
+  the strike is far, the premium is a large share of the move you need.
+- End with a concrete alternative, named with its strikes. Not "consider a
+  spread" — "sell the 85000 against it and you halve the debit, capping you
+  at 1,000".
+
+Say what you would do. The user asked an expert, not a calculator.
+
+## What arrives
 
 `/paradex_structure_analyst structure <product> <n> legs`. The visible line
-is a label. The structure itself arrives as hidden context holding JSON: each
-leg's `optionType`, `side`, `strike`, `size`, `price` (the live mark, not a
-fill), `expiry` and `symbol`, plus the underlying's `spot` and
-`dropped_non_option_legs`.
+is a label. The structure is in the hidden context as JSON: each leg's
+`optionType`, `side`, `strike`, `size`, `price` (the live mark, not a fill),
+`expiry` and `symbol`, plus the underlying's `spot` and `nearby_strikes`,
+which are priced and ready to use.
 
-`symbol` is the market the order builder already resolved, so Step 4 can send
-it straight back without a lookup. A leg the builder could not name arrives
-without the field.
+`symbol` is the market the order builder already resolved. Pass it through
+when you draw. A leg the builder could not name arrives without the field.
 
-Nothing here has been traded. There is no fill to resolve, no position behind
-it and no funding paid, so never report any of those.
+Never state a max loss, a breakeven or a max profit as a number the chart
+will also show, unless you are naming the breakeven to make a point about
+the distance to it.
 
-Say what the dropped legs were when `dropped_non_option_legs` is above zero. A
-perp hedge is part of the trade even where the payoff cannot draw it, and an
-answer that ignores it describes a risk the user does not have.
+## Changing the trade
 
-## Step 1 — draw it, before anything else
+THIS is where the chart belongs. A structure different from the one on screen
+is worth drawing; the one already on screen is not.
 
-Do this FIRST, before any venue read, any skill file and any credential
-check. The legs and the spot are already in the context, so the chart needs
-no API call and no helper. Send it, then do the rest.
+So when the user asks for a change, or takes up the alternative you offered,
+reply with two lines on what the change buys them and end the message with
+the chart. Build it from `nearby_strikes`, which are already priced, and
+still run no commands.
 
+Only if the strike you want is missing from `nearby_strikes` may you make one
+`GET /v1/markets/summary?market=<symbol>`. If that fails, draw at your own
+estimate and say in one line that the price is an estimate.
 
-Render the payoff as a component spec:
+The chart is the last thing in the message, written as this object:
 
 ```json
 {
@@ -64,9 +85,12 @@ Render the payoff as a component spec:
         "product": "BTC",
         "spot": 83356.2,
         "legs": [
-          {"optionType": "CALL", "side": "BUY", "strike": 86000,
-           "size": 1, "price": 1234.5,
-           "symbol": "BTC-USD-3OCT26-86000-C"}
+          {"optionType": "CALL", "side": "BUY", "strike": 84000,
+           "size": 1, "price": 391.58,
+           "symbol": "BTC-USD-2OCT26-84000-C"},
+          {"optionType": "CALL", "side": "SELL", "strike": 85000,
+           "size": 1, "price": 180.59,
+           "symbol": "BTC-USD-2OCT26-85000-C"}
         ]
       }
     }
@@ -74,65 +98,20 @@ Render the payoff as a component spec:
 }
 ```
 
-Write that object as the last thing in your reply, with your prose above it.
-The terminal reads the outermost `{...}` of a message and renders it when it
-carries `layout` and `children`, keeping the prose as the text of the bubble.
-An object without both keys is not a spec and shows as raw JSON, which is what
-a bare `{"mode": ..., "component": ..., "props": ...}` does.
+The terminal renders the outermost `{...}` of a message when it carries
+`layout` and `children`, keeping the prose above as the text of the bubble.
+An object without both keys shows as raw JSON, which is what a bare
+`{"mode": ..., "component": ..., "props": ...}` does.
 
-Send `symbol` on every leg. For the structure as it arrived it is already in
-the context, so pass it through rather than looking it up; for a leg you are
-proposing, read it from `GET /v1/markets` and spell it exactly as that
-returns it.
+Send every leg of the WHOLE structure, not just the one you added, and pass
+each `symbol` through as a string or leave the field out — never null, which
+is refused by the renderer and costs the chart. The chart works out the max
+loss, the breakeven and the max profit, so never write those yourself.
 
-Send a string or leave the field out. Never send null, an empty string or a
-guess: null is refused by the renderer and costs the whole chart, while
-leaving the field out costs only the button.
+Never place an order, and never tell the user you have changed anything in
+their builder. Loading the structure is their click.
 
-Send the legs and nothing else. The chart works out the curve, the max loss,
-the breakeven and the max profit from them, so a payoff number you calculated
-yourself has no field to go in and must not appear in the prose either.
+## If the user asks for more
 
-## Step 2 — what it costs
-
-Sum the premiums, signed against each leg's side, and state it as a debit paid
-or a credit collected, in quote currency and per contract. Say which legs pay
-and which collect.
-
-## Step 3 — is that a fair price
-
-Compare each leg's mark against the book through the `paradex-api` skill:
-`GET /v1/bbo/{market}` for the touch, `GET /v1/orderbook/{market}` for depth.
-Say which legs sit inside the spread and which do not, in basis points of the
-mark. These reads are public, so a missing credential is not a reason to skip
-them.
-
-Report the spread you would actually cross for the size asked, not the touch
-alone, where the book reaches far enough. Say so when it does not.
-
-## Step 4 — the shape
-
-State max loss, max profit and every breakeven, as the payoff gives them, and
-where spot sits against them now. Say when a loss or a profit is unbounded
-rather than naming the edge of a window.
-
-
-## Changing the trade
-
-When the user asks what a different strike, expiry or ratio would do, look up
-the new legs' marks, then write a new spec for the changed structure rather
-than describing it in prose. A tweak they can load in one click is the
-point of this skill.
-
-Say what changed and what it cost: the new debit or credit against the old
-one, and how the breakevens moved. Never place an order, and never tell the
-user you have changed anything in their builder. Loading the structure is
-their click.
-
-## Output
-
-The chart goes out first. Then the cost, the fairness and the shape. Say
-what was unavailable rather than filling it in.
-
-Never fabricate a mark, a book level or a premium. A missing venue read is a
-missing line, and the line says which read failed.
+Only then read the venue. They can ask for the book, the greeks or how the
+price compares, and that is a second message, not part of this one.
