@@ -79,23 +79,34 @@ reads as one.
 
 ## Step 5 — draw the payoff
 
-After the numbers, emit a `ui.render` event so the user sees the shape of the
-position:
+After the numbers, render the payoff so the user sees the shape of the position:
 
 ```json
 {
-  "mode": "catalog",
-  "component": "options_payoff",
-  "props": {
-    "product": "BTC",
-    "spot": 83356.2,
-    "legs": [
-      {"optionType": "CALL", "side": "BUY", "strike": 90000,
-       "size": 0.5, "price": 1234.5}
-    ]
-  }
+  "id": "payoff-1",
+  "layout": "stack",
+  "children": [
+    {
+      "component": "options_payoff",
+      "props": {
+        "product": "BTC",
+        "spot": 83356.2,
+        "legs": [
+          {"optionType": "CALL", "side": "BUY", "strike": 86000,
+           "size": 1, "price": 1234.5,
+           "symbol": "BTC-USD-3OCT26-86000-C"}
+        ]
+      }
+    }
+  ]
 }
 ```
+
+Write that object as the last thing in your reply, with your prose above it.
+The terminal reads the outermost `{...}` of a message and renders it when it
+carries `layout` and `children`, keeping the prose as the text of the bubble.
+An object without both keys is not a spec and shows as raw JSON, which is what
+a bare `{"mode": ..., "component": ..., "props": ...}` does.
 
 One leg per fill. `optionType` and `strike` come from the market symbol,
 `side` and `size` from the fill, and `price` is the fill price as the premium

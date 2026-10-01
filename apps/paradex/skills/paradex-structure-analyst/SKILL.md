@@ -69,23 +69,34 @@ rather than naming the edge of a window.
 
 ## Step 4 — draw it
 
-Emit a `ui.render` event:
+Render the payoff as a component spec:
 
 ```json
 {
-  "mode": "catalog",
-  "component": "options_payoff",
-  "props": {
-    "product": "BTC",
-    "spot": 83356.2,
-    "legs": [
-      {"optionType": "CALL", "side": "BUY", "strike": 86000,
-       "size": 1, "price": 1234.5,
-       "symbol": "BTC-USD-3OCT26-86000-C"}
-    ]
-  }
+  "id": "payoff-1",
+  "layout": "stack",
+  "children": [
+    {
+      "component": "options_payoff",
+      "props": {
+        "product": "BTC",
+        "spot": 83356.2,
+        "legs": [
+          {"optionType": "CALL", "side": "BUY", "strike": 86000,
+           "size": 1, "price": 1234.5,
+           "symbol": "BTC-USD-3OCT26-86000-C"}
+        ]
+      }
+    }
+  ]
 }
 ```
+
+Write that object as the last thing in your reply, with your prose above it.
+The terminal reads the outermost `{...}` of a message and renders it when it
+carries `layout` and `children`, keeping the prose as the text of the bubble.
+An object without both keys is not a spec and shows as raw JSON, which is what
+a bare `{"mode": ..., "component": ..., "props": ...}` does.
 
 Send `symbol` on every leg. For the structure as it arrived it is already in
 the context, so pass it through rather than looking it up; for a leg you are
@@ -103,8 +114,8 @@ yourself has no field to go in and must not appear in the prose either.
 ## Changing the trade
 
 When the user asks what a different strike, expiry or ratio would do, look up
-the new legs' marks, then emit a new `ui.render` for the changed structure
-rather than describing it in prose. A tweak they can load in one click is the
+the new legs' marks, then write a new spec for the changed structure rather
+than describing it in prose. A tweak they can load in one click is the
 point of this skill.
 
 Say what changed and what it cost: the new debit or credit against the old
