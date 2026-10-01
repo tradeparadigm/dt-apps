@@ -16,7 +16,7 @@
 schema_version: 1
 
 id: paradex
-version: 1.1.1
+version: 1.1.2
 name: Paradex
 blurb: Trade perpetual futures on Paradex with a key your agent never holds.
 
@@ -30,6 +30,12 @@ blurb: Trade perpetual futures on Paradex with a key your agent never holds.
 # installed app an update that changes no skill text.
 access: read-write
 maturity: stable
+
+# EVERY ACCOUNT GETS THIS WITHOUT ASKING, the same as Paradigm. The trade
+# history sends `/paradex_trade_analyst` straight from a row, so an account
+# that never opened the Apps screen would get a command with no skill behind
+# it. Uninstalling keeps it uninstalled.
+default_install: true
 
 # Shown on the app's detail page, above the skill. Markdown.
 description: |

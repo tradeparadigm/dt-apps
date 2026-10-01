@@ -180,7 +180,7 @@ request:
 rm -rf ~/.openclaw/workspace/tools/paradex/paradex-api
 mkdir -p ~/.openclaw/workspace/tools/paradex/paradex-api
 find ~/.openclaw/workspace/tools/paradex -maxdepth 1 -name '*.mjs' -delete
-cat > ~/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.1.1.mjs <<'EOF'
+cat > ~/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.1.2.mjs <<'EOF'
 import { typedData as td, shortString } from 'starknet';
 
 const V = Object.keys(process.env).find(k => (process.env[k] || '').startsWith('sign-paradex'));
@@ -263,7 +263,7 @@ Reading is then one call:
 
 ```sh
 node --input-type=module -e "
-import { auth, HOST } from '$HOME/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.1.1.mjs';
+import { auth, HOST } from '$HOME/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.1.2.mjs';
 const jwt = await auth();
 const r = await fetch(\`https://\${HOST}/v1/account\`, { headers: { Authorization: 'Bearer ' + jwt } });
 console.log(r.status, await r.text());
@@ -308,7 +308,7 @@ credential (see its surprise above).
 | Call | Returns |
 |---|---|
 | `GET /v1/markets` | Every instrument and its parameters |
-| `GET /v1/markets/summary?market=ETH-USD-PERP` | Mark price, 24h volume, open interest |
+| `GET /v1/markets/summary?market=ETH-USD-PERP` | Mark price, 24h volume, open interest, and `underlying_price` — the underlying's price, which is what an option market's spot is |
 | `GET /v1/bbo/{market}` | Best bid and offer |
 | `GET /v1/orderbook/{market}` | Order book depth |
 | `GET /v1/markets/klines` | Candles |
