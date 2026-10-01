@@ -75,6 +75,36 @@ Sum funding over the holding period for that market and state it against the
 realised move, so a profitable-looking hold that paid it all away in funding
 reads as one.
 
+## Step 5 — draw the payoff
+
+After the numbers, emit a `ui.render` event so the user sees the shape of the
+position:
+
+```json
+{
+  "mode": "catalog",
+  "component": "options_payoff",
+  "props": {
+    "product": "BTC",
+    "spot": 83356.2,
+    "legs": [
+      {"optionType": "CALL", "side": "BUY", "strike": 90000,
+       "size": 0.5, "price": 1234.5}
+    ]
+  }
+}
+```
+
+One leg per fill. `optionType` and `strike` come from the market symbol,
+`side` and `size` from the fill, and `price` is the fill price as the premium
+per contract, always positive. `spot` is the underlying's price now.
+
+Send the legs and nothing else. The chart works out the curve, the max loss,
+the breakeven and the max profit from them, so a payoff number you calculated
+yourself has no field to go in and must not appear in the prose either.
+
+Skip this step when the host draws nothing back. Say the numbers either way.
+
 ## Output
 
 Lead with the numbers. Fill against mark in basis points, size, notional, the
