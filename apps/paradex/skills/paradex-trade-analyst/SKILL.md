@@ -1,15 +1,17 @@
 ---
 name: paradex-trade-analyst
 description: >
-  Analysis of a filled Paradex perpetual trade against live Paradex market
-  data. Invoked as `/paradex_trade_analyst <fill_id> <market side size price>`,
+  Analysis of a Paradex trade the user ALREADY MADE, against live Paradex
+  market data. Invoked as `/paradex_trade_analyst <fill_id> <market side size price>`,
   which the trade history sends when a user asks to analyse a fill. Resolves
   the fill from the Paradex REST API via the
   paradex-api skill, benchmarks the fill price against the mark and the book
   at the time, reports the position the fill left behind, and states funding
   paid or received over the holding period. Use when the user asks to analyse,
   benchmark or get market colour on a Paradex fill, or pastes Paradex fill
-  JSON. Paradigm RFQ blocks belong to paradigm-block-analyst.
+  JSON. A structure the user is
+  considering rather than one they traded belongs to paradex-structure-analyst.
+  Paradigm RFQ blocks belong to paradigm-block-analyst.
 compatibility: >
   Needs the paradex-api skill for authenticated reads, which means a Paradex
   credential enrolled through the DIME credential proxy. Public market data
@@ -32,20 +34,6 @@ authoritative.
 
 A message may also carry hidden context holding the source fills as JSON.
 When it does, those rows are the fill and no lookup is needed.
-
-## A structure instead of a fill
-
-`/paradex_trade_analyst structure <product> <n> legs` comes from the Paradex
-order builder, not the trade history, and nothing has been traded. The hidden
-context carries the legs, each with its strike, side, size and the live mark
-as `price`, plus the underlying's `spot` and a count of legs the chart cannot
-draw.
-
-Skip Steps 1 and 3: there is no fill to resolve and no position behind it.
-Value the structure at those marks, state what it costs or collects to put
-on, and go to Step 5. Say what the dropped legs were when
-`dropped_non_option_legs` is above zero, since a hedge is part of the trade
-even where the payoff cannot draw it.
 
 ## Step 1 — resolve the fill
 
@@ -109,18 +97,7 @@ position:
 }
 ```
 
-Send `symbol` on every leg, the Paradex market symbol exactly as
-`/v1/markets` spells it. With all of them the user gets a button that loads
-the structure into the order builder; with any missing, the chart still
-draws. Never invent a symbol: read it, and leave the field off when you
-cannot.
-
-When the user asks to change the trade, send a new `ui.render` for the
-changed structure rather than describing it in prose. A tweak they can load
-in one click is the point.
-
-One leg per fill when analysing a fill. `optionType` and `strike` come from
-the market symbol,
+One leg per fill. `optionType` and `strike` come from the market symbol,
 `side` and `size` from the fill, and `price` is the fill price as the premium
 per contract, always positive. `spot` is `underlying_price` from the
 `/v1/markets/summary` read of Step 2, which is the underlying's price now and
