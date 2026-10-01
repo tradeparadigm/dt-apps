@@ -35,12 +35,22 @@ When it does, those rows are the fill and no lookup is needed.
 
 ## Step 1 — resolve the fill
 
-With hidden context, use it. Otherwise read the fill through the
-`paradex-api` skill, which holds the signing and the host rules. Never guess
-a fill from the label.
+With hidden context, use it. That is the normal path: the trade history sends
+the whole row.
 
-Report and stop when the fill does not resolve. An unresolved fill has no
-known size.
+Without it, search for the fill. `GET /v1/fills` takes `asset_kind`, `cursor`,
+`end_at`, `market`, `page_size` and `start_at`, and nothing else. There is no
+fill-id filter and no single-fill endpoint, so an `id` query parameter is
+ignored and the first page comes back looking like an answer.
+
+So: read `GET /v1/fills` through the `paradex-api` skill, which holds the
+signing and the host rules, with `market` set to the label's market and
+`page_size=100`. Walk `cursor` back through pages and compare each row's `id`
+against the fill id as strings. Stop at the exact match, and stop after ten
+pages without one.
+
+Report and stop when no row matches. Never read a fill from the label, and
+never accept a row whose `id` differs from the one asked for.
 
 ## Step 2 — value it
 
