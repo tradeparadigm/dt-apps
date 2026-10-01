@@ -34,8 +34,8 @@ fill), `expiry` and `symbol`, plus the underlying's `spot` and
 `dropped_non_option_legs`.
 
 `symbol` is the market the order builder already resolved, so Step 4 can send
-it straight back without a lookup. It is null only for a structure the builder
-could not name.
+it straight back without a lookup. A leg the builder could not name arrives
+without the field.
 
 Nothing here has been traded. There is no fill to resolve, no position behind
 it and no funding paid, so never report any of those.
@@ -87,11 +87,14 @@ Emit a `ui.render` event:
 }
 ```
 
-Send `symbol` on every leg. For the structure as it arrived, it is already in
-the context — pass it through rather than looking it up. For a leg you are
-proposing, read the symbol from `GET /v1/markets` and spell it exactly as that
-returns it. Never invent one: leave the field off when you cannot read it,
-which costs the button and keeps the chart.
+Send `symbol` on every leg. For the structure as it arrived it is already in
+the context, so pass it through rather than looking it up; for a leg you are
+proposing, read it from `GET /v1/markets` and spell it exactly as that
+returns it.
+
+Send a string or leave the field out. Never send null, an empty string or a
+guess: null is refused by the renderer and costs the whole chart, while
+leaving the field out costs only the button.
 
 Send the legs and nothing else. The chart works out the curve, the max loss,
 the breakeven and the max profit from them, so a payoff number you calculated
