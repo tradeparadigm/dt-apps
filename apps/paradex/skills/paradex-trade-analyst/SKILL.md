@@ -109,7 +109,18 @@ position:
 }
 ```
 
-One leg per fill. `optionType` and `strike` come from the market symbol,
+Send `symbol` on every leg, the Paradex market symbol exactly as
+`/v1/markets` spells it. With all of them the user gets a button that loads
+the structure into the order builder; with any missing, the chart still
+draws. Never invent a symbol: read it, and leave the field off when you
+cannot.
+
+When the user asks to change the trade, send a new `ui.render` for the
+changed structure rather than describing it in prose. A tweak they can load
+in one click is the point.
+
+One leg per fill when analysing a fill. `optionType` and `strike` come from
+the market symbol,
 `side` and `size` from the fill, and `price` is the fill price as the premium
 per contract, always positive. `spot` is `underlying_price` from the
 `/v1/markets/summary` read of Step 2, which is the underlying's price now and
