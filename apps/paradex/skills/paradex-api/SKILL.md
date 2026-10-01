@@ -180,7 +180,7 @@ request:
 rm -rf ~/.openclaw/workspace/tools/paradex/paradex-api
 mkdir -p ~/.openclaw/workspace/tools/paradex/paradex-api
 find ~/.openclaw/workspace/tools/paradex -maxdepth 1 -name '*.mjs' -delete
-cat > ~/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.1.1.mjs <<'EOF'
+cat > ~/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.1.2.mjs <<'EOF'
 import { typedData as td, shortString } from 'starknet';
 
 const V = Object.keys(process.env).find(k => (process.env[k] || '').startsWith('sign-paradex'));
@@ -263,7 +263,7 @@ Reading is then one call:
 
 ```sh
 node --input-type=module -e "
-import { auth, HOST } from '$HOME/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.1.1.mjs';
+import { auth, HOST } from '$HOME/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.1.2.mjs';
 const jwt = await auth();
 const r = await fetch(\`https://\${HOST}/v1/account\`, { headers: { Authorization: 'Bearer ' + jwt } });
 console.log(r.status, await r.text());
