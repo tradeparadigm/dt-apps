@@ -29,8 +29,13 @@ pay.
 
 `/paradex_structure_analyst structure <product> <n> legs`. The visible line
 is a label. The structure itself arrives as hidden context holding JSON: each
-leg's `optionType`, `side`, `strike`, `size` and `price` (the live mark, not a
-fill), plus the underlying's `spot`, and `dropped_non_option_legs`.
+leg's `optionType`, `side`, `strike`, `size`, `price` (the live mark, not a
+fill), `expiry` and `symbol`, plus the underlying's `spot` and
+`dropped_non_option_legs`.
+
+`symbol` is the market the order builder already resolved, so Step 4 can send
+it straight back without a lookup. It is null only for a structure the builder
+could not name.
 
 Nothing here has been traded. There is no fill to resolve, no position behind
 it and no funding paid, so never report any of those.
@@ -82,11 +87,11 @@ Emit a `ui.render` event:
 }
 ```
 
-Send `symbol` on every leg, the Paradex market symbol exactly as
-`/v1/markets` spells it. With all of them the user gets a button that loads
-the structure into the order builder. Never invent a symbol: read it, and
-leave the field off when you cannot, which costs the button and keeps the
-chart.
+Send `symbol` on every leg. For the structure as it arrived, it is already in
+the context — pass it through rather than looking it up. For a leg you are
+proposing, read the symbol from `GET /v1/markets` and spell it exactly as that
+returns it. Never invent one: leave the field off when you cannot read it,
+which costs the button and keeps the chart.
 
 Send the legs and nothing else. The chart works out the curve, the max loss,
 the breakeven and the max profit from them, so a payoff number you calculated
