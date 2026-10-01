@@ -97,7 +97,9 @@ position:
 
 One leg per fill. `optionType` and `strike` come from the market symbol,
 `side` and `size` from the fill, and `price` is the fill price as the premium
-per contract, always positive. `spot` is the underlying's price now.
+per contract, always positive. `spot` is `underlying_price` from the
+`/v1/markets/summary` read of Step 2, which is the underlying's price now and
+not the option's own mark. Skip this step when that read failed.
 
 Send the legs and nothing else. The chart works out the curve, the max loss,
 the breakeven and the max profit from them, so a payoff number you calculated

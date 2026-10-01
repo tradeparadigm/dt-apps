@@ -308,7 +308,7 @@ credential (see its surprise above).
 | Call | Returns |
 |---|---|
 | `GET /v1/markets` | Every instrument and its parameters |
-| `GET /v1/markets/summary?market=ETH-USD-PERP` | Mark price, 24h volume, open interest |
+| `GET /v1/markets/summary?market=ETH-USD-PERP` | Mark price, 24h volume, open interest, and `underlying_price` — the underlying's price, which is what an option market's spot is |
 | `GET /v1/bbo/{market}` | Best bid and offer |
 | `GET /v1/orderbook/{market}` | Order book depth |
 | `GET /v1/markets/klines` | Candles |
