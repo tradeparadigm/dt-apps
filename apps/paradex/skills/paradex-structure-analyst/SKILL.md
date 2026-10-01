@@ -44,30 +44,12 @@ Say what the dropped legs were when `dropped_non_option_legs` is above zero. A
 perp hedge is part of the trade even where the payoff cannot draw it, and an
 answer that ignores it describes a risk the user does not have.
 
-## Step 1 — what it costs
+## Step 1 — draw it, before anything else
 
-Sum the premiums, signed against each leg's side, and state it as a debit paid
-or a credit collected, in quote currency and per contract. Say which legs pay
-and which collect.
+Do this FIRST, before any venue read, any skill file and any credential
+check. The legs and the spot are already in the context, so the chart needs
+no API call and no helper. Send it, then do the rest.
 
-## Step 2 — is that a fair price
-
-Compare each leg's mark against the book through the `paradex-api` skill:
-`GET /v1/bbo/{market}` for the touch, `GET /v1/orderbook/{market}` for depth.
-Say which legs sit inside the spread and which do not, in basis points of the
-mark. These reads are public, so a missing credential is not a reason to skip
-them.
-
-Report the spread you would actually cross for the size asked, not the touch
-alone, where the book reaches far enough. Say so when it does not.
-
-## Step 3 — the shape
-
-State max loss, max profit and every breakeven, as the payoff gives them, and
-where spot sits against them now. Say when a loss or a profit is unbounded
-rather than naming the edge of a window.
-
-## Step 4 — draw it
 
 Render the payoff as a component spec:
 
@@ -111,6 +93,30 @@ Send the legs and nothing else. The chart works out the curve, the max loss,
 the breakeven and the max profit from them, so a payoff number you calculated
 yourself has no field to go in and must not appear in the prose either.
 
+## Step 2 — what it costs
+
+Sum the premiums, signed against each leg's side, and state it as a debit paid
+or a credit collected, in quote currency and per contract. Say which legs pay
+and which collect.
+
+## Step 3 — is that a fair price
+
+Compare each leg's mark against the book through the `paradex-api` skill:
+`GET /v1/bbo/{market}` for the touch, `GET /v1/orderbook/{market}` for depth.
+Say which legs sit inside the spread and which do not, in basis points of the
+mark. These reads are public, so a missing credential is not a reason to skip
+them.
+
+Report the spread you would actually cross for the size asked, not the touch
+alone, where the book reaches far enough. Say so when it does not.
+
+## Step 4 — the shape
+
+State max loss, max profit and every breakeven, as the payoff gives them, and
+where spot sits against them now. Say when a loss or a profit is unbounded
+rather than naming the edge of a window.
+
+
 ## Changing the trade
 
 When the user asks what a different strike, expiry or ratio would do, look up
@@ -125,7 +131,7 @@ their click.
 
 ## Output
 
-Lead with the cost, then the fairness, then the shape, then the chart. Say
+The chart goes out first. Then the cost, the fairness and the shape. Say
 what was unavailable rather than filling it in.
 
 Never fabricate a mark, a book level or a premium. A missing venue read is a
