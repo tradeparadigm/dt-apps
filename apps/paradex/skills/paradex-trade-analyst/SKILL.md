@@ -33,6 +33,20 @@ authoritative.
 A message may also carry hidden context holding the source fills as JSON.
 When it does, those rows are the fill and no lookup is needed.
 
+## A structure instead of a fill
+
+`/paradex_trade_analyst structure <product> <n> legs` comes from the Paradex
+order builder, not the trade history, and nothing has been traded. The hidden
+context carries the legs, each with its strike, side, size and the live mark
+as `price`, plus the underlying's `spot` and a count of legs the chart cannot
+draw.
+
+Skip Steps 1 and 3: there is no fill to resolve and no position behind it.
+Value the structure at those marks, state what it costs or collects to put
+on, and go to Step 5. Say what the dropped legs were when
+`dropped_non_option_legs` is above zero, since a hedge is part of the trade
+even where the payoff cannot draw it.
+
 ## Step 1 — resolve the fill
 
 With hidden context, use it. That is the normal path: the trade history sends
