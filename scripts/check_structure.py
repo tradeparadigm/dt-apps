@@ -129,6 +129,10 @@ HELPER_RE = re.compile(
     r"tools/(?P<app>[a-z0-9-]+)/(?P<skill>[a-z0-9-]+)/(?P=skill)-(?P<version>[^/\s`'\"]+)\.mjs"
 )
 
+# A slash command a description claims. The slash must open a word, so
+# "calls/puts" and the tail of a bucket path are not claims.
+COMMAND_RE = re.compile(r"(?:(?<=^)|(?<=[\s`'\"(]))/([a-z][a-z0-9_-]*)\b")
+
 # Mirrored from pkg/apps: idPattern, slugPattern, detailKeyPattern.
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
@@ -620,6 +624,30 @@ def check_errata_version(app: str, version: str, files: list, failures: list[str
                     "that name is the whole expiry, so a mismatch means an agent reads "
                     "a note about a bug you have already fixed."
                 )
+def command_name(skill: str) -> str:
+    """The slash command openclaw registers for a skill.
+
+    Mirrors sanitizeSkillCommandName: lowercase, every character outside
+    [a-z0-9_] becomes an underscore, runs collapse, and 32 characters is the
+    limit. The bare-command lookup then compares against this exactly.
+    """
+    name = re.sub(r"[^a-z0-9_]+", "_", skill.lower())
+    return re.sub(r"_+", "_", name).strip("_")[:32] or "skill"
+
+
+def check_command_claim(
+    skill: str, entry: Path, description: str, failures: list[str]
+) -> None:
+    """A description claims this skill's own command and no other."""
+    want = command_name(skill)
+    for got in sorted({m for m in COMMAND_RE.findall(description) if m != want}):
+        failures.append(
+            f"{entry}: the description claims /{got}, and openclaw registers "
+            f"/{want} for a skill named {skill!r}. Nothing registers /{got}, so "
+            "it reaches this skill only when the model guesses from the prose."
+        )
+
+
 def check_helper_versions(
     app: str, version: str, skill: str, files: list[Path], failures: list[str]
 ) -> None:
@@ -705,8 +733,10 @@ def main() -> int:
                 failures.append(
                     f"{entry}: frontmatter name is {fm.get('name')!r}, directory is {name!r}"
                 )
-            if not str(fm.get("description") or "").strip():
+            description = str(fm.get("description") or "")
+            if not description.strip():
                 failures.append(f"{entry}: frontmatter has no description")
+            check_command_claim(name, entry, description, failures)
 
             files = [p for p in d.rglob("*") if p.is_file()]
             check_client_preamble(app.name, files, failures)

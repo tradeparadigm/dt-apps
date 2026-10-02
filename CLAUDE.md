@@ -96,6 +96,14 @@ the call, and the venue names whatever it checks first — a signature on Bybit,
 `AGENTS.md` in dime-terminal carries this rule for every app; repeat it in a
 skill only where the venue makes it easy to get wrong.
 
+## Renaming a command means changing whatever sends it
+
+The README says what a skill's command is and CI checks it. The half no checker
+here can see is the caller. The block analyst's command arrives from the trade
+tape in mono (`ui/desktop/src/features/terminal/build-trade-prompt.ts`), which
+this repository cannot read, so a rename that lands alone leaves that button
+sending a string nothing answers. Change both.
+
 ## Run it before merging
 
 The checker reads structure. Whether an agent following the skill reaches the
