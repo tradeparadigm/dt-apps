@@ -187,9 +187,16 @@ distinct — substituting one for another is the failure this script exists to s
 | `0` | resolved | the rendered block |
 | `2` | malformed or missing `rfq_id` | ask for the id |
 | `3` | the id exists in BOTH namespaces | re-run with the exact `DRFQv2-`/`GRFQ-` id the message names; that form is honoured, so it resolves |
-| `4` | **execution tape unavailable**, or the environment failed it (unwritable `--out-dir`) | a pipeline or environment failure. Report it as one. **Never** use the "RFQ not resolved" line — that blames the trade |
-| `5` | not found, and the read covered the full window | genuinely not found |
-| `6` | not found, and the read stopped short | relay the boundary it names — a block traded after it would not be in the read, so this is not evidence of absence |
+| `4` | **execution tape unavailable** and no other source had the fill, or the environment failed it (unwritable `--out-dir`) | a pipeline or environment failure. Report it as one. **Never** use the "RFQ not resolved" line — that blames the trade |
+| `5` | not found in the injected trade, the tape or Paradigm's API, and the tape covered the full window | genuinely not found; the line also says why the API did not help (no key enrolled, refused, not among its newest trades) |
+| `6` | not found anywhere, and the tape's read stopped short | relay the boundary and the API's reason — a block traded after the boundary would not be in the tape, so this is not evidence of absence |
+
+The fill is resolved in this order: the trade JSON passed with `--fill-json`, then the execution
+tape, then `GET /v2/drfq/trade_tape/` on `api.prod.paradigm.trade` with the account's enrolled
+production key (`CRED_PARADIGM_MAINNET_ACCESS` / `CRED_PARADIGM_MAINNET_SIGNING`, through the
+credential proxy), paged newest-first down to the tape's coverage edge. The 30-day recurrence
+always comes from the tape. When the tape cannot be read but another source had the fill, the
+run exits `0` and an `analyze:` line says the history is missing.
 
 Exit `0` can still carry a line: `recurrence is a FLOOR — the read covers
 through <time>`. `analyze.sh` puts it on stdout with the block. The block is sound; the 30-day recurrence count is a

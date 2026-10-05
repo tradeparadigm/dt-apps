@@ -21,11 +21,15 @@ ONE unfiltered 30-day read, filtered twice in memory:
 import argparse
 import csv
 import datetime as dt
+import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "paradigm-data-discovery" / "scripts"))
 from execution_tape import AmbiguousRfqError, read_executions  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import fill_sources  # noqa: E402
 
 HORIZON = dt.timedelta(days=30)
 FILL_COLUMNS = ("PRODUCT", "DESCRIPTION", "QTY", "PRICE", "REF_PRICE", "SIDE",
@@ -127,10 +131,29 @@ def coverage_edge(result: dict) -> str:
     return f"the read covers through {reached:%Y-%m-%d %H:%M}Z only"
 
 
-def collect(rfq_id: str, out_dir: Path, *, now=None, s3=None) -> dict:
+def _structure(row: dict) -> tuple[str, str, str]:
+    """Asset, venue and normalised description: the structure, whatever source.
+
+    The tape's PRODUCT string is matched exactly when the fill came off the tape,
+    as it always was. A fill from the API builds PRODUCT itself, and an exact
+    match would then hang recurrence on two writers spelling a kind the same way.
+    """
+    product = row.get("PRODUCT") or ""
+    left, _, venue = product.partition(" - ")
+    asset = (left.split() or [""])[0].upper()
+    return asset, venue.strip().upper(), row.get("_DESC_N") or ""
+
+
+def collect(rfq_id: str, out_dir: Path, *, now=None, s3=None, injected=None,
+            lookup=None) -> dict:
+    """Resolve the fill: the injected trade, then the tape, then Paradigm's API.
+
+    The tape is read either way, because the 30-day recurrence comes from it. A
+    tape that cannot be read stops the run only when nothing else had the fill;
+    otherwise the block renders and says the history is missing.
+    """
     now = now or dt.datetime.now(dt.timezone.utc)
-    result = read_executions(now - HORIZON, now, s3=s3, now=now)
-    rows = shaped(result["rows"])
+    lookup = lookup or fill_sources.lookup_api
 
     # An explicit namespace is honoured, matching execution_tape.read_executions.
     # Stripping it unconditionally made the ambiguity message's own remediation
@@ -139,46 +162,98 @@ def collect(rfq_id: str, out_dir: Path, *, now=None, s3=None) -> dict:
     core = core_id(rfq_id)
     if not core:
         raise ValueError("empty rfq_id")
-    wanted = ({rfq_id} if rfq_id.startswith(("DRFQv2-", "GRFQ-"))
-              else {core, f"DRFQv2-{core}", f"GRFQ-{core}"})
-    fill = [r for r in rows if r["RFQ_ID"] in wanted]
-    if not fill:
+    explicit = rfq_id.startswith(("DRFQv2-", "GRFQ-"))
+    wanted = {rfq_id} if explicit else {core, f"DRFQv2-{core}", f"GRFQ-{core}"}
+
+    fill, package, source, notes = None, None, None, []
+    if injected is not None:
+        found = fill_sources.from_injected(injected, core)
+        if found:
+            fill, package = found
+            source = "injected"
+
+    tape_error, result, rows = None, {}, []
+    try:
+        result = read_executions(now - HORIZON, now, s3=s3, now=now)
+        rows = shaped(result["rows"])
+    except Exception as exc:  # noqa: BLE001 — decided below, once the other sources are known
+        tape_error = exc
+
+    if fill is None and tape_error is None:
+        tape_fill = [r for r in rows if r["RFQ_ID"] in wanted]
+        if tape_fill:
+            namespaces = {r["RFQ_ID"] for r in tape_fill}
+            if len(namespaces) > 1:
+                raise AmbiguousRfqError(
+                    f"{core} exists in {len(namespaces)} namespaces ({', '.join(sorted(namespaces))}) — "
+                    "re-run with the exact DRFQv2- or GRFQ- prefixed id")
+            fill, source = tape_fill, "tape"
+
+    api_reason = ""
+    if fill is None:
+        if explicit and rfq_id.startswith("GRFQ-"):
+            # The API's ids carry no namespace and this is its DRFQ path, so a
+            # match could not be told apart from a DRFQ block with the same core.
+            api_reason = "Paradigm's API was not searched: its DRFQ tape cannot confirm a GRFQ- id"
+        else:
+            trade, api_reason = lookup(
+                core, stop_before_ms=result.get("coverage_end_ms"),
+                now_ms=now.timestamp() * 1000)
+            if trade is not None:
+                fill, package = fill_sources.rows_from_trade(trade)
+                source = "api"
+
+    coverage = {"coverage_complete": bool(result.get("coverage_complete")),
+                "coverage_edge": "" if tape_error else coverage_edge(result),
+                "coverage_note": result.get("coverage_note")}
+    if fill is None:
+        if tape_error is not None:
+            raise RuntimeError(f"{tape_error}; {api_reason}" if api_reason else str(tape_error))
         # The reader reports the hourly-sync tail as incomplete rather than
         # raising. Saying "not on the tape" for a trade inside that tail is the
         # substitution its contract forbids — absence of evidence read as
         # evidence of absence.
-        return {"fill": 0, "hist": 0, "blocks": 0,
-                "coverage_complete": bool(result.get("coverage_complete")),
-                "coverage_edge": coverage_edge(result),
-                "coverage_note": result.get("coverage_note")}
-    namespaces = {r["RFQ_ID"] for r in fill}
-    if len(namespaces) > 1:
-        raise AmbiguousRfqError(
-            f"{core} exists in {len(namespaces)} namespaces ({', '.join(sorted(namespaces))}) — "
-            "re-run with the exact DRFQv2- or GRFQ- prefixed id")
+        return {"fill": 0, "hist": 0, "blocks": 0, "api_reason": api_reason, **coverage}
 
-    # Recurrence is about OTHER blocks of the same structure, so match on the
-    # structure, not on the RFQ.
-    structures = {(r["PRODUCT"], r["_DESC_N"]) for r in fill}
-    hist = [r for r in rows if (r["PRODUCT"], r["_DESC_N"]) in structures]
+    if source == "tape":
+        # Recurrence is about OTHER blocks of the same structure, so match on the
+        # structure, not on the RFQ.
+        structures = {(r["PRODUCT"], r["_DESC_N"]) for r in fill}
+        hist = [r for r in rows if (r["PRODUCT"], r["_DESC_N"]) in structures]
+    else:
+        # The fill's own block is counted exactly once, as the tape path counts
+        # it: tape rows for this RFQ are dropped and the fill's rows stand in, so
+        # two sources spelling one block id differently cannot count it twice.
+        structures = {_structure(r) for r in fill}
+        hist = [r for r in rows if _structure(r) in structures
+                and core_id(r["RFQ_ID"] or "") != core] + fill
+        if tape_error is not None:
+            notes.append(f"30-day history unavailable — execution tape unreadable ({tape_error}); "
+                         "recurrence counts this block alone")
+        elif source == "api":
+            notes.append("fill read from Paradigm's API — the execution tape does not reach it yet")
+        if package is not None and not package.get("check", True):
+            notes.append("the legs' prices do not net to the package price on this trade, "
+                         "so check Paid/Recd against the trade itself")
 
     out_dir.mkdir(parents=True, exist_ok=True)
     write(out_dir / "fill.csv", FILL_COLUMNS, fill)
     write(out_dir / "hist.csv", HIST_COLUMNS, hist)
+    if package is not None:
+        (out_dir / "package.json").write_text(json.dumps(package), encoding="utf-8")
     # Coverage travels on BOTH paths. Reporting it only on a miss left
     # recurrence — the one figure the uncovered tail actually moves — rendered
     # as a fact while the same tail was being treated as decisive above.
     return {"fill": len(fill), "hist": len(hist),
             "blocks": len({r["BLOCK_TRADE_ID"] for r in hist if r["BLOCK_TRADE_ID"]}),
-            "coverage_complete": bool(result.get("coverage_complete")),
-            "coverage_edge": coverage_edge(result),
-            "coverage_note": result.get("coverage_note")}
+            "source": source, "notes": notes, **coverage}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("rfq_id")
     parser.add_argument("--out-dir", required=True)
+    parser.add_argument("--fill-json", help="the trade JSON the terminal attached, as a file")
     args = parser.parse_args()
     rfq_id = args.rfq_id.strip()
     if not core_id(rfq_id):
@@ -187,27 +262,40 @@ def main() -> int:
         # with "execution tape unavailable" — a dead pipeline that is not dead.
         print(f"analyze: invalid rfq_id {args.rfq_id!r}", file=sys.stderr)
         return 2
+    injected = None
+    if args.fill_json:
+        try:
+            injected = fill_sources.load_injected(args.fill_json)
+        except (OSError, ValueError) as exc:
+            # A payload that will not parse is not a reason to stop: the tape and
+            # the API are still there. Say so, and carry on without it.
+            print(f"analyze: the attached trade data was not readable JSON ({exc}); "
+                  "resolved without it", file=sys.stderr)
     try:
-        counts = collect(rfq_id, Path(args.out_dir))
+        counts = collect(rfq_id, Path(args.out_dir), injected=injected)
     except AmbiguousRfqError as exc:
         print(f"analyze: {exc}", file=sys.stderr)
         return 3
     except Exception as exc:
-        # The tape is the only source; a reader refusal is a DEAD PIPELINE, not
-        # an unknown RFQ. analyze.py's missing-fill message says "not on the
-        # Paradigm tape", which would blame the trade for a producer outage.
+        # A reader refusal with no other source holding the fill is a DEAD
+        # PIPELINE, not an unknown RFQ. analyze.py's missing-fill message says
+        # "not on the Paradigm tape", which would blame the trade for an outage.
         print(f"analyze: execution tape unavailable — {exc}", file=sys.stderr)
         return 4
     if not counts["fill"]:
         edge = counts.get("coverage_edge") or ""
+        api = counts.get("api_reason") or ""
+        tail = f" {api[0].upper()}{api[1:]}." if api else ""
         if edge:
             print(f"analyze: {rfq_id} not found — {edge}. A block traded after that "
                   "boundary would not be in this read, so absence here is not absence from "
-                  "the market.", file=sys.stderr)
+                  f"the market.{tail}", file=sys.stderr)
             return 6
         print(f"analyze: {rfq_id} not found on the execution tape, whose read covered "
-              "the full requested window", file=sys.stderr)
+              f"the full requested window.{tail}", file=sys.stderr)
         return 5
+    for note in counts.get("notes") or []:
+        print(f"analyze: {note}", file=sys.stderr)
     if counts.get("coverage_edge"):
         # Recurrence counts OTHER blocks of this structure over 30 days, so the
         # uncovered tail lands on exactly that number. Saying the count is a

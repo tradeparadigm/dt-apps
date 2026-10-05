@@ -33,6 +33,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import analyze_core as ac  # noqa: E402
 
 DERIBIT = "https://www.deribit.com/api/v2/public"
+# Public market data, no credential. A PRDX block is benchmarked on the venue it
+# settled on: Deribit has no listing for most of what trades there, and where it
+# does, its mark is a different book's price set beside a Paradex fill.
+PARADEX = "https://api.prod.paradex.trade/v1"
 WARN: list[str] = []
 
 
@@ -45,6 +49,13 @@ def _read_csv(path):
         return []
     with open(path, newline="") as f:
         return list(csv.DictReader(f))
+
+
+def _read_json(path):
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
 
 
 def _get(path, params, timeout=15):
@@ -66,6 +77,48 @@ def fetch_ticker(sym):
                      "gamma": g.get("gamma"), "theta": g.get("theta"),
                      "oi": t.get("open_interest"), "under": t.get("underlying_price"),
                      "index": t.get("index_price")}
+    except Exception as e:  # noqa: BLE001
+        warn(f"ticker {sym}: {e}")
+        return sym, None
+
+
+def _paradex(path, params=None, timeout=15):
+    url = f"{PARADEX}/{path}" + (f"?{urlencode(params)}" if params else "")
+    with urllib.request.urlopen(url, timeout=timeout) as r:
+        return json.loads(r.read())
+
+
+def fetch_paradex_ticker(sym):
+    """The same fields fetch_ticker returns, from Paradex's markets/summary.
+
+    `mark_iv` is a DECIMAL on Paradex (0.52 is 52%) and a percentage on Deribit,
+    so it is scaled here and the render prints one unit. Greeks sit in a nested
+    `greeks` object; one Paradex does not publish is None, never 0, so the net
+    leaves it out rather than summing a missing value as nothing. Bid and ask
+    come from the summary when it carries them and from bbo/ when it does not.
+    """
+    try:
+        page = _paradex("markets/summary", {"market": sym})
+        row = (page.get("results") or [None])[0]
+        if not row:
+            raise RuntimeError("no market summary")
+        g = row.get("greeks") or {}
+        bid, ask = ac._f(row.get("bid")), ac._f(row.get("ask"))
+        if bid is None or ask is None:
+            try:
+                bbo = _paradex(f"bbo/{sym}")
+                bid = ac._f(bbo.get("bid")) if bid is None else bid
+                ask = ac._f(bbo.get("ask")) if ask is None else ask
+            except Exception as e:  # noqa: BLE001
+                warn(f"bbo {sym}: {e}")
+        iv = ac._f(row.get("mark_iv"))
+        delta = g.get("delta") if g.get("delta") is not None else row.get("delta")
+        return sym, {"mark": ac._f(row.get("mark_price")), "bid": bid, "ask": ask,
+                     "iv": None if iv is None else round(iv * 100, 2),
+                     "delta": ac._f(delta), "vega": ac._f(g.get("vega")),
+                     "gamma": ac._f(g.get("gamma")), "theta": ac._f(g.get("theta")),
+                     "oi": ac._f(row.get("open_interest")),
+                     "under": ac._f(row.get("underlying_price")), "index": None}
     except Exception as e:  # noqa: BLE001
         warn(f"ticker {sym}: {e}")
         return sym, None
@@ -168,20 +221,25 @@ def _run(args):
                         and not any(l["cp"] == "FUT" for l in legs))
             unmapped = True
 
-    # instruments: each option leg + the perp for spot
+    # instruments: each option leg + the perp for spot, on the venue the block
+    # settled on. Paradex carries no 30d block-trade buckets in this script, so
+    # those are Deribit's alone.
+    on_paradex = prod["venue"] == "PRDX"
+    symbol = ac.paradex_symbol if on_paradex else ac.deribit_symbol
+    ticker = fetch_paradex_ticker if on_paradex else fetch_ticker
     syms = []
     for l in legs:
         if l["cp"] != "FUT" and l.get("expiry_c"):
-            l["_sym"] = ac.deribit_symbol(asset, l["expiry_c"], l["strike"], l["cp"])
+            l["_sym"] = symbol(asset, l["expiry_c"], l["strike"], l["cp"])
             syms.append(l["_sym"])
-    perp = ac.perp_symbol(asset)
+    perp = ac.paradex_perp_symbol(asset) if on_paradex else ac.perp_symbol(asset)
 
     # fetch everything concurrently: tickers (legs+perp) + per-leg 30d trades.
     # Submit all up front so they run in parallel, then collect into typed maps.
     tickers, buckets = {}, {}
     with ThreadPoolExecutor(max_workers=min(12, 2 * len(syms) + 2)) as ex:
-        tfuts = [ex.submit(fetch_ticker, s) for s in syms + [perp]]
-        bfuts = [ex.submit(fetch_trades_bucket, s, now_ms) for s in syms]
+        tfuts = [ex.submit(ticker, s) for s in syms + [perp]]
+        bfuts = [] if on_paradex else [ex.submit(fetch_trades_bucket, s, now_ms) for s in syms]
         for f in tfuts:
             s, v = f.result()
             tickers[s] = v
@@ -207,6 +265,10 @@ def _run(args):
         if tt:
             greek_by_key[ac.leg_key(l)] = tt
     ng = ac.net_greeks(legs, greek_by_key, qty) if reliable else {}
+    # A greek one leg's venue does not publish is unknown for the package, not 0.
+    for k in list(ng):
+        if any(greek_by_key[ac.leg_key(l)].get(k) is None for l in legs):
+            ng[k] = None
 
     # Net package offset (SKILL Step 7, the ONE convention) — per structure unit, unit by quote.
     # struct_net weights each option leg by its QTY relative to the structure's base unit, so a
@@ -218,6 +280,13 @@ def _run(args):
     # Single-leg reduces to (PRICE − REF_PRICE) × 10000 (backward compatible).
     fill_net = ac.struct_net(fill, "PRICE")
     ref_net = ac.struct_net(fill, "REF_PRICE")
+    # A fill from Paradigm's API or the terminal carries the package mark, not a
+    # mark per leg, so collect_analysis.py hands it over already netted.
+    package = _read_json(os.path.join(args.csv_dir, "package.json"))
+    if package.get("ref_net") is not None:
+        ref_net = float(package["ref_net"])
+    if not fill_net and package.get("fill_net") is not None:
+        fill_net = float(package["fill_net"])
     off = ac.package_offset(fill_net, ref_net, quote)
 
     # recurrence: HIST blocks clustered by BLOCK_TRADE_ID
@@ -392,8 +461,11 @@ def render(r) -> str:
     rows = []
     ng = r["net_greeks"]
     if ng and r["reliable_signs"]:
-        rows.append(("Greeks", f"Δ {ng['delta']:+.2f} {a} · Vega {ng['vega']:+,.0f}/v · "
-                               f"Γ {ng['gamma']:+.4f} · Θ {ng['theta']:+,.0f}/d"))
+        parts = [(f"Δ {ng['delta']:+.2f} {a}" if ng.get("delta") is not None else None),
+                 (f"Vega {ng['vega']:+,.0f}/v" if ng.get("vega") is not None else None),
+                 (f"Γ {ng['gamma']:+.4f}" if ng.get("gamma") is not None else None),
+                 (f"Θ {ng['theta']:+,.0f}/d" if ng.get("theta") is not None else None)]
+        rows.append(("Greeks", " · ".join(p for p in parts if p)))
     else:
         per = " · ".join(
             f"{_leg_lbl(l, multi_exp)} Δ{(l['tkr'] or {}).get('delta')}"
@@ -403,8 +475,10 @@ def render(r) -> str:
                      for l in legs if l["cp"] != "FUT" and l.get("tkr"))
     rows.append(("Fair", f"{_offset_txt(r['offset'])} · {ivs}"))
     d30 = sum((l["trades"] or {}).get("30d", (0, 0, 0))[1] for l in legs if l.get("trades"))
-    rows.append(("History", f"{r['recurrence_blocks']} same-structure block(s) on Paradigm 30d · "
-                            f"Deribit leg blocks 30d: {d30}"))
+    history = f"{r['recurrence_blocks']} same-structure block(s) on Paradigm 30d"
+    if r["venue"] != "PRDX":
+        history += f" · Deribit leg blocks 30d: {d30}"
+    rows.append(("History", history))
     live = " · ".join(f"{_leg_lbl(l, multi_exp)} {(l['tkr'] or {}).get('bid')}/{(l['tkr'] or {}).get('ask')}"
                       for l in legs if l["cp"] != "FUT" and l.get("tkr"))
     rows.append(("Live", live))

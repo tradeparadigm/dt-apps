@@ -10,12 +10,25 @@
 # to a temp SQL file, and it reads the daily execution partitions rather than
 # hot__paradigm_trade_tape_30d.
 #
-# Usage: bash scripts/analyze.sh <rfq_id>      e.g. analyze.sh r_3FvzJWGF…
+# Usage: bash scripts/analyze.sh <rfq_id> [--fill-json FILE|-]
+#   e.g. analyze.sh r_3FvzJWGF…
+# --fill-json hands over the trade JSON the terminal attached to the message (a
+# file, or `-` for stdin). The tape does not hold a block for up to an hour after
+# it prints, and this is what the script resolves the fill from in that window.
 set -uo pipefail
 
 RAW="${1:-}"
-[ -z "$RAW" ] && { echo "usage: analyze.sh <rfq_id>"; exit 2; }
+[ -z "$RAW" ] && { echo "usage: analyze.sh <rfq_id> [--fill-json FILE|-]"; exit 2; }
+shift
 # Only the ID is authoritative; any <rfq description> after it is ignored here.
+FILL_JSON=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --fill-json) FILL_JSON="${2:-}"; shift 2 || shift ;;
+    --fill-json=*) FILL_JSON="${1#--fill-json=}"; shift ;;
+    *) shift ;;
+  esac
+done
 CORE=$(printf '%s' "$RAW" | sed -E 's/^(DRFQv2-|GRFQ-)//')
 case "$CORE" in
   ''|*[!A-Za-z0-9_-]*) echo "invalid rfq_id — expected an r_… id (letters/digits/_/- only)"; exit 2 ;;
@@ -27,6 +40,15 @@ DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 OUT=$(mktemp -d "${TMPDIR:-/tmp}/analyze.XXXXXX")
 trap 'rm -rf "$OUT"' EXIT
+
+# Stdin is read here, once, so collect gets a file whichever way it arrived.
+FILL_ARGS=()
+if [ "$FILL_JSON" = "-" ]; then
+  cat > "$OUT/.fill-input.json"
+  FILL_ARGS=(--fill-json "$OUT/.fill-input.json")
+elif [ -n "$FILL_JSON" ]; then
+  FILL_ARGS=(--fill-json "$FILL_JSON")
+fi
 
 # Resolve FIRST and stop on failure. analyze.py reports a missing fill.csv as
 # "RFQ not resolved (not on Paradigm tape)", which would blame the trade for a
@@ -42,7 +64,7 @@ trap 'rm -rf "$OUT"' EXIT
 # on stdout above the block — and SKILL.md tells the model stdout is its entire
 # reply. Only lines collect_analysis.py itself authored are relayed.
 err="$OUT/.collect.err"
-uv run "$DIR/scripts/collect_analysis.py" "$RAW" --out-dir "$OUT" >/dev/null 2>"$err"
+uv run "$DIR/scripts/collect_analysis.py" "$RAW" --out-dir "$OUT" ${FILL_ARGS[@]+"${FILL_ARGS[@]}"} >/dev/null 2>"$err"
 status=$?
 note=$(grep '^analyze: ' "$err" 2>/dev/null)
 if [ "$status" -ne 0 ]; then
