@@ -51,7 +51,7 @@ jobs:
         run: |
           shopt -s nullglob
           ran=0
-          for t in tests/paradigm/*/tests/test_*.py tests/paradigm/harness/test_*.py; do
+          for t in tests/*/*/tests/test_*.py tests/paradigm/harness/test_*.py; do
             if grep -qE '^(import|from) (pytest|polars|duckdb|boto3|pyarrow|obstore)\b' "$t"; then
               continue
             fi
