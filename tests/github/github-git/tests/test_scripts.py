@@ -28,8 +28,8 @@ argv = sys.argv[1:]
 json.dump({"argv": argv}, open(os.environ["RECORD"], "w"))
 with open(argv[argv.index("-D") + 1], "w") as f:
     f.write("HTTP/2 200\\r\\ncontent-type: application/json\\r\\n"
-            "link: <https://api.github.com/x?page=2>; rel=\\"next\\"\\r\\n"
-            "x-ratelimit-reset: 1791191261\\r\\n\\r\\n")
+            "Link: <https://api.github.com/x?page=2>; rel=\\"next\\"\\r\\n"
+            "X-RateLimit-Reset: 1791191261\\r\\n\\r\\n")
 print('{"ok":true}')
 print("HTTP 200")
 EOF
@@ -63,6 +63,10 @@ def run(script, env):
         return proc, rec
 
 
+def refused(proc, rec, message):
+    return proc.returncode == 2 and rec is None and message in proc.stderr
+
+
 def basic_user(argv):
     header = next(a for a in argv if "extraHeader=" in a)
     return base64.b64decode(header.rsplit(" ", 1)[1]).decode()
@@ -84,18 +88,20 @@ if rec:
     check("git: arguments pass through", rec["argv"][-2:] == ["ls-remote", "https://github.com/o/r.git"])
 
 proc, rec = run("git.sh", {"_ARGS": ["--version"]})
-check("git: no credential exits 2", proc.returncode == 2 and rec is None)
+check("git: no credential is refused", refused(proc, rec, "no GitHub git credential"))
 
 proc, rec = run("git.sh", {"CRED_GITHUB_GIT_GIT": "cred-a", "CRED_GITHUB_GIT": "cred-b"})
-check("git: two credentials exit 2", proc.returncode == 2 and rec is None)
+check("git: two credentials are refused", refused(proc, rec, "several GitHub git credentials"))
 
 proc, rec = run("git.sh", {"CRED_GITHUB_GIT_GIT": "cred-a", "CRED_GITHUB_GIT": "cred-b",
                            "GITHUB_GIT_CRED": "CRED_GITHUB_GIT", "_ARGS": ["status"]})
 check("git: override picks the named credential",
       proc.returncode == 0 and rec and basic_user(rec["argv"]) == "x-access-token:cred-b")
 
-proc, rec = run("git.sh", {"CRED_GITHUB_GIT_GIT": "cred-a", "GITHUB_GIT_CRED": "HOME"})
-check("git: override outside CRED_GITHUB exits 2", proc.returncode == 2 and rec is None)
+proc, rec = run("git.sh", {"CRED_GITHUB_GIT_GIT": "cred-a", "HOME": "/home/node",
+                           "GITHUB_GIT_CRED": "HOME"})
+check("git: override outside CRED_GITHUB is refused",
+      refused(proc, rec, "GITHUB_GIT_CRED must name a CRED_GITHUB"))
 
 # api.sh
 proc, rec = run("api.sh", {"CRED_GITHUB_API_REST": "cred-github-api-rest-BBB",
@@ -112,21 +118,26 @@ if rec:
           "--data-raw" in argv and argv[argv.index("--data-raw") + 1] == "@/etc/passwd")
     check("api: body on stdout", '{"ok":true}' in proc.stdout and "HTTP 200" in proc.stdout)
     check("api: link and rate limit on stderr",
-          proc.stderr.splitlines() == ['link: <https://api.github.com/x?page=2>; rel="next"',
-                                       "x-ratelimit-reset: 1791191261"])
+          proc.stderr.splitlines() == ['Link: <https://api.github.com/x?page=2>; rel="next"',
+                                       "X-RateLimit-Reset: 1791191261"])
 
 proc, rec = run("api.sh", {"CRED_GITHUB_API_REST": "cred-a", "TARGET": "/user"})
 check("api: no BODY sends no data", rec is not None and "--data-raw" not in rec["argv"])
 
 proc, rec = run("api.sh", {"CRED_GITHUB_API_REST": "cred-a", "TARGET": ".evil.com/x"})
-check("api: TARGET without a leading slash exits 2", proc.returncode == 2 and rec is None)
+check("api: TARGET without a leading slash is refused", refused(proc, rec, "starting with /"))
 
 proc, rec = run("api.sh", {"TARGET": "/user"})
-check("api: no credential exits 2", proc.returncode == 2 and rec is None)
+check("api: no credential is refused", refused(proc, rec, "no GitHub REST credential"))
+
+proc, rec = run("api.sh", {"CRED_GITHUB_API_REST": "cred-a", "CRED_GITHUB_REST": "cred-b",
+                           "TARGET": "/user"})
+check("api: two credentials are refused", refused(proc, rec, "several GitHub REST credentials"))
 
 proc, rec = run("api.sh", {"CRED_GITHUB_API_REST": "cred-a", "GITHUB_REST_CRED": "PATH",
                            "TARGET": "/user"})
-check("api: override outside CRED_GITHUB exits 2", proc.returncode == 2 and rec is None)
+check("api: override outside CRED_GITHUB is refused",
+      refused(proc, rec, "GITHUB_REST_CRED must name a CRED_GITHUB"))
 
 for name in failed:
     print(f"FAIL {name}")
