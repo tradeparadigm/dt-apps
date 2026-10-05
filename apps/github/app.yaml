@@ -1,0 +1,74 @@
+# GitHub, for git over HTTPS and the REST API. Replace mode on Authorization;
+# the proxy decodes Basic before it looks for the placeholder.
+
+schema_version: 1
+
+id: github
+version: 1.0.0
+name: GitHub
+blurb: Clone, push and call the GitHub API with a token your agent never holds.
+
+# Not versioned: served from the catalogue listing.
+access: read-write
+maturity: beta
+
+description: |
+  GitHub hosts git repositories and exposes them through git over HTTPS and a
+  REST API.
+
+  This app installs a skill teaching your agent to clone, fetch and push over
+  HTTPS and to call the REST API, using a **fine-grained personal access
+  token** that stays sealed. Your agent sends a placeholder and the credential
+  proxy swaps in the token on the way out.
+
+  Git and the API are on different hosts, so you enrol the token twice: once
+  as **Git** on the Git environment, and once as **REST API** on the API
+  environment. Give the token access to only the repositories and
+  permissions you want the agent to have.
+
+
+developer: GitHub
+developer_url: https://github.com
+environments:
+  - id: git
+    label: Git
+    host: github.com
+  - id: api
+    label: API
+    host: api.github.com
+
+exclusive_credential_types: true
+
+credential_types:
+  - id: git
+    label: Git (pick with the Git environment)
+    slug: git
+    secret_label: Fine-grained personal access token
+    # Smart HTTP. `*` matches one segment, so `repo` and `repo.git` both match.
+    routes:
+      - path: /*/*/info/refs
+        methods: [GET]
+      - path: /*/*/git-upload-pack
+        methods: [POST]
+      - path: /*/*/git-receive-pack
+        methods: [POST]
+    delivery:
+      mode: replace
+      match_headers: [Authorization]
+    summary: >-
+      For the Git environment, github.com. Sets: the placeholder is swapped for
+      the token in the Authorization header, including inside Basic auth, on
+      git's fetch and push endpoints only.
+
+  - id: rest
+    label: REST API (pick with the API environment)
+    slug: rest
+    secret_label: Fine-grained personal access token
+    routes:
+      - path: /*
+    delivery:
+      mode: replace
+      match_headers: [Authorization]
+    summary: >-
+      For the API environment, api.github.com. Sets: the placeholder is swapped
+      for the token in the Authorization header, on every path.
