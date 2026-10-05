@@ -103,6 +103,9 @@ proc, rec = run("git.sh", {"CRED_GITHUB_GIT_GIT": "cred-a", "HOME": "/home/node"
 check("git: override outside CRED_GITHUB is refused",
       refused(proc, rec, "GITHUB_GIT_CRED must name a CRED_GITHUB"))
 
+proc, rec = run("git.sh", {"GITHUB_GIT_CRED": "CRED_GITHUB_GIT_GIT"})
+check("git: override naming an unset variable is refused", refused(proc, rec, "is not set"))
+
 # api.sh
 proc, rec = run("api.sh", {"CRED_GITHUB_API_REST": "cred-github-api-rest-BBB",
                            "CRED_GITHUB_API_REST_META": "{}",
@@ -138,6 +141,9 @@ proc, rec = run("api.sh", {"CRED_GITHUB_API_REST": "cred-a", "GITHUB_REST_CRED":
                            "TARGET": "/user"})
 check("api: override outside CRED_GITHUB is refused",
       refused(proc, rec, "GITHUB_REST_CRED must name a CRED_GITHUB"))
+
+proc, rec = run("api.sh", {"GITHUB_REST_CRED": "CRED_GITHUB_API_REST", "TARGET": "/user"})
+check("api: override naming an unset variable is refused", refused(proc, rec, "is not set"))
 
 for name in failed:
     print(f"FAIL {name}")
