@@ -42,4 +42,7 @@ if [ -n "${BODY:-}" ]; then
   set -- "$@" -H "Content-Type: application/json" --data-raw "$BODY"
 fi
 
-exec curl "$@" "https://api.github.com$TARGET"
+headers=$(mktemp)
+trap 'rm -f "$headers"' EXIT
+curl "$@" -D "$headers" "https://api.github.com$TARGET"
+grep -i -E '^(link|x-ratelimit-)' "$headers" | tr -d '\r' >&2 || true

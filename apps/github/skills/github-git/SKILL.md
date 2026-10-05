@@ -72,6 +72,8 @@ METHOD=POST TARGET=/repos/OWNER/REPO/pulls \
 ```
 
 The script prints the response body and then `HTTP <status>` on its own line.
+On stderr it prints the `link` header, which holds the next page's URL, and
+the `x-ratelimit-*` headers.
 `TARGET` is the path and query, without the host.
 
 ## Never edit the scripts
@@ -89,7 +91,7 @@ changed, so it can be fixed here.
 | `Repository not found` from git, or 404 from the API on a repository you know exists | The token was not given that repository. GitHub answers 404 for a private repository the token cannot see. |
 | 403 on push, `Permission to OWNER/REPO denied` | The token has read access only. It needs Contents: read and write. |
 | 403 `Resource not accessible by personal access token` | The token lacks the permission for that endpoint, such as Pull requests or Issues. |
-| 403 with `rate limit` in the body | GitHub's rate limit. The `x-ratelimit-reset` header gives the reset time. |
+| 403 with `rate limit` in the body | GitHub's rate limit. `x-ratelimit-reset` on stderr gives the reset time. |
 | `no GitHub … credential in the environment` from a script | The user has not enrolled that half, or enrolled it on a custom environment under another name. Run `env \| grep '^CRED_GITHUB'` and pass the right one as `GITHUB_GIT_CRED` or `GITHUB_REST_CRED`. |
 | `several GitHub … credentials` from a script | More than one matches. Pick the one for the right host, `CRED_GITHUB_GIT_GIT` or `CRED_GITHUB_API_REST`, and pass it as `GITHUB_GIT_CRED` or `GITHUB_REST_CRED`. |
 
