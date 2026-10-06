@@ -155,7 +155,7 @@ that made the mistake:
 - every skill directory holds a `SKILL.md` whose frontmatter `name` matches
   it, with a description, inside the file-count and size limits;
 - a skill's description claims that skill's own command and no other. See
-  Commands below;
+  Commands above;
 - the version in a cached helper's filename matches the app's `version:`.
   Nothing in the consumer reads that path, because it is an instruction the
   agent follows rather than a field anything parses. So a bump the filename does
