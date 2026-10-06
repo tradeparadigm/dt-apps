@@ -183,8 +183,9 @@ class Repo:
         self.w("add", "-A")
         self.w("commit", "-q", "-m", message)
 
-    def dry_run(self, *a):
-        proc = subprocess.run(["node", str(SCRIPTS / "commit.mjs"), "--dry-run", "--repo", "o/r", *a],
+    def dry_run(self, *a, repo=True):
+        flags = ["--repo", "o/r"] if repo else []
+        proc = subprocess.run(["node", str(SCRIPTS / "commit.mjs"), "--dry-run", *flags, *a],
                               cwd=self.work, env=self.env, capture_output=True, text=True)
         out = json.loads(proc.stdout) if proc.returncode == 0 else None
         return proc, out
@@ -226,6 +227,12 @@ with tempfile.TemporaryDirectory() as d:
     r.w("switch", "-q", "-c", "feature")
     r.write("f.txt", "f\n")
     r.commit("feature work")
+    other = pathlib.Path(d, "other")
+    r.git("clone", "-q", str(r.root / "origin.git"), str(other))
+    (other / "later.txt").write_text("later\n")
+    r.git("add", "-A", cwd=other)
+    r.git("commit", "-q", "-m", "main moves on", cwd=other)
+    r.git("push", "-q", "origin", "main", cwd=other)
     proc, out = r.dry_run()
     check("commit: a branch missing remotely starts at the merge base with the default branch",
           out is not None and out["createBranchAt"] == base and out["input"]["expectedHeadOid"] == base)
@@ -252,6 +259,46 @@ with tempfile.TemporaryDirectory() as d:
     proc, out = r.dry_run()
     check("commit: a branch behind its remote is refused",
           proc.returncode == 2 and "has commits this branch does not" in proc.stderr)
+
+with tempfile.TemporaryDirectory() as d:
+    r = Repo(d)
+    r.write("a.txt", "a\n")
+    (r.work / "link").symlink_to("a.txt")
+    r.commit("base")
+    r.w("push", "-q", "origin", "main")
+    r.write("a.txt", "a\n", 0o755)
+    r.commit("chmod")
+    proc, out = r.dry_run()
+    check("commit: a mode change is refused",
+          proc.returncode == 2 and "a.txt changes mode 100644 -> 100755" in proc.stderr)
+    r.w("reset", "-q", "--hard", "origin/main")
+    (r.work / "link").unlink()
+    (r.work / "link").symlink_to("b.txt")
+    r.commit("retarget")
+    proc, out = r.dry_run()
+    check("commit: an edited symlink is refused",
+          proc.returncode == 2 and "link is a symlink or a submodule" in proc.stderr)
+
+# A git@github.com remote, served from a local bare repo by a fake ssh.
+with tempfile.TemporaryDirectory() as d:
+    root = pathlib.Path(d)
+    ssh = root / "ssh"
+    ssh.write_text(f'#!/bin/sh\nfor a; do last=$a; done\ncd "{root}" && exec sh -c "$last"\n')
+    ssh.chmod(0o755)
+    r = Repo(d)
+    r.env["GIT_SSH_COMMAND"] = str(ssh)
+    r.git("init", "-q", "--bare", "-b", "main", str(root / "o" / "r.git"))
+    r.w("remote", "set-url", "origin", "git@github.com:o/r.git")
+    r.write("a.txt", "a\n")
+    r.commit("base")
+    r.w("push", "-q", "origin", "main")
+    r.write("a.txt", "b\n")
+    r.commit("one change\n\nIts body.")
+    proc, out = r.dry_run(repo=False)
+    check("commit: reads OWNER/NAME from a git@github.com remote",
+          out is not None and out["input"]["branch"]["repositoryNameWithOwner"] == "o/r")
+    check("commit: one commit sends its own message with no list",
+          out is not None and out["input"]["message"] == {"headline": "one change", "body": "Its body."})
 
 for name in failed:
     print(f"FAIL {name}")
