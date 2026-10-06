@@ -434,6 +434,16 @@ class TestHosts(unittest.TestCase):
         self.assertNotEqual(code, 0, out)
         self.assertIn("routes (host, path)", out)
 
+    def test_an_empty_host_and_no_host_on_one_path_are_refused(self):
+        def twice(src):
+            return src.replace(
+                "      - path: /v1/orders\n",
+                '      - path: /v1/orders\n        host: ""\n        methods: [GET]\n'
+                "      - path: /v1/orders\n", 1)
+        code, out = check(twice)
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("routes (host, path)", out)
+
     def test_malformed_hosts_are_reported_rather_than_crashing(self):
         for edit in (
             lambda src: src.replace("environments:\n", "environments: 5\nx_environments:\n", 1),
