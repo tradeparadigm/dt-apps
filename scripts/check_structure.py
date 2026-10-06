@@ -581,8 +581,22 @@ if (all.length > 1 && !process.env.{VENUE}_CRED) {{
 const HDR = 'X-Dime-Sign-' + V.replace(/^CRED_/, '').toLowerCase().replaceAll('_', '-');"""
 
 
+def signs(manifest_text: str) -> bool:
+    """Whether any credential type in the manifest uses the sign protocol."""
+    try:
+        data = yaml.safe_load(manifest_text) or {}
+    except yaml.YAMLError:
+        return False
+    types = data.get("credential_types") if isinstance(data, dict) else None
+    return any(
+        isinstance(t, dict) and isinstance(t.get("delivery"), dict)
+        and t["delivery"].get("mode") == "sign"
+        for t in types or []
+    )
+
+
 def check_client_preamble(app: str, files: list, failures: list[str]) -> None:
-    """A shipped client opens with the proxy protocol, spelled one way."""
+    """A sign-mode app's shipped client opens with the sign protocol, spelled one way."""
     for f in files:
         if f.suffix != ".mjs" or f.parent.name != "scripts":
             continue
@@ -667,7 +681,9 @@ def main() -> int:
         if not man.is_file():
             failures.append(f"{app}: no {MANIFEST}")
             continue
-        version = check_manifest(app.name, man.read_text(), failures)
+        manifest_text = man.read_text()
+        version = check_manifest(app.name, manifest_text, failures)
+        app_signs = signs(manifest_text)
 
         skills_dir = app / "skills"
         on_disk = (
@@ -709,7 +725,8 @@ def main() -> int:
                 failures.append(f"{entry}: frontmatter has no description")
 
             files = [p for p in d.rglob("*") if p.is_file()]
-            check_client_preamble(app.name, files, failures)
+            if app_signs:
+                check_client_preamble(app.name, files, failures)
             if version:
                 check_errata_version(app.name, version, files, failures)
                 check_helper_versions(app.name, version, name, files, failures)

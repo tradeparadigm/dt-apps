@@ -74,6 +74,27 @@ class TestFixture(unittest.TestCase):
         self.assertEqual(code, 0, out)
 
 
+class TestClientPreamble(unittest.TestCase):
+    """The preamble is the sign protocol, so only a sign-mode app's client carries it."""
+
+    CLIENT = {"apps/example/skills/example-api/scripts/client.mjs": "console.log(1)\n"}
+
+    def to_sign(self, src):
+        return src.replace(
+            "      mode: inject\n      header: X-Api-Key\n",
+            "      mode: sign\n      scheme: hmac-sha256\n      encoding: hex\n",
+        )
+
+    def test_a_sign_mode_client_without_the_preamble_is_refused(self):
+        code, out = check(self.to_sign, extra=self.CLIENT)
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("no credential preamble", out)
+
+    def test_a_client_of_an_app_that_does_not_sign_needs_no_preamble(self):
+        code, out = check(extra=self.CLIENT)
+        self.assertEqual(code, 0, out)
+
+
 class TestScope(unittest.TestCase):
     """Required in the store, unlike the consumer, which defaults them.
 

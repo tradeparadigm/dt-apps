@@ -1,15 +1,15 @@
 ---
 name: github-git
 description: >
-  Git over HTTPS and the GitHub REST API using a fine-grained personal access
-  token held by the DIME credential proxy. Covers cloning, fetching, pulling
-  and pushing private and public repositories on github.com, and calling
-  api.github.com for issues, pull requests, repository contents and the
-  signed-in user. Use for ANY git operation against github.com and ANY request
-  to api.github.com, including "clone my repo", "push this branch", "open a
-  pull request", "list my GitHub issues", or a 403 from the credential proxy on
-  a GitHub call. Read this BEFORE running git against github.com: a plain git
-  command is refused by the proxy once this credential is enrolled.
+  Git, gh and the GitHub REST and GraphQL APIs using a fine-grained personal
+  access token held by the DIME credential proxy. Covers cloning, fetching,
+  pulling and pushing over HTTPS or git@ remotes, gh commands such as gh pr
+  create and gh api, Verified commits, and calls to api.github.com. Use for ANY
+  git operation against github.com, ANY gh command and ANY request to
+  api.github.com, including "clone my repo", "push this branch", "open a pull
+  request", "make a signed commit", "list my GitHub issues", or a 403 from the
+  credential proxy on a GitHub call. Read this BEFORE the first GitHub command
+  in a chat: one setup script has to run first.
 metadata:
   author: tradeparadigm
 ---
@@ -26,43 +26,47 @@ and the API are on different hosts:
 
 | Variable | Host | Used by |
 |---|---|---|
-| `CRED_GITHUB_GIT_GIT` | `github.com` | `scripts/git.sh` |
-| `CRED_GITHUB_API_REST` | `api.github.com` | `scripts/api.sh` |
+| `CRED_GITHUB_GIT_GIT` | `github.com` | git, `scripts/commit.mjs` |
+| `CRED_GITHUB_API_REST` | `api.github.com` | `gh`, `scripts/api.sh`, `scripts/commit.mjs` |
 
 The names depend on what the user picked at enrolment. The scripts take any
-`CRED_GITHUB…_GIT` and `CRED_GITHUB…_REST` variable. If only one of the two is
-there, only that half works. Tell the user which one is missing.
+`CRED_GITHUB…_GIT` and `CRED_GITHUB…_REST` variable. If only one is there,
+only that half works. Tell the user which one is missing.
 
-`gh` is not installed. Do not install it.
+## Run setup first
+
+Before the first GitHub command in a chat, run the script beside this file:
+
+```sh
+sh scripts/setup.sh
+```
+
+It prints `configured:` and the halves it set up. It is safe to run again, and
+you must run it again after the user re-enrols a token, because the
+placeholder changes. It writes:
+
+- a git config entry that sends the git placeholder as Basic auth on every
+  request to github.com. The proxy refuses a fetch or push without it, and
+  plain git would not send it until GitHub asked;
+- `insteadOf` rules, so `git@github.com:` and `ssh://git@github.com/` remotes
+  go over HTTPS. SSH itself does not go through the proxy;
+- `gh`'s `hosts.yml`, holding the REST placeholder.
+
+Everything it writes is a placeholder, so none of it is secret.
 
 ## Git
 
-Run git through the script beside this file, in place of `git`:
+After setup, use plain `git` with any remote form. Commits need an author: if
+`git commit` complains, set `user.name` and `user.email` with what the user
+tells you.
 
-```sh
-sh scripts/git.sh clone https://github.com/OWNER/REPO.git
-sh scripts/git.sh -C REPO push origin my-branch
-sh scripts/git.sh -C REPO pull
-```
-
-Give the script's absolute path when you run it from another directory. It
-takes the same arguments as `git`.
-
-The script sends the placeholder as Basic auth on every request to
-github.com. Plain `git` does not: it sends nothing until GitHub answers 401,
-and the proxy answers an unauthenticated fetch or push with a 403 first, so
-git never retries. Never put the placeholder in a remote URL or in a stored
-git config. The script adds it per command.
-
-Use HTTPS remotes. SSH does not go through the proxy and there is no key.
 Git LFS objects are not covered.
 
-Commits need an author. If `git commit` complains, set one for the repository
-with `git config user.name` and `git config user.email`, using what the user
-tells you. Plain `git` is fine for local commands. Only commands that reach
-github.com need the script.
+## gh
 
-## REST API
+After setup, `gh` works as normal: `gh pr create`, `gh pr list`, `gh issue
+view`, `gh api`, `gh repo clone`. If `gh` is not installed, call the API with
+the script:
 
 ```sh
 TARGET=/user sh scripts/api.sh
@@ -71,10 +75,37 @@ METHOD=POST TARGET=/repos/OWNER/REPO/pulls \
   BODY='{"title":"…","head":"my-branch","base":"main","body":"…"}' sh scripts/api.sh
 ```
 
-The script prints the response body and then `HTTP <status>` on its own line.
-On stderr it prints the `link` header, which holds the next page's URL, and
-the `x-ratelimit-*` headers.
-`TARGET` is the path and query, without the host.
+`api.sh` prints the response body, then `HTTP <status>`. On stderr it prints
+the `link` header, which holds the next page's URL, and the `x-ratelimit-*`
+headers.
+
+## Verified commits
+
+`git push` sends commits unsigned. To push commits that GitHub shows as
+Verified, commit locally as normal, then run this from inside the repository
+in place of `git push`:
+
+```sh
+node scripts/commit.mjs
+node scripts/commit.mjs --dry-run      # print what it would send
+node scripts/commit.mjs --base main    # branch not on GitHub yet, made from main
+```
+
+It reads the repository from the `origin` remote. Pass `--remote NAME` for
+another remote, or `--repo OWNER/NAME` when the remote URL is not github.com.
+It needs both halves: git to fetch, and the API to commit.
+
+It sends every local commit ahead of the remote branch as ONE commit through
+GitHub's API. GitHub signs it, and the user is the author. Then it moves your
+local branch onto that commit, so `git status` is clean.
+
+It refuses:
+
+- when the remote branch has commits yours does not. Pull or rebase first;
+- symlinks, submodules, new executable files and mode changes. Push those
+  with plain `git push` and tell the user that commit is not Verified.
+
+The token needs Contents: read and write on the repository.
 
 ## Never edit the scripts
 
@@ -86,14 +117,15 @@ changed, so it can be fixed here.
 
 | What you see | Causes, cheapest to check first |
 |---|---|
-| 403 from the proxy, body says `placeholder_absent` | You ran plain `git` or `curl` in place of the script. Or `GITHUB_GIT_CRED` or `GITHUB_REST_CRED` names the wrong variable. Or the REST credential was enrolled on the Git environment, so every github.com page now needs the placeholder; ask the user to re-enrol it as Git. |
-| `could not read Username for 'https://github.com': terminal prompts disabled` from git, or 401 `Bad credentials` from the API | The token is expired or revoked. Or the credential was enrolled with the other type, so the proxy never swaps it and GitHub sees the placeholder itself. Or it was enrolled on the wrong environment: git needs `CRED_GITHUB_GIT_GIT` and the API needs `CRED_GITHUB_API_REST`, and `CRED_GITHUB_API_GIT` or `CRED_GITHUB_GIT_REST` never works. |
-| `Repository not found` from git, or 404 from the API on a repository you know exists | The token was not given that repository. GitHub answers 404 for a private repository the token cannot see. |
-| 403 on push, `Permission to OWNER/REPO denied` | The token has read access only. It needs Contents: read and write. |
+| 403 from the proxy, body says `placeholder_absent` | Setup has not run in this pod, or ran before the git credential existed. Run `sh scripts/setup.sh`. Or the REST credential was enrolled on the Git environment, so every github.com page now needs the placeholder; ask the user to re-enrol it as Git. |
+| `could not read Username for 'https://github.com'` from git, 401 `Bad credentials` from `gh` or the API | The user re-enrolled and the config holds the old placeholder: run setup again. Or the token is expired or revoked. Or it was enrolled on the wrong environment: git needs `CRED_GITHUB_GIT_GIT` and the API needs `CRED_GITHUB_API_REST`, and `CRED_GITHUB_API_GIT` or `CRED_GITHUB_GIT_REST` never works. |
+| `Repository not found` from git, or 404 on a repository you know exists | The token was not given that repository. GitHub answers 404 for a private repository the token cannot see. |
+| 403 on push, `Permission to OWNER/REPO denied`, or `commit.mjs` gets a permission error | The token has read access only. It needs Contents: read and write. |
 | 403 `Resource not accessible by personal access token` | The token lacks the permission for that endpoint, such as Pull requests or Issues. |
-| 403 with `rate limit` in the body | GitHub's rate limit. `x-ratelimit-reset` on stderr gives the reset time. |
+| 403 with `rate limit` in the body | GitHub's rate limit. `x-ratelimit-reset` gives the reset time. |
+| `commit.mjs` says `expectedHeadOid` does not match | Someone pushed to the branch since your fetch. Pull or rebase, then run it again. |
 | `no GitHub … credential in the environment` from a script | The user has not enrolled that half, or enrolled it on a custom environment under another name. Run `env \| grep '^CRED_GITHUB'` and pass the right one as `GITHUB_GIT_CRED` or `GITHUB_REST_CRED`. |
-| `several GitHub … credentials` from a script | More than one matches. Pick the one for the right host, `CRED_GITHUB_GIT_GIT` or `CRED_GITHUB_API_REST`, and pass it as `GITHUB_GIT_CRED` or `GITHUB_REST_CRED`. |
+| `several GitHub … credentials` from a script | More than one matches. Pass the one for the right host, `CRED_GITHUB_GIT_GIT` or `CRED_GITHUB_API_REST`, as `GITHUB_GIT_CRED` or `GITHUB_REST_CRED`. |
 
 Report a permission failure to the user with the permission it needs. Do not
 work around it.

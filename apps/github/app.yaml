@@ -4,7 +4,7 @@
 schema_version: 1
 
 id: github
-version: 1.0.0
+version: 1.1.0
 name: GitHub
 blurb: Clone, push and call the GitHub API with a token your agent never holds.
 
@@ -16,10 +16,11 @@ description: |
   GitHub hosts git repositories and exposes them through git over HTTPS and a
   REST API.
 
-  This app installs a skill teaching your agent to clone, fetch and push over
-  HTTPS and to call the REST API, using a **fine-grained personal access
-  token** that stays sealed. Your agent sends a placeholder and the credential
-  proxy swaps in the token on the way out.
+  This app installs a skill that sets up git and the `gh` CLI for your agent,
+  using a **fine-grained personal access token** that stays sealed. Your agent
+  sends a placeholder and the credential proxy swaps in the token on the way
+  out. `git@github.com:` remotes work over HTTPS, and your agent can push
+  commits that GitHub signs and shows as Verified.
 
   Git and the API are on different hosts, so you enrol the token twice: once
   as **Git** on the Git environment, and once as **REST API** on the API
