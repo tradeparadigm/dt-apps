@@ -55,6 +55,16 @@ def deribit_symbol(asset: str, expiry_c: str, strike, cp: str) -> str:
     return f"{base}-{expiry_c}-{k}-{cp.upper()}"
 
 
+def paradex_symbol(asset: str, expiry_c: str, strike, cp: str) -> str:
+    """BTC → 'BTC-USD-9OCT26-90000-C': Paradex's option market name."""
+    k = int(round(float(strike)))
+    return f"{asset.upper()}-USD-{expiry_c}-{k}-{cp.upper()}"
+
+
+def paradex_perp_symbol(asset: str) -> str:
+    return f"{asset.upper()}-USD-PERP"
+
+
 def perp_symbol(asset: str) -> str:
     base = asset.upper()
     return f"{base}-PERPETUAL" if base in ("BTC", "ETH") else f"{base}_USDC-PERPETUAL"

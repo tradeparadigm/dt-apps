@@ -25,7 +25,7 @@ compatibility: Resolves the rfq_id against the Paradigm execution tape's daily
   unreachable, never fabricating the fill.
 metadata:
   author: tradeparadigm
-  version: "1.10"
+  version: "1.11"
 ---
 
 # Paradigm Block Trade Analyst
@@ -64,16 +64,25 @@ greeks").
 
 ### Live path — run ONE script, relay its output
 
-**If the trade row / block JSON is already injected in the prompt (evals, a terminal feed) or
-`exec`/`uv`/S3 aren't available, skip the script** and render the block directly from that data via
-Steps 1–7. Otherwise use the script:
+**Always run the script when `exec` and `uv` are available — including when the trade JSON is
+injected.** Hand the injected JSON to it (below); the script resolves the fill from it, then the
+execution tape, then Paradigm's API, so a block too new for the tape still renders. Render by hand
+via Steps 1–7 only when `exec`/`uv` are unavailable.
 
-**Any `analyze:` line it prints is part of the answer — relay it verbatim, first.** On a non-zero exit that line is the whole reply; on exit `0` it qualifies the block (`recurrence is a FLOOR` means the 30d count is a lower bound). Exit `4` is a tape or environment failure, never an unknown RFQ — do not answer it with the not-resolved line. Codes in `references/rfq-lookup.md`.
+**Any `analyze:` line it prints is part of the answer — relay it verbatim, first.** On a non-zero exit that line is the whole reply; on exit `0` it qualifies the block. A History count marked `(as of <time>)` is a lower bound: blocks after that time are not in it. Exit `4` is a tape or environment failure, never an unknown RFQ — do not answer it with the not-resolved line. Codes in `references/rfq-lookup.md`.
 
 **Run one command and relay its stdout as your entire reply:**
 
 ```bash
 bash scripts/analyze.sh <rfq_id>      # the id only; ignore any description after it
+```
+
+When the message carries the trade JSON (`DATA: {...}`), pass it on stdin in the same command:
+
+```bash
+bash scripts/analyze.sh <rfq_id> --fill-json - <<'EOF'
+<the JSON exactly as it arrived>
+EOF
 ```
 
 `analyze.sh` does everything — `collect_analysis.py` resolves the `FILL` legs by `RFQ_ID` plus

@@ -11,6 +11,7 @@ import os
 import sys
 import tempfile
 import csv
+import json
 from pathlib import Path
 
 import importlib.util
@@ -215,7 +216,7 @@ ok("fill=1" in _out, f"and prints the counts on STDOUT [{_out.strip()}]")
 
 _code, _out, _err = run_main("r_missing", rows=[tape_row()])
 ok(_code == 5, f"an unknown id exits 5, not 0 [{_code}]")
-ok("not found on the execution tape" in _err, f"on stderr [{_err.strip()[:70]}]")
+ok("Couldn't find r_missing in Paradigm's 30-day history" in _err, f"on stderr [{_err.strip()[:70]}]")
 ok(_out.strip() == "", "and prints nothing on stdout")
 
 _code, _out, _err = run_main("r_missing", rows=[tape_row()],
@@ -223,7 +224,8 @@ _code, _out, _err = run_main("r_missing", rows=[tape_row()],
                                        "source_watermark_ms": 0,
                                        "coverage_note": "sync trails"})
 ok(_code == 6, f"an unknown id under a stale tail exits 6, not 5 [{_code}]")
-ok("not absence from" in _err, f"and says so rather than blaming the id [{_err.strip()[:70]}]")
+ok("history is current to" in _err and "may not show yet" in _err,
+   f"and says so rather than blaming the id [{_err.strip()[:90]}]")
 
 _code, _out, _err = run_main("r_target", raises=RuntimeError("partition missing"))
 ok(_code == 4, f"a reader refusal exits 4, NOT 5 [{_code}]")
@@ -242,13 +244,16 @@ _code, _out, _err = run_main("GRFQ-r_dup", rows=_amb)
 ok(_code == 0, f"and the prefixed id it tells you to use then works [{_code}] {_err.strip()[:60]}")
 
 # Recurrence under a stale tail is a floor, on the path where a block WAS found.
-_code, _out, _err = run_main("r_target", rows=[tape_row()],
+_tmp = tempfile.mkdtemp()
+_code, _out, _err = run_main("r_target", rows=[tape_row()], tmp=_tmp,
                              coverage={"coverage_complete": False,
                                        "source_watermark_ms": 0,
                                        "coverage_note": "sync trails"})
 ok(_code == 0, "a found block under a stale tail still succeeds")
-ok("recurrence is a FLOOR" in _err,
-   f"but says the count is a floor [{_err.strip()[:70]}]")
+_hist = json.loads((Path(_tmp) / "history.json").read_text())
+ok(_hist["as_of"] and not _hist["unavailable"],
+   f"and hands the count's coverage to the History row [{_hist}]")
+ok("analyze:" not in _err, f"rather than a line of its own above the block [{_err.strip()[:70]}]")
 
 # A NULL row_type is DROPPED, as `WHERE row_type='paradigm_trade'` drops it.
 # Keeping it put the same rfq_id in both fill and hist and inflated recurrence.

@@ -187,11 +187,18 @@ distinct — substituting one for another is the failure this script exists to s
 | `0` | resolved | the rendered block |
 | `2` | malformed or missing `rfq_id` | ask for the id |
 | `3` | the id exists in BOTH namespaces | re-run with the exact `DRFQv2-`/`GRFQ-` id the message names; that form is honoured, so it resolves |
-| `4` | **execution tape unavailable**, or the environment failed it (unwritable `--out-dir`) | a pipeline or environment failure. Report it as one. **Never** use the "RFQ not resolved" line — that blames the trade |
-| `5` | not found, and the read covered the full window | genuinely not found |
-| `6` | not found, and the read stopped short | relay the boundary it names — a block traded after it would not be in the read, so this is not evidence of absence |
+| `4` | **execution tape unavailable** and no other source had the fill, or the environment failed it (unwritable `--out-dir`) | a pipeline or environment failure. Report it as one. **Never** use the "RFQ not resolved" line — that blames the trade |
+| `5` | not found in the injected trade, the tape or Paradigm's API, and the tape covered the full window | `Couldn't find <id> in Paradigm's 30-day history.` plus why the API did not help, when it did not search (no key enrolled, refused) |
+| `6` | not found anywhere, and the tape stops short of now | `Couldn't find <id>. Paradigm's history is current to <time>, so a very recent trade may not show yet.` plus the API's part — relay it; it is not evidence the trade never happened |
 
-Exit `0` can still carry a line: `recurrence is a FLOOR — the read covers
-through <time>`. `analyze.sh` puts it on stdout with the block. The block is sound; the 30-day recurrence count is a
-lower bound because the hourly sync tail is not in the read. Relay it beside the
-block rather than presenting the count as exact.
+The fill is resolved in this order: the trade JSON passed with `--fill-json`, then the execution
+tape, then `GET /v2/drfq/trade_tape/` on `api.prod.paradigm.trade` with the account's enrolled
+production key (`CRED_PARADIGM_MAINNET_ACCESS` / `CRED_PARADIGM_MAINNET_SIGNING`, through the
+credential proxy), paged newest-first down to the tape's coverage edge. The 30-day recurrence
+always comes from the tape. When the tape cannot be read but another source had the fill, the
+run exits `0` and the History row reads `Paradigm block history unavailable right now`.
+
+When the tape stops short of now (the hourly sync, so nearly always), the History row carries
+it beside the count: `N same-structure block(s) on Paradigm 30d (as of 01:59 UTC)`. The count
+is a lower bound; blocks after that time are not in it. The block is sound either way, so
+relay it as printed.
