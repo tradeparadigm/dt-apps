@@ -572,7 +572,8 @@ ok("Spot unavailable" in _out and "62kC, 62kP, spot" in _out, "and no spot at al
 # Bybit/OKX blocks are benchmarked on Deribit; the block says so.
 _byb = [dict(r, PRODUCT="BTC OPTION - BYB") for r in straddle]
 _out, _rc = _rendered_rc(_byb, STRADDLE_TK)
-ok(_rc == 0 and "does not read BYB's own market data" in _out, "a non-Deribit venue is named")
+ok(_rc == 0 and "_Benchmarked on Deribit._" in _out, "a block from a venue the script does not read says where its live data is from")
+ok("Benchmarked" not in _rendered_rc(straddle, STRADDLE_TK)[0], "and a Deribit block does not")
 
 # Only what the trade data cannot settle reaches the agent, with the numbers.
 _rr = [{"PRODUCT": "BTC OPTION - DBT", "DESCRIPTION": "RRCall 25 Sep 26 58000/66000",

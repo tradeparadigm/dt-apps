@@ -548,8 +548,7 @@ def _notes(r, legs, a) -> list[str]:
         out.append(f"No live data for {', '.join(what)} after a retry. "
                    f"Rerun /analyze to try again.")
     if r["venue"] not in ("DBT", "PRDX"):
-        out.append(f"Benchmarked on Deribit: this analysis does not read {r['venue']}'s own "
-                   f"market data.")
+        out.append("Benchmarked on Deribit.")
     return [f"_{n}_" for n in out]
 
 
