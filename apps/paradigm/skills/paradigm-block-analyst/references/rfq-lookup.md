@@ -177,10 +177,16 @@ decide the structure; every one of those comes from the resolved `FILL` row (`PR
   asset therefore isn't known, report the RFQ unresolved (Step 7); do not fabricate an
   asset/strike/structure or default to BTC.
 
-## `collect_analysis.py` exit codes
+## Exit codes
 
-One line on STDERR, relayed verbatim and nothing else. The codes are deliberately
-distinct — substituting one for another is the failure this script exists to stop.
+`analyze.sh` exits `0` (stdout is the answer) or `1` (stdout ends with a `## For the agent`
+section). Those two are the whole contract for whoever runs it; the table below is
+`collect_analysis.py`'s own, which `analyze.sh` reads to decide between them. Codes `2`–`6` are
+answers for the user and become exit `0` with the line relayed; any other code, or the step's
+deadline, means the script did not run and becomes exit `1` with a rebuild by hand as the task.
+
+`collect_analysis.py` writes one line on STDERR, relayed verbatim and nothing else. The codes are
+deliberately distinct — substituting one for another is the failure this script exists to stop.
 
 | code | meaning | what to say |
 |---|---|---|

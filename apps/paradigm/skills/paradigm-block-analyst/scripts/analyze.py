@@ -11,11 +11,10 @@ CSVs collect_analysis.py wrote (from analyze.sh), parses the structure, fetches 
 leg's Deribit ticker + 30d trade buckets CONCURRENTLY, computes net greeks /
 direction / fill-offset / recurrence, and prints the finished block (--render).
 
-The agent runs `bash scripts/analyze.sh <rfq_id>` and relays stdout. The only
-piece it may finalise itself is the Greeks row when the structure's signs
-aren't reliably derivable from the tape (risk reversals, calendars, exotics) —
-those rows are printed as per-leg greeks with a `⚠ net: confirm signs` marker and
-all the numbers it needs are right there.
+Exit 0: stdout is the answer, for the user as it stands — including what could
+not be fetched, said in the block. Exit 1: stdout needs an agent; it ends with a
+"## For the agent" section holding the task and every number already pulled, so
+the agent finishes the block without re-running or re-fetching anything.
 
 Deterministic + no per-turn tool orchestration ⇒ fast and run-to-run stable.
 """
@@ -25,6 +24,8 @@ import json
 import os
 import re
 import sys
+import time
+import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlencode
@@ -38,6 +39,10 @@ DERIBIT = "https://www.deribit.com/api/v2/public"
 # does, its mark is a different book's price set beside a Paradex fill.
 PARADEX = "https://api.prod.paradex.trade/v1"
 WARN: list[str] = []
+# Short enough that a request, its one retry and Paradex's bbo/ fallback all fit
+# inside analyze.sh's deadline for this step.
+TIMEOUT_S = 6
+AGENT_MARK = "## For the agent"
 
 
 def warn(m):
@@ -58,10 +63,27 @@ def _read_json(path):
         return json.load(f)
 
 
-def _get(path, params, timeout=15):
-    url = f"{DERIBIT}/{path}?{urlencode(params)}"
-    with urllib.request.urlopen(url, timeout=timeout) as r:
-        d = json.loads(r.read())
+def _transient(exc) -> bool:
+    """A failure a second attempt can fix: the network, a timeout, a 5xx or a
+    429. A 4xx is an answer (no such instrument) and is not retried."""
+    if isinstance(exc, urllib.error.HTTPError):
+        return exc.code >= 500 or exc.code == 429
+    return isinstance(exc, (urllib.error.URLError, TimeoutError, ConnectionError, OSError))
+
+
+def _open_json(url, timeout):
+    for attempt in (1, 2):
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as r:
+                return json.loads(r.read())
+        except Exception as exc:  # noqa: BLE001 — re-raised unless one retry may fix it
+            if attempt == 2 or not _transient(exc):
+                raise
+            time.sleep(0.3)
+
+
+def _get(path, params, timeout=TIMEOUT_S):
+    d = _open_json(f"{DERIBIT}/{path}?{urlencode(params)}", timeout)
     if "error" in d:
         raise RuntimeError(d["error"])
     return d["result"]
@@ -82,10 +104,8 @@ def fetch_ticker(sym):
         return sym, None
 
 
-def _paradex(path, params=None, timeout=15):
-    url = f"{PARADEX}/{path}" + (f"?{urlencode(params)}" if params else "")
-    with urllib.request.urlopen(url, timeout=timeout) as r:
-        return json.loads(r.read())
+def _paradex(path, params=None, timeout=TIMEOUT_S):
+    return _open_json(f"{PARADEX}/{path}" + (f"?{urlencode(params)}" if params else ""), timeout)
 
 
 def fetch_paradex_ticker(sym):
@@ -159,22 +179,34 @@ def main():
     ap.add_argument("--render", action="store_true")
     args = ap.parse_args()
     try:
-        _run(args)
-    except Exception as e:  # noqa: BLE001 — never a traceback; degrade to raw rows
+        return _run(args)
+    except Exception as e:  # noqa: BLE001 — never a traceback; hand the resolved rows on
         try:
             rows = _read_csv(os.path.join(args.csv_dir, "fill.csv"))
         except Exception:  # noqa: BLE001 — the fallback itself must not raise
             rows = []
         if not rows:
-            print("RFQ not resolved / analysis error — no data available.")
-            return
-        print(f"⚠ analysis hit an error ({type(e).__name__}) — the resolved tape rows below "
-              f"are correct; build the block from them (fetch each leg on Deribit):")
-        print("```yaml")
-        for r in rows:
-            print(f"  {r.get('SIDE')} {r.get('QTY')} @ {r.get('PRICE')} (ref {r.get('REF_PRICE')}) "
-                  f"· {r.get('DESCRIPTION')} · {r.get('PRODUCT')}")
-        print("```")
+            print("analyze: the analysis failed before the trade was read.")
+            return 0
+        print(f"analyze: the analysis failed ({type(e).__name__}: {e}) after the trade was found.")
+        print(agent_section(
+            "Build the block from the trade rows below, as paradigm-block-analyst Steps 1–7 "
+            "describe: legs from the rows (never the user's text), each leg's live ticker on the "
+            "trade's venue, the net greeks, and the fill against the mark.",
+            {"fill_rows": rows, "error": f"{type(e).__name__}: {e}"},
+            refetch=True))
+        return 1
+
+
+def agent_section(task: str, data: dict, refetch: bool = False) -> str:
+    """The part of an exit-1 output only the agent reads: what to do, and every
+    number the script already has, so the turn is scoped to the one gap."""
+    rules = ("Fetch only what the task names; everything below was already pulled."
+             if refetch else
+             "Do not run analyze.sh again and do not fetch anything: everything you need is "
+             "below. Reply with the block above, completed, and nothing before or after it.")
+    return "\n".join(["", AGENT_MARK, "", task, "", rules, "", "```json",
+                      json.dumps(data, default=str, indent=1), "```"])
 
 
 def _run(args):
@@ -184,9 +216,8 @@ def _run(args):
     fill = _read_csv(os.path.join(args.csv_dir, "fill.csv"))
     hist = _read_csv(os.path.join(args.csv_dir, "hist.csv"))
     if not fill:
-        print("RFQ not resolved (not on Paradigm tape / id not ingested) — "
-              "no asset/structure/fill available.")
-        return
+        print("analyze: no trade was resolved, so there is nothing to analyse.")
+        return 0
 
     prod = ac.parse_product(fill[0].get("PRODUCT", ""))
     asset = prod["asset"]
@@ -201,9 +232,9 @@ def _run(args):
     legs = ac.legs_from_rows(fill)
     if legs is not None:
         side = "Buyer" if ac.net_cash(fill) > 0 else "Seller"
-        # per-leg option signs are exact; a perp leg nets only once its coin size
-        # is confirmed (ac.hedges_sized), else the net is deferred (⚠).
-        reliable = ac.hedges_sized(legs)
+        # each row's SIDE is its leg's sign; a perp leg's SIZE is a separate
+        # question (hedge status, below).
+        reliable = True
         parsed = {"code": "combo"}
     else:
         parsed = ac.parse_description(desc)
@@ -217,11 +248,9 @@ def _run(args):
             #    the model build the whole block. Never a confident empty/guessed block.
             legs = ac.extract_legs_generic(desc)
             side = "Buyer" if ac.net_cash(fill) > 0 else "Seller"
-            # explicit per-leg signs are authoritative even under an unmapped name →
-            # still net reliably; otherwise defer to the model.
-            reliable = (bool(legs)
-                        and all(l.get("sign") is not None for l in legs)
-                        and not any(l["cp"] == "FUT" for l in legs))
+            # explicit per-leg signs are authoritative even under an unmapped name;
+            # whether the description listed EVERY leg is what stays unknown.
+            reliable = bool(legs) and all(l.get("sign") is not None for l in legs)
             unmapped = True
         # The rows name each leg's instrument even when the DESCRIPTION repeats
         # the package, so a name this parser cannot sign (an unmapped one, or a
@@ -232,10 +261,24 @@ def _run(args):
             if by_instrument is not None:
                 legs = by_instrument
                 side = "Buyer" if ac.net_cash(fill) > 0 else "Seller"
-                reliable = ac.hedges_sized(legs)
+                reliable = True
                 if unmapped:
                     parsed = {"code": "combo"}
                 unmapped = False
+
+    # A perp/future hedge nets only when every hedge row became a leg whose size
+    # two sources confirm. Otherwise the options net alone, and the block says so:
+    # the size is a fact about the trade nobody downstream can supply.
+    hedge_rows = [r for r in fill
+                  if ac.parse_product(r.get("PRODUCT", "")).get("kind") in ("PERPETUAL", "FUTURE")]
+    fut_legs = [l for l in legs if l["cp"] == "FUT"]
+    if not hedge_rows:
+        hedge = "none"
+    elif len(fut_legs) == len(hedge_rows) and ac.hedges_sized(legs):
+        hedge = "sized"
+    else:
+        hedge = "unconfirmed"
+    net_legs = [l for l in legs if l["cp"] != "FUT" or hedge == "sized"]
 
     # instruments: each option leg + the perp for spot, on the venue the block
     # settled on. Paradex carries no 30d block-trade buckets in this script, so
@@ -284,11 +327,19 @@ def _run(args):
             # delta 1 per coin, nothing else: a sized hedge's ratio is coins per
             # package unit, so net_greeks counts it in coin like the option legs.
             greek_by_key[ac.leg_key(l)] = ac.FUT_GREEKS
-    ng = ac.net_greeks(legs, greek_by_key, qty) if reliable else {}
+    ng = ac.net_greeks(net_legs, greek_by_key, qty) if reliable else {}
     # A greek one leg's venue does not publish is unknown for the package, not 0.
     for k in list(ng):
-        if any(greek_by_key[ac.leg_key(l)].get(k) is None for l in legs):
+        if any(greek_by_key[ac.leg_key(l)].get(k) is None for l in net_legs):
             ng[k] = None
+    # What did not come back after its retry, said in the block rather than
+    # handed to anyone: a retry is the only fix, and the user can rerun.
+    gaps = [_leg_lbl(l, False) for l in legs
+            if l["cp"] != "FUT" and l.get("_sym") and tickers.get(l["_sym"]) is None]
+    if spot is None:
+        gaps.append("spot")
+    counts_missing = (not on_paradex
+                      and any(buckets.get(l.get("_sym")) is None for l in legs if l.get("_sym")))
 
     # Net package offset (SKILL Step 7, the ONE convention) — per structure unit, unit by quote.
     # struct_net weights each option leg by its QTY relative to the structure's base unit, so a
@@ -341,14 +392,22 @@ def _run(args):
                        "ref": ac._f(r.get("REF_PRICE")), "product": r.get("PRODUCT")}
                       for r in fill],
         "net_greeks": ng, "recurrence_blocks": recurrence, "warnings": WARN,
+        "hedge": hedge,
+        "hedge_rows": [{"instrument": r.get("INSTRUMENT") or r.get("PRODUCT"),
+                        "side": r.get("SIDE"), "qty": ac._f(r.get("QTY")),
+                        "price": ac._f(r.get("PRICE")), "ratio": ac._f(r.get("RATIO"))}
+                       for r in hedge_rows],
+        "gaps": gaps, "counts_missing": counts_missing,
         "history_unavailable": bool(history.get("unavailable")),
         "history_as_of": history.get("as_of") or "",
     }
 
     if args.render:
-        print(render(result))
-    else:
-        print(json.dumps(result, default=str))
+        text, code = render(result)
+        print(text)
+        return code
+    print(json.dumps(result, default=str))
+    return 0
 
 
 def _sk(strike):
@@ -434,107 +493,162 @@ def _quote(t) -> str:
     return f"{bid if bid is not None else '–'}/{ask if ask is not None else '–'}"
 
 
-def render(r) -> str:
+def _history_text(r) -> str:
+    if r.get("history_unavailable"):
+        return "Paradigm block history unavailable right now"
+    text = f"{r['recurrence_blocks']} same-structure block(s) on Paradigm 30d"
+    if r.get("history_as_of"):
+        text += f" (as of {r['history_as_of']})"
+    return text
+
+
+def _greek_parts(ng, a) -> str:
+    parts = [(f"Δ {ng['delta']:+.2f} {a}" if ng.get("delta") is not None else None),
+             (f"Vega {ng['vega']:+,.0f}/v" if ng.get("vega") is not None else None),
+             (f"Γ {ng['gamma']:+.4f}" if ng.get("gamma") is not None else None),
+             (f"Θ {ng['theta']:+,.0f}/d" if ng.get("theta") is not None else None)]
+    return " · ".join(p for p in parts if p)
+
+
+def _agent_data(r) -> dict:
+    """Every number the script pulled, for an agent finishing the block."""
+    return {
+        "asset": r["asset"], "venue": r["venue"], "side": r["side"], "N": r["qty"],
+        "fill_net": r["fill_net"], "ref_net": r["ref_net"], "spot": r["spot"],
+        "legs": [{k: l.get(k) for k in ("cp", "strike", "expiry", "ratio", "sign", "sym")}
+                 | {"greeks": {k: (l.get("tkr") or {}).get(k)
+                               for k in ("delta", "gamma", "vega", "theta", "iv", "mark")}}
+                 for l in r["legs"]],
+        "fill_rows": r["fill_rows"],
+    }
+
+
+def _amt(x: float) -> str:
+    return f"{int(x):,}" if float(x).is_integer() else f"{x:,.6g}"
+
+
+def _notes(r, legs, a) -> list[str]:
+    """One line each for what the block could not settle, said to the user."""
+    out = []
+    if r.get("qty_inferred"):
+        sizes = "/".join(f"{row['qty']:g}" for row in r["fill_rows"]
+                         if row.get("qty") and "OPTION" in (row.get("product") or ""))
+        out.append(f"Leg sizes {sizes} state no ratio, so ×{r['qty']:g} takes the smallest leg "
+                   f"as one package. If the package is larger, ×N, {r['verb']} and a bps offset "
+                   f"change with it; the greeks are for the whole block either way.")
+    if r.get("hedge") == "unconfirmed":
+        rows = "; ".join(f"{h['side']} {_amt(h['qty'])} {h['instrument']} @ {_amt(h['price'])}"
+                         for h in r.get("hedge_rows") or [] if h.get("qty") and h.get("price"))
+        out.append(f"Greeks are the options alone: the perp hedge's size is not confirmed by "
+                   f"the trade data ({rows}).")
+    if r.get("gaps") or r.get("counts_missing"):
+        what = list(r.get("gaps") or [])
+        if r.get("counts_missing"):
+            what.append("Deribit's 30-day leg counts")
+        out.append(f"No live data for {', '.join(what)} after a retry. "
+                   f"Rerun /analyze to try again.")
+    if r["venue"] not in ("DBT", "PRDX"):
+        out.append(f"Benchmarked on Deribit: this analysis does not read {r['venue']}'s own "
+                   f"market data.")
+    return [f"_{n}_" for n in out]
+
+
+def render(r) -> tuple[str, int]:
+    """(text, exit code). 0 when the text is the answer; 1 when it ends with a
+    task for the agent — only for what the trade data cannot settle by rule."""
     a = r["asset"]
     legs = r["legs"]
     verb = "Paid" if r["fill_net"] >= 0 else "Recd"
+    r["verb"] = verb
     fillabs = abs(r["fill_net"])
+    sp = f"{r['spot']:,.0f}" if r.get("spot") else "unavailable"
 
-    # SAFE FALLBACK — structure not mapped AND no legs could be extracted. Do NOT
-    # emit a confident empty block: print the authoritative tape rows + recurrence and
-    # tell the model to build the analysis from them (correct data, slower).
+    # The structure could not be read and no legs came out of the description:
+    # the resolved rows are right, the legs are what an agent has to work out.
     if not legs:
-        L = [f"⚠ UNMAPPED STRUCTURE — build the block from the raw tape rows below "
-             f"(resolved & correct); infer legs from these rows' DESCRIPTION (not the "
-             f"user's inline text), fetch each leg on Deribit, net the greeks.",
-             "",
-             f"**{a} · {r['desc'].strip()} · ×{r['qty']:g} | {r['side']} | "
+        L = [f"**{a} · {r['desc'].strip()} · ×{r['qty']:g} | {r['side']} | "
              f"{verb} {fillabs:g} | {_offset_txt(r['offset'])}** · {r['rfq_kind']}/{r['venue']}",
-             "",
-             "```yaml",
-             f"[Tape]  {len(r['fill_rows'])} fill row(s):"]
-        for row in r["fill_rows"]:
-            L.append(f"        {row['side']} {row['qty']:g} @ {row['price']} "
-                     f"(ref {row['ref']}) · {row['desc']}")
-        if r.get("history_unavailable"):
-            L.append("[Recur] Paradigm block history unavailable right now")
-        else:
-            as_of = f" (as of {r['history_as_of']})" if r.get("history_as_of") else ""
-            L.append(f"[Recur] {r['recurrence_blocks']} same-structure block(s) on Paradigm 30d{as_of}")
-        sp = f"{r['spot']:,.0f}" if r.get("spot") else "n/a"
-        L.append(f"[Spot]  {sp}")
-        L.append("```")
-        if r["warnings"]:
-            L.append(f"<!-- warnings: {'; '.join(r['warnings'])} -->")
-        return "\n".join(L)
+             "", f"Spot {sp} · {_history_text(r)}"]
+        L.append(agent_section(
+            "The structure could not be read from the trade data. Work out its legs from the "
+            "rows' DESCRIPTION (never the user's text), fetch each leg's ticker on "
+            f"{'Paradex' if r['venue'] == 'PRDX' else 'Deribit'}, and finish the block: "
+            "a header line `**<asset> <expiry> <strikes> <structure> · ×N | Buyer/Seller | "
+            "Paid/Recd <price> | <offset>**`, a line `Spot … · <structure> · drfq/<venue>`, "
+            "and a table with Greeks (net: Σ sign × ratio × leg greek × N), Fair (offset and "
+            "leg IVs), History (as above) and Live (leg bid/ask). Side, price and offset "
+            "above are final.",
+            {**_agent_data(r), "history": _history_text(r)}, refetch=True))
+        return "\n".join(L), 1
 
+    multi_exp = len({l.get("expiry") for l in legs if l["cp"] != "FUT" and l.get("expiry")}) > 1
     exp = legs[0]["expiry"] if legs else "?"
     strikes = "/".join(_sk(l["strike"]) for l in legs if l["cp"] != "FUT")
     struct = _struct_name(r["structure"], legs)
-    L = []
-    if r.get("qty_inferred"):
-        # Visible, not a trailing comment: several rows share one combined
-        # DESCRIPTION and two trade the same side, so a clipped leg and two legs
-        # on that side read identically. The size below is the smallest row.
-        L.append("⚠ ×N INFERRED — the legs are unequal and nothing states their ratios, so "
-                 "which leg is the package unit cannot be read off the tape: a 100/100/10 "
-                 "spread with a tail and a 10:10:1 ratio are the same three numbers. ×N below "
-                 "is the SMALLEST leg, which on the first of those is wrong by a whole "
-                 "multiple, and the premium nets against that same base — so Paid/Recd and the "
-                 "bps offset are wrong by the same factor. Read the leg sizes off the tape rows "
-                 "below and say so, rather than repeating ×N as though it were confirmed.")
-        L.append("")
-    L.append(f"**{a} {exp} {strikes} {struct} · ×{r['qty']:g} | {r['side']} | "
-             f"{verb} {fillabs:g} | {_offset_txt(r['offset'])}**")
-    sp = f"{r['spot']:,.0f}" if r.get("spot") else "n/a"
-    L.append("")
-    note = ("⚠ unmapped structure — verify legs & net signs from the data below"
-            if r.get("unmapped") else
-            ("signs verified" if r["reliable_signs"] else "net greeks: confirm signs from legs below"))
-    # A confirmed hedge's size, signed for the taker: the one number in the
-    # net greeks a reader cannot see on the option legs.
+    L = [f"**{a} {exp} {strikes} {struct} · ×{r['qty']:g} | {r['side']} | "
+         f"{verb} {fillabs:g} | {_offset_txt(r['offset'])}**", ""]
     hedge = sum(l["sign"] * l["ratio"] * r["qty"] for l in legs if l["cp"] == "FUT" and l.get("sized"))
     hedge_txt = f" · hedge {hedge:+.2f} {a} perp" if hedge else ""
+    note = "signs verified" if r["reliable_signs"] and not r.get("unmapped") else "draft"
     L.append(f"Spot {sp} · {struct}{hedge_txt} · {note} · {r['rfq_kind']}/{r['venue']}")
     L.append("")
-    # tag legs with expiry only when the structure spans >1 expiry (calendars/diagonals)
-    multi_exp = len({l.get("expiry") for l in legs if l["cp"] != "FUT" and l.get("expiry")}) > 1
-    # A pipe table, which the terminal draws as a real table.
+
+    opt = [l for l in legs if l["cp"] != "FUT"]
+    missing = [l for l in opt if not l.get("tkr")]
     rows = []
     ng = r["net_greeks"]
-    if ng and r["reliable_signs"]:
-        parts = [(f"Δ {ng['delta']:+.2f} {a}" if ng.get("delta") is not None else None),
-                 (f"Vega {ng['vega']:+,.0f}/v" if ng.get("vega") is not None else None),
-                 (f"Γ {ng['gamma']:+.4f}" if ng.get("gamma") is not None else None),
-                 (f"Θ {ng['theta']:+,.0f}/d" if ng.get("theta") is not None else None)]
-        rows.append(("Greeks", " · ".join(p for p in parts if p)))
+    if not r["reliable_signs"]:
+        per = " · ".join(f"{_leg_lbl(l, multi_exp)} Δ{(l['tkr'] or {}).get('delta')}"
+                         for l in opt if l.get("tkr"))
+        rows.append(("Greeks", f"per leg (signs to confirm): {per}"))
+    elif missing:
+        rows.append(("Greeks", "net unavailable — no live data for "
+                     + ", ".join(_leg_lbl(l, multi_exp) for l in missing)))
     else:
-        per = " · ".join(
-            f"{_leg_lbl(l, multi_exp)} Δ{(l['tkr'] or {}).get('delta')}"
-            for l in legs if l["cp"] != "FUT" and l.get("tkr"))
-        rows.append(("Greeks", f"⚠ net: confirm signs — per-leg: {per}"))
-    ivs = " / ".join(f"{_leg_lbl(l, multi_exp)} {(l['tkr'] or {}).get('iv')}v"
-                     for l in legs if l["cp"] != "FUT" and l.get("tkr"))
+        rows.append(("Greeks", _greek_parts(ng, a)))
+    ivs = " / ".join(f"{_leg_lbl(l, multi_exp)} "
+                     + (f"{l['tkr'].get('iv')}v" if l.get("tkr") else "no data") for l in opt)
     rows.append(("Fair", f"{_offset_txt(r['offset'])} · {ivs}"))
-    d30 = sum((l["trades"] or {}).get("30d", (0, 0, 0))[1] for l in legs if l.get("trades"))
-    if r.get("history_unavailable"):
-        history = "Paradigm block history unavailable right now"
-    else:
-        history = f"{r['recurrence_blocks']} same-structure block(s) on Paradigm 30d"
-        if r.get("history_as_of"):
-            history += f" (as of {r['history_as_of']})"
+    history = _history_text(r)
     if r["venue"] != "PRDX":
-        history += f" · Deribit leg blocks 30d: {d30}"
+        if r.get("counts_missing"):
+            history += " · Deribit leg blocks 30d: –"
+        else:
+            d30 = sum((l["trades"] or {}).get("30d", (0, 0, 0))[1] for l in legs if l.get("trades"))
+            history += f" · Deribit leg blocks 30d: {d30}"
     rows.append(("History", history))
-    live = " · ".join(f"{_leg_lbl(l, multi_exp)} {_quote(l['tkr'] or {})}"
-                      for l in legs if l["cp"] != "FUT" and l.get("tkr"))
+    live = " · ".join(f"{_leg_lbl(l, multi_exp)} "
+                      + (_quote(l["tkr"]) if l.get("tkr") else "no data") for l in opt)
     rows.append(("Live", live))
     L += ["|  | Detail |", "| --- | --- |"]
     L += [f"| {label} | {text} |" for label, text in rows]
+    notes = _notes(r, legs, a)
+    if notes:
+        L += [""] + notes
     if r["warnings"]:
         L.append(f"<!-- warnings: {'; '.join(r['warnings'])} -->")
-    return "\n".join(L)
+
+    # What only judgment can settle goes to the agent, with the numbers.
+    if r.get("unmapped"):
+        L.append(agent_section(
+            "The structure's name was not recognised and the legs above were read from its "
+            "description text, which can miss a leg. Check them against fill_rows. If they "
+            "match, reply with the block as it stands, changing `draft` to `signs verified`. "
+            "If a leg is missing or wrong, correct the legs and redo the Greeks, Fair and Live "
+            "rows — fetching only a leg that is not in the data.",
+            _agent_data(r), refetch=True))
+        return "\n".join(L), 1
+    if not r["reliable_signs"]:
+        L.append(agent_section(
+            "Which legs the taker is long and which short could not be read from the trade "
+            "data. Settle each option leg's sign from fill_rows (a row naming one leg carries "
+            "the taker's SIDE for it) and the structure, then replace the Greeks row with the "
+            f"net: Σ sign × ratio × leg greek × N, N = {r['qty']:g}, and `draft` with "
+            "`signs verified`. Buyer/Seller, Paid/Recd and the offset in the header are final.",
+            _agent_data(r)))
+        return "\n".join(L), 1
+    return "\n".join(L), 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

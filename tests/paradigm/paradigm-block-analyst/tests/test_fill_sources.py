@@ -441,7 +441,7 @@ def render_rr(trade):
 
 
 block = render_rr(RR_PERP)
-ok("⚠" not in block, f"nothing is left for the model [{block}]")
+ok("⚠" not in block and "## For the agent" not in block, f"nothing is left for the model [{block}]")
 ok("| Seller |" in block and "Recd 0.0082" in block, f"Seller, received 0.0082 [{block.splitlines()[0]}]")
 ok("Combo + perp · hedge +39.67 BTC perp · signs verified" in block,
    f"named from its legs, the hedge sized for the taker, signs verified [{block.splitlines()[2]}]")
@@ -451,8 +451,14 @@ ok("Δ -0.33 BTC" in greeks and "Vega +0/v" in greeks, f"the hedge is in the net
 
 unsized = dict(RR_PERP, legs=[RR_PERP["legs"][0], RR_PERP["legs"][1], dict(RR_PERP["legs"][2], ratio=None)])
 block = render_rr(unsized)
-ok("⚠ net: confirm signs" in block,
-   "without a confirmed hedge size the net is still deferred, as before")
+greeks = block.split("| Greeks |")[1].splitlines()[0]
+# 40 × (−0.553 − 0.447) = −40 BTC: the options alone, said to be.
+ok("Δ -40.00 BTC" in greeks, f"without a confirmed hedge size the options net alone [{greeks}]")
+ok("the options alone: the perp hedge's size is not confirmed" in block
+   and "BUY 3,387,650 BTC-PERPETUAL @ 85,400" in block,
+   "and the block says so, with the hedge as traded")
+ok("## For the agent" not in block and "hedge +" not in block,
+   "no agent is asked to guess the size, and no size is printed")
 
 # --- analyze.sh hands the attached trade to collect ------------------------
 SH = skillpath.scripts("paradigm-block-analyst") / "analyze.sh"

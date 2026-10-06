@@ -148,8 +148,8 @@ printed = subprocess.run(["bash", SH, "DRFQv2-r_Abc"], capture_output=True, text
                          env={**os.environ, "ANALYZE_PRINT_ID": "1"})
 ok(printed.stdout.strip() == "r_Abc", "the id hook strips the namespace prefix")
 bad = subprocess.run(["bash", SH, "r_a;rm -rf /"], capture_output=True, text=True)
-ok(bad.returncode == 2 and "invalid rfq_id" in bad.stdout,
-   "a shell metacharacter in the id is refused before anything runs")
+ok(bad.returncode == 0 and "invalid rfq_id" in bad.stdout,
+   "a shell metacharacter in the id is refused before anything runs, as an answer for the user")
 
 body = Path(SH).read_text()
 # Comments still NAME what was removed, which is the point of them. Assert on
@@ -399,11 +399,23 @@ def run_sh(code, note="analyze: stub said so", rfq="r_target"):
 import shlex  # noqa: E402
 import os  # noqa: E402
 
-for _code in (3, 4, 5, 6, 127):
+# collect's own answers — ambiguous id, history down, not found — are the
+# user's to read: exit 0, the one line, no agent.
+for _code in (2, 3, 4, 5, 6):
     _rc, _out, _ = run_sh(_code)
-    ok(_rc == _code, f"analyze.sh propagates exit {_code} [{_rc}]")
-    ok("stub said so" in _out,
-       f"and relays collect's own message on stdout for {_code} [{_out.strip()[:50]}]")
+    ok(_rc == 0, f"collect's exit {_code} is an answer: analyze.sh exits 0 [{_rc}]")
+    ok(_out.strip() == "analyze: stub said so",
+       f"and relays collect's own message alone for {_code} [{_out.strip()[:50]}]")
+# A collect that never answered is the whole analysis undone: exit 1, with a
+# rebuild by hand as the agent's task.
+for _code in (1, 127, 124):
+    _rc, _out, _ = run_sh(_code)
+    ok(_rc == 1 and "## For the agent" in _out and "Steps 1–7" in _out,
+       f"collect dying with {_code} hands the rebuild to the agent [{_rc}: {_out.strip()[:60]}]")
+    ok("manual recipe in references/rfq-lookup.md" in _out,
+       "and, with no trade data attached, says how to resolve the trade by hand")
+for _code in (2, 3, 4, 5, 6, 1, 127):
+    _rc, _out, _ = run_sh(_code)
     # The point of the gate: a failed resolve must not go on to render a block
     # from an empty directory.
     ok("REACHED_ANALYZE_PY" not in _out,
@@ -450,7 +462,7 @@ ok(_calls[-1][:2] == ["run", "scripts/analyze.py"] and "--render" in _calls[-1]
 # A failure collect never got to author — import error, uv, argparse — carries no
 # `analyze:` line. Filtering alone left both streams empty; the reply was nothing.
 _rc, _out, _ = run_sh(1, note="ModuleNotFoundError: No module named 'execution_tape'")
-ok(_rc == 1, f"an unauthored failure keeps its exit code [{_rc}]")
+ok(_rc == 1, f"an unauthored failure goes to the agent [{_rc}]")
 ok("ModuleNotFoundError" in _out and "exit 1" in _out,
    f"and says what died on stdout [{_out.strip()[:80]}]")
 ok("Installed 13 packages" not in _out, f"without uv's chatter [{_out.strip()[:80]}]")
@@ -479,6 +491,40 @@ for _c in (0, 5):
 # No note, no noise.
 _rc, _out, _ = run_sh(0, note="")
 ok(_rc == 0 and "analyze:" not in _out, f"a clean run adds nothing [{_out.strip()[:40]}]")
+
+# The render step: analyze.py's 0 and 1 pass through; anything else is the
+# render dying after the trade resolved, and the agent gets the rows.
+def run_render(code, out=""):
+    with tempfile.TemporaryDirectory() as bin_dir:
+        stub = Path(bin_dir) / "uv"
+        marker = Path(bin_dir) / "second-call"
+        stub.write_text(
+            "#!/bin/sh\n"
+            f"if [ -f {shlex.quote(str(marker))} ]; then\n"
+            f"  printf '%s' {shlex.quote(out)}\n"
+            f"  exit {code}\n"
+            "fi\n"
+            f"touch {shlex.quote(str(marker))}\n"
+            # collect: write the resolved row where analyze.sh keeps it
+            'while [ $# -gt 0 ]; do [ "$1" = --out-dir ] && d="$2"; shift; done\n'
+            'printf "PRODUCT,DESCRIPTION,QTY\\nBTC OPTION - DBT,Call 25 Sep 26 62000,10\\n" > "$d/fill.csv"\n'
+            "exit 0\n")
+        stub.chmod(0o755)
+        env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")
+        done = subprocess.run(["bash", str(SH), "r_target"], capture_output=True, text=True, env=env)
+        return done.returncode, done.stdout
+
+
+_rc, _out = run_render(0, "**block**\n")
+ok(_rc == 0 and _out == "**block**\n", f"a clean render passes through untouched [{_out!r}]")
+_rc, _out = run_render(1, "**draft**\n\n## For the agent\n\ntask\n")
+ok(_rc == 1 and _out.count("## For the agent") == 1, "analyze.py's own hand-off passes through")
+for _code in (1, 124, 139):
+    _rc, _out = run_render(_code, "")
+    ok(_rc == 1 and "## For the agent" in _out and "Call 25 Sep 26 62000" in _out,
+       f"a render that dies with {_code} hands the resolved rows on [{_rc}: {_out[:60]!r}]")
+_rc, _out = run_render(124, "")
+ok("took longer than 30s" in _out, "a render deadline says so")
 
 # --- no skill file directs a read at a hot object or v_vol_surface ---------
 import re  # noqa: E402
