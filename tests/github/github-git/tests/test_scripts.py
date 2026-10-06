@@ -27,7 +27,7 @@ if "-D" in argv:
                 "X-RateLimit-Reset: 1791191261\\r\\n\\r\\n")
     print('{"ok":true}')
     print("HTTP 200")
-elif argv[-1].endswith("/user"):
+elif argv[-1].endswith("/user") and not os.environ.get("CURL_EMPTY"):
     print('{"login":"octo","id":1}')
 EOF
 """
@@ -103,6 +103,17 @@ with tempfile.TemporaryDirectory() as home:
     check("setup: writes through links into the persistent volume",
           proc.returncode == 0 and (keep / "gitconfig").is_file() and (keep / "gh/hosts.yml").is_file()
           and pathlib.Path(home, ".gitconfig").is_symlink())
+
+with tempfile.TemporaryDirectory() as home:
+    hosts = pathlib.Path(home, ".config/gh/hosts.yml")
+    hosts.parent.mkdir(parents=True)
+    hosts.write_text("github.com: {}\n")
+    hosts.chmod(0o644)
+    proc, rec = run("setup.sh", {"CRED_GITHUB_API_REST": "cred-a", "CURL_EMPTY": "1"}, home)
+    text = hosts.read_text()
+    check("setup: an unreadable login falls back to x-access-token",
+          proc.returncode == 0 and 'user: "x-access-token"' in text and "could not read" in proc.stderr)
+    check("setup: an existing hosts.yml is made private", hosts.stat().st_mode & 0o077 == 0)
 
 with tempfile.TemporaryDirectory() as home:
     proc, rec = run("setup.sh", {"CRED_GITHUB_API_REST": "cred-a"}, home)
@@ -224,6 +235,10 @@ with tempfile.TemporaryDirectory() as d:
               i["message"].get("body") == "Why it changed.\n\nIncludes:\n- first change\n- second change")
         check("commit: an existing branch is not created", out["createBranchAt"] is None)
 
+    r.w("switch", "-q", "--detach")
+    proc, out = r.dry_run()
+    check("commit: a detached HEAD is refused", proc.returncode == 2 and "detached" in proc.stderr)
+    r.w("switch", "-q", "main")
     r.w("switch", "-q", "-c", "feature")
     r.write("f.txt", "f\n")
     r.commit("feature work")
