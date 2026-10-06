@@ -80,7 +80,14 @@ def run(script, env, home=None, gh_on_path=False, path_first=None):
         (bin_dir / "python3").symlink_to(sys.executable)
         gh_tarball(bin_dir / "gh.tgz")
         record = bin_dir / "record.json"
-        path = f"{bin_dir}:/usr/bin:/bin"
+        # A copy of /usr/bin and /bin with no gh, since CI runners ship one.
+        system = bin_dir / "system"
+        system.mkdir()
+        for d in ("/bin", "/usr/bin"):
+            for tool in os.listdir(d):
+                if tool != "gh" and not (system / tool).exists():
+                    (system / tool).symlink_to(os.path.join(d, tool))
+        path = f"{bin_dir}:{system}"
         full_env = {"PATH": f"{path_first}:{path}" if path_first else path, "TARBALL": str(bin_dir / "gh.tgz"),
                     "RECORD": str(record), "HOME": home or d, **env}
         proc = subprocess.run(["sh", str(SCRIPTS / script), *args], env=full_env,
