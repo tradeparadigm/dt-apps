@@ -83,16 +83,19 @@ def run(script, env, home=None, gh_on_path=False, path_first=None):
         # A copy of /usr/bin and /bin with no gh, since CI runners ship one.
         system = bin_dir / "system"
         system.mkdir()
-        for d in ("/bin", "/usr/bin"):
-            for tool in os.listdir(d):
+        for sys_dir in ("/bin", "/usr/bin"):
+            for tool in os.listdir(sys_dir):
                 if tool != "gh" and not (system / tool).exists():
-                    (system / tool).symlink_to(os.path.join(d, tool))
+                    (system / tool).symlink_to(os.path.join(sys_dir, tool))
+        tmp = bin_dir / "tmp"
+        tmp.mkdir()
         path = f"{bin_dir}:{system}"
         full_env = {"PATH": f"{path_first}:{path}" if path_first else path, "TARBALL": str(bin_dir / "gh.tgz"),
-                    "RECORD": str(record), "HOME": home or d, **env}
+                    "RECORD": str(record), "HOME": home or d, "TMPDIR": str(tmp), **env}
         proc = subprocess.run(["sh", str(SCRIPTS / script), *args], env=full_env,
                               capture_output=True, text=True)
         rec = json.loads(record.read_text()) if record.exists() else None
+        proc.leftovers = os.listdir(tmp)
         return proc, rec
 
 
@@ -125,6 +128,7 @@ with tempfile.TemporaryDirectory() as home:
     check("setup: downloads gh for the machine's architecture",
           rec is not None and rec["argv"][-1] == "https://github.com/cli/cli/releases/download/"
           "v2.102.0/gh_2.102.0_linux_arm64.tar.gz")
+    check("setup: leaves nothing in TMPDIR after installing gh", proc.leftovers == [])
     check("setup: gh runs with its config in ~/.openclaw", gh(home, "pr", "list") == f"{keep}/gh pr list")
     proc, rec = run("setup.sh", dict(env), home)
     check("setup: a second run does not download gh again",
@@ -157,11 +161,12 @@ with tempfile.TemporaryDirectory() as home:
     proc, rec = run("setup.sh", {"CRED_GITHUB_API_REST": "cred-a", "ARCH": "x86_64"}, home)
     check("setup: a gh download with the wrong sha256 is not installed",
           proc.returncode == 2 and "wrong sha256" in proc.stderr and "linux_amd64" in rec["argv"][-1]
-          and not pathlib.Path(home, ".openclaw/bin/gh-2.102.0").exists())
+          and not pathlib.Path(home, ".openclaw/bin/gh-2.102.0").exists() and proc.leftovers == [])
 
 with tempfile.TemporaryDirectory() as home:
     proc, rec = run("setup.sh", {"CRED_GITHUB_API_REST": "cred-a", "CURL_FAIL": "1"}, home)
-    check("setup: a failed gh download is reported", proc.returncode == 2 and "could not download gh" in proc.stderr)
+    check("setup: a failed gh download is reported",
+          proc.returncode == 2 and "could not download gh" in proc.stderr and proc.leftovers == [])
 
 with tempfile.TemporaryDirectory() as home:
     proc, rec = run("setup.sh", {"CRED_GITHUB_API_REST": "cred-a", "ARCH": "riscv64"}, home)
@@ -358,16 +363,16 @@ with tempfile.TemporaryDirectory() as d:
     check("commit: an edited symlink is refused",
           proc.returncode == 2 and "link is a symlink or a submodule" in proc.stderr)
 
-# A git@github.com remote, served from a local bare repo by a fake ssh.
+# git@ and ssh:// remotes, served from a local bare repo by a fake ssh.
 with tempfile.TemporaryDirectory() as d:
     root = pathlib.Path(d)
     ssh = root / "ssh"
-    ssh.write_text(f'#!/bin/sh\nfor a; do last=$a; done\ncd "{root}" && exec sh -c "$last"\n')
+    ssh.write_text(f'#!/bin/sh\nfor a; do last=$a; done\ncd "{root}" && exec sh -c "$(echo "$last" | sed "s,\'/,\',")"\n')
     ssh.chmod(0o755)
     r = Repo(d)
     r.env["GIT_SSH_COMMAND"] = str(ssh)
-    r.git("init", "-q", "--bare", "-b", "main", str(root / "o" / "r.git"))
-    r.w("remote", "set-url", "origin", "git@github.com:o/r.git")
+    r.git("init", "-q", "--bare", "-b", "main", str(root / "acme" / "tools.git"))
+    r.w("remote", "set-url", "origin", "git@github.com:acme/tools.git")
     r.write("a.txt", "a\n")
     r.commit("base")
     r.w("push", "-q", "origin", "main")
@@ -375,9 +380,20 @@ with tempfile.TemporaryDirectory() as d:
     r.commit("one change\n\nIts body.")
     proc, out = r.dry_run(repo=False)
     check("commit: reads OWNER/NAME from a git@github.com remote",
-          out is not None and out["input"]["branch"]["repositoryNameWithOwner"] == "o/r")
+          out is not None and out["input"]["branch"]["repositoryNameWithOwner"] == "acme/tools")
     check("commit: one commit sends its own message with no list",
           out is not None and out["input"]["message"] == {"headline": "one change", "body": "Its body."})
+    r.w("remote", "set-url", "origin", "ssh://git@github.com/acme/tools")
+    proc, out = r.dry_run(repo=False)
+    check("commit: reads OWNER/NAME from an ssh:// remote",
+          out is not None and out["input"]["branch"]["repositoryNameWithOwner"] == "acme/tools")
+    # After setup.sh, get-url returns the https form. No network here, so the
+    # script gets past parsing and stops at ls-remote.
+    r.w("remote", "set-url", "origin", "https://github.com/acme/tools.git/")
+    r.env["GIT_ALLOW_PROTOCOL"] = "file"
+    proc, out = r.dry_run(repo=False)
+    check("commit: accepts an https://github.com remote",
+          proc.returncode == 2 and "could not reach origin" in proc.stderr)
 
 for name in failed:
     print(f"FAIL {name}")

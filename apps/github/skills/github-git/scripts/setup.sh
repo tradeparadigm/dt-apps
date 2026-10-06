@@ -14,7 +14,7 @@ install_gh() {
     x86_64|amd64) arch=amd64; sum=bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386 ;;
     *) echo "no gh build for $(uname -m); use scripts/api.sh" >&2; exit 2 ;;
   esac
-  tmp=$(mktemp -d)
+  tmp=$(mktemp -d "${TMPDIR:-/tmp}/gh.XXXXXX")
   name=gh_${GH_VERSION}_linux_$arch
   if ! curl -fsSL --max-time 300 -o "$tmp/gh.tgz" \
       "https://github.com/cli/cli/releases/download/v$GH_VERSION/$name.tar.gz"; then
