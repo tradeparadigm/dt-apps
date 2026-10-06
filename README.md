@@ -96,8 +96,8 @@ that made the mistake:
   used on, and a route may name the one `host` it applies to. The checker
   refuses a route host that some environment lacks. No host can be in two
   environments, so only an app with one environment can give a route a host.
-  GitHub uses both to send git to `github.com` and the API to `api.github.com`
-  under one token;
+  With both, an app can send one token to several hosts and scope each route
+  to one of them;
 - hosts are bare lowercase hostnames — no scheme, port, path or underscore —
   because the proxy matches them case-sensitively and the enrolment path
   refuses anything that is not a hostname outright;
