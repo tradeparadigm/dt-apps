@@ -415,7 +415,7 @@ class TestHosts(unittest.TestCase):
 
     def test_a_route_host_only_one_environment_has_is_refused(self):
         def second_env(src):
-            return src.replace("environments:\n", "environments:\n  - id: second\n    label: Second\n    host: second.example.com\n", 1)
+            return self.HOST.sub(lambda m: m[1] + "  - id: second\n    label: Second\n    host: second.example.com\n", src, count=1)
         code, out = check(self.scoped(self.first_host(), second_env))
         self.assertNotEqual(code, 0, out)
         self.assertIn("is not a host every environment has", out)
