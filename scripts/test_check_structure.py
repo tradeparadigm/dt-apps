@@ -361,7 +361,98 @@ class TestScopeCaps(unittest.TestCase):
     def test_one_host_over_is_refused(self):
         code, out = check(self.envs(101))
         self.assertNotEqual(code, 0, out)
-        self.assertIn("101 environments", out)
+        self.assertIn("101 hosts", out)
+
+    def test_extra_hosts_count_toward_the_cap(self):
+        extra = "\n".join(f"      - h{i}.example.com" for i in range(100))
+        code, out = check(lambda src: re.sub(r"(    host: [^\n]+\n)", r"\1    extra_hosts:\n" + extra + "\n", src, count=1))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("101 hosts", out)
+
+
+class TestHosts(unittest.TestCase):
+    """extra_hosts and a route's host mirror pkg/apps and ValidateAppTemplates."""
+
+    HOST = re.compile(r"(    host: ([^\n]+)\n)")
+
+    def extra(self, *hosts):
+        listed = "".join(f"      - {h}\n" for h in hosts)
+        return lambda src: self.HOST.sub(lambda m: m[1] + "    extra_hosts:\n" + listed, src, count=1)
+
+    def scoped(self, host, *more_edits):
+        def edit(src):
+            for e in more_edits:
+                src = e(src)
+            return src.replace("      - path: /v1/orders\n", f"      - path: /v1/orders\n        host: {host}\n", 1)
+        return edit
+
+    def first_host(self):
+        return self.HOST.search(Path(FIXTURE, "example/app.yaml").read_text())[2]
+
+    def test_an_extra_host_and_a_route_scoped_to_it_are_accepted(self):
+        code, out = check(self.scoped("git.example.com", self.extra("git.example.com")))
+        self.assertEqual(code, 0, out)
+
+    def test_an_extra_host_in_upper_case_is_refused(self):
+        code, out = check(self.extra("Git.example.com"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("extra_hosts[0]", out)
+
+    def test_an_extra_host_that_repeats_a_host_is_refused(self):
+        code, out = check(self.extra(self.first_host()))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("environments hosts", out)
+
+    def test_extra_hosts_that_are_not_a_list_are_refused(self):
+        code, out = check(lambda src: self.HOST.sub(lambda m: m[1] + "    extra_hosts: git.example.com\n", src, count=1))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("extra_hosts is not a list", out)
+
+    def test_a_route_host_no_environment_has_is_refused(self):
+        code, out = check(self.scoped("other.example.com"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("is not a host every environment has", out)
+
+    def test_a_route_host_only_one_environment_has_is_refused(self):
+        def second_env(src):
+            return src.replace("environments:\n", "environments:\n  - id: second\n    label: Second\n    host: second.example.com\n", 1)
+        code, out = check(self.scoped(self.first_host(), second_env))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("is not a host every environment has", out)
+
+    def test_an_empty_route_host_means_every_host(self):
+        code, out = check(self.scoped('""'))
+        self.assertEqual(code, 0, out)
+
+    def test_the_same_path_twice_on_one_host_is_refused(self):
+        def twice(src):
+            return src.replace(
+                "      - path: /v1/orders\n",
+                f"      - path: /v1/orders\n        host: {self.first_host()}\n        methods: [GET]\n"
+                f"      - path: /v1/orders\n        host: {self.first_host()}\n", 1)
+        code, out = check(twice)
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("routes (host, path)", out)
+
+    def test_malformed_hosts_are_reported_rather_than_crashing(self):
+        for edit in (
+            lambda src: src.replace("environments:\n", "environments: 5\nx_environments:\n", 1),
+            lambda src: self.HOST.sub(lambda m: m[1] + "    extra_hosts:\n      - {a: b}\n", src, count=1),
+            self.scoped("[a, b]"),
+        ):
+            code, out = check(edit)
+            self.assertNotEqual(code, 0, out)
+            self.assertNotIn("Traceback", out)
+
+    def test_the_same_path_on_two_hosts_is_accepted(self):
+        def both(src):
+            src = self.extra("git.example.com")(src)
+            return src.replace(
+                "      - path: /v1/orders\n",
+                "      - path: /v1/orders\n        host: git.example.com\n        methods: [GET]\n"
+                f"      - path: /v1/orders\n        host: {self.first_host()}\n", 1)
+        code, out = check(both)
+        self.assertEqual(code, 0, out)
 
 
 class TestManifest(unittest.TestCase):

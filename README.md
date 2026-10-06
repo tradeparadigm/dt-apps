@@ -92,6 +92,11 @@ that made the mistake:
   Half an icon is refused rather than defaulted;
 - no two apps claim the same skill name. openclaw resolves a collision by
   precedence rather than erroring, so one of them would simply never load;
+- an environment may list `extra_hosts`, further hosts the same credential is
+  used on, and a route may name the one `host` it applies to. That host has
+  to be one every environment has, or enrolling an environment without it is
+  refused. Together they let GitHub put git's endpoints on `github.com` and
+  every path on `api.github.com` under one token;
 - hosts are bare lowercase hostnames — no scheme, port, path or underscore —
   because the proxy matches them case-sensitively and the enrolment path
   refuses anything that is not a hostname outright;
@@ -145,6 +150,10 @@ server had learned and this had not.
 One divergence is deliberate and is marked as such in both places: `access`
 and `maturity` are required here and optional there. Everything else should
 agree.
+
+A new key has an order to it as well. The server decodes with KnownFields, so
+a manifest that uses `extra_hosts` or a route `host` is dropped by any server
+deployed before it learned them. Deploy the server first, then the manifest.
 
 Drift in either direction costs something. Laxer here and an app merges and
 then goes missing from the catalogue, because the server drops what it cannot

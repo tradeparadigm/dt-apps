@@ -24,6 +24,8 @@ What is checked, in each case because the consumer refuses the app without it:
     ids are well formed as well as present, and ids, hosts and slugs are
     unique. These live in the consumer's App.validate, and a manifest missing
     one used to merge here and vanish from the live catalogue.
+  * An environment may list extra_hosts, and a route may name a host, which
+    must be one every environment has. pkg/apps and ValidateAppTemplates.
   * Hosts are bare lowercase hostnames — no scheme, port, path or underscore.
     The proxy matches them case-sensitively, so an uppercase letter is a rule
     that can never fire, and the enrolment path refuses anything that is not a
@@ -173,7 +175,7 @@ KNOWN = {
         "developer", "developer_url", "tint", "icon",
     },
     "icon": {"path", "view_box"},
-    "environment": {"id", "label", "host"},
+    "environment": {"id", "label", "host", "extra_hosts"},
     "credential_type": {
         "id", "label", "slug", "secret_label", "detail_fields", "routes",
         "delivery", "summary",
@@ -184,7 +186,7 @@ KNOWN = {
         "key_encoding", "match_headers", "match_body", "match_path",
         "match_query",
     },
-    "route": {"path", "methods"},
+    "route": {"path", "methods", "host"},
 }
 
 # Which delivery fields each mode actually uses. The consumer canonicalises a
@@ -260,36 +262,59 @@ def check_unique(man: str, where: str, values: list, failures: list[str]) -> Non
         seen.add(v)
 
 
+def env_hosts(env: dict) -> list:
+    """Every host of an environment that is a string; the rest is reported elsewhere."""
+    extra = env.get("extra_hosts")
+    hosts = [env.get("host")] + (extra if isinstance(extra, list) else [])
+    return [h for h in hosts if isinstance(h, str)]
+
+
 def check_environments(man: str, envs: object, failures: list[str]) -> None:
     if not isinstance(envs, list) or not envs:
         failures.append(f"{man}: at least one environment is required")
         return
-    # Each environment is a host a credential may be scoped to, and the server
-    # caps how many one credential carries.
-    if len(envs) > MAX_HOSTS:
+    # A credential carries every host of the app, and the server caps how
+    # many one credential may name.
+    total = sum(len(env_hosts(e)) for e in envs if isinstance(e, dict))
+    if total > MAX_HOSTS:
         failures.append(
-            f"{man}: {len(envs)} environments, and a credential may name {MAX_HOSTS} hosts"
+            f"{man}: {total} hosts across the environments, and a credential may name {MAX_HOSTS}"
         )
     for i, env in enumerate(envs):
         check_known(man, f"environments[{i}]", env, "environment", failures)
         row = require(man, f"environments[{i}]", env, ("id", "label", "host"), failures)
         if not row:
             continue
-        eid, host = row.get("id"), row.get("host")
+        eid = row.get("id")
         if isinstance(eid, str) and not NAME_RE.match(eid):
             failures.append(f"{man}: environments[{i}].id {eid!r} must be lowercase letters, digits and hyphens")
-        if isinstance(host, str) and host != host.lower():
-            failures.append(f"{man}: environments[{i}].host {host!r} must be lowercase — the proxy matches case-sensitively")
-        elif isinstance(host, str) and not HOST_RE.match(host):
-            failures.append(
-                f"{man}: environments[{i}].host {host!r} is not a bare hostname — no scheme, "
-                "port, path or underscore, and it must carry a dot"
-            )
+        extra = row.get("extra_hosts")
+        if extra is not None and not isinstance(extra, list):
+            failures.append(f"{man}: environments[{i}].extra_hosts is not a list")
+            extra = []
+        named = [(f"environments[{i}].host", row.get("host"))] + [
+            (f"environments[{i}].extra_hosts[{j}]", h) for j, h in enumerate(extra or [])
+        ]
+        for where, host in named:
+            if host is None and where.endswith(".host"):
+                continue  # require() already reported it
+            if not isinstance(host, str):
+                failures.append(f"{man}: {where} is not a string")
+            elif not host.strip():
+                failures.append(f"{man}: {where} is empty")
+            elif host != host.lower():
+                failures.append(f"{man}: {where} {host!r} must be lowercase — the proxy matches case-sensitively")
+            elif not HOST_RE.match(host):
+                failures.append(
+                    f"{man}: {where} {host!r} is not a bare hostname — no scheme, "
+                    "port, path or underscore, and it must carry a dot"
+                )
     check_unique(man, "environments.id", [e.get("id") for e in envs if isinstance(e, dict)], failures)
-    check_unique(man, "environments.host", [e.get("host") for e in envs if isinstance(e, dict)], failures)
+    check_unique(man, "environments hosts",
+                 [h for e in envs if isinstance(e, dict) for h in env_hosts(e)], failures)
 
 
-def check_credential_types(man: str, types: object, failures: list[str]) -> None:
+def check_credential_types(man: str, types: object, every_env: set, failures: list[str]) -> None:
     if not isinstance(types, list) or not types:
         failures.append(f"{man}: at least one credential type is required")
         return
@@ -334,8 +359,18 @@ def check_credential_types(man: str, types: object, failures: list[str]) -> None
                         f"{man}: {where}.routes[{j}].methods {m!r} is not one of {sorted(METHODS)}"
                     )
             check_unique(man, f"{where}.routes[{j}].methods", methods, failures)
-        check_unique(man, f"{where}.routes.path",
-                     [r.get("path") for r in routes if isinstance(r, dict)], failures)
+            host = r.get("host")
+            if host is not None and not isinstance(host, str):
+                failures.append(f"{man}: {where}.routes[{j}].host is not a string")
+            elif host not in (None, "") and host not in every_env:
+                # The server lowercases and then compares, so a host that is
+                # not already written as one every environment has is refused.
+                failures.append(
+                    f"{man}: {where}.routes[{j}].host {host!r} is not a host every environment has"
+                )
+        check_unique(man, f"{where}.routes (host, path)",
+                     [(r.get("host") if isinstance(r.get("host"), str) else "", r.get("path"))
+                      for r in routes if isinstance(r, dict)], failures)
         if len(routes) > MAX_ROUTES:
             failures.append(
                 f"{man}: {where} narrows to {len(routes)} endpoints, and the API accepts {MAX_ROUTES}"
@@ -552,7 +587,10 @@ def check_manifest(app: str, text: str, failures: list[str]) -> str:
     check_presentation(man, doc, failures)
     check_scope(man, doc, failures)
     check_environments(man, doc.get("environments"), failures)
-    check_credential_types(man, doc.get("credential_types"), failures)
+    raw_envs = doc.get("environments")
+    envs = [e for e in raw_envs if isinstance(e, dict)] if isinstance(raw_envs, list) else []
+    every_env = set.intersection(*(set(env_hosts(e)) for e in envs)) if envs else set()
+    check_credential_types(man, doc.get("credential_types"), every_env, failures)
     return as_text(doc.get("version")) or ""
 
 
