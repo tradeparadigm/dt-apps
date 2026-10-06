@@ -201,9 +201,9 @@ def _run(args):
     legs = ac.legs_from_rows(fill)
     if legs is not None:
         side = "Buyer" if ac.net_cash(fill) > 0 else "Seller"
-        # per-leg option signs are exact; a perp leg needs delta sizing we don't do
-        # here, so defer the net to the model (⚠) when a future/perp leg is present.
-        reliable = not any(l["cp"] == "FUT" for l in legs)
+        # per-leg option signs are exact; a perp leg nets only once its coin size
+        # is confirmed (ac.hedges_sized), else the net is deferred (⚠).
+        reliable = ac.hedges_sized(legs)
         parsed = {"code": "combo"}
     else:
         parsed = ac.parse_description(desc)
@@ -223,6 +223,19 @@ def _run(args):
                         and all(l.get("sign") is not None for l in legs)
                         and not any(l["cp"] == "FUT" for l in legs))
             unmapped = True
+        # The rows name each leg's instrument even when the DESCRIPTION repeats
+        # the package, so a name this parser cannot sign (an unmapped one, or a
+        # risk reversal, whose roles the name does not fix) still has exact legs:
+        # instrument for strike and type, each row's own SIDE for the sign.
+        if unmapped or not reliable:
+            by_instrument = ac.legs_from_instruments(fill)
+            if by_instrument is not None:
+                legs = by_instrument
+                side = "Buyer" if ac.net_cash(fill) > 0 else "Seller"
+                reliable = ac.hedges_sized(legs)
+                if unmapped:
+                    parsed = {"code": "combo"}
+                unmapped = False
 
     # instruments: each option leg + the perp for spot, on the venue the block
     # settled on. Paradex carries no 30d block-trade buckets in this script, so
@@ -267,6 +280,10 @@ def _run(args):
         tt = tickers.get(l.get("_sym"))
         if tt:
             greek_by_key[ac.leg_key(l)] = tt
+        elif l["cp"] == "FUT":
+            # delta 1 per coin, nothing else: a sized hedge's ratio is coins per
+            # package unit, so net_greeks counts it in coin like the option legs.
+            greek_by_key[ac.leg_key(l)] = ac.FUT_GREEKS
     ng = ac.net_greeks(legs, greek_by_key, qty) if reliable else {}
     # A greek one leg's venue does not publish is unknown for the package, not 0.
     for k in list(ng):
@@ -314,7 +331,7 @@ def _run(args):
         "unmapped": unmapped, "spot": spot, "quote": quote,
         "fill_net": round(fill_net, 6), "ref_net": round(ref_net, 6), "offset": off,
         "legs": [{"cp": l["cp"], "strike": l["strike"], "ratio": l["ratio"],
-                  "sign": l["sign"], "expiry": l.get("expiry_c"), "sym": l.get("_sym"),
+                  "sign": l["sign"], "sized": l.get("sized", False), "expiry": l.get("expiry_c"), "sym": l.get("_sym"),
                   "tkr": tickers.get(l.get("_sym")), "trades": buckets.get(l.get("_sym"))}
                  for l in legs],
         # raw tape rows — the authoritative ground truth for the model to build from
@@ -474,7 +491,11 @@ def render(r) -> str:
     note = ("⚠ unmapped structure — verify legs & net signs from the data below"
             if r.get("unmapped") else
             ("signs verified" if r["reliable_signs"] else "net greeks: confirm signs from legs below"))
-    L.append(f"Spot {sp} · {struct} · {note} · {r['rfq_kind']}/{r['venue']}")
+    # A confirmed hedge's size, signed for the taker: the one number in the
+    # net greeks a reader cannot see on the option legs.
+    hedge = sum(l["sign"] * l["ratio"] * r["qty"] for l in legs if l["cp"] == "FUT" and l.get("sized"))
+    hedge_txt = f" · hedge {hedge:+.2f} {a} perp" if hedge else ""
+    L.append(f"Spot {sp} · {struct}{hedge_txt} · {note} · {r['rfq_kind']}/{r['venue']}")
     L.append("")
     # tag legs with expiry only when the structure spans >1 expiry (calendars/diagonals)
     multi_exp = len({l.get("expiry") for l in legs if l["cp"] != "FUT" and l.get("expiry")}) > 1

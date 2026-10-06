@@ -371,6 +371,89 @@ try:
 finally:
     az._paradex, az.fetch_ticker, az.fetch_trades_bucket = real_paradex, real_ticker, real_bucket
 
+# --- a same-strike RRCall with a perp hedge nets without the model ---------
+# r_3KJM8FNFmpa0Dd8Gw9I66FAojXw, 6 Oct 2026: the name is not one the parser
+# maps and the package carries a perp, so it used to hand off flagged twice.
+# Every number below is the trade's own.
+RR_PERP = {
+    "id": "bt_rrperp", "rfq_id": "r_3KJM8FNFmpa0Dd8Gw9I66FAojXw",
+    "venue": "DBT", "kind": "OPTION", "state": "FILLED", "executed_at": 1791198000000.0,
+    "side": "SELL", "price": "0.0082", "quantity": "40",
+    "legs": [dict(leg("BTC-30OCT26-85000-C", "BUY", "0.0384", "40", "0.55339")),
+             dict(leg("BTC-30OCT26-85000-P", "SELL", "0.0302", "40", "-0.44661")),
+             dict(leg("BTC-PERPETUAL", "SELL", "85400", "3387650", None), ratio="0.9917",
+                  is_hedge=True)],
+    "strategy_code": "CR", "description": "RRCall  30 Oct 26  85000\n      -0.99  Perpetual  85,400",
+    "quote_currency": "BTC", "mark_price": "0.0080", "index_price": "85307"}
+
+rows, pkg = fs.rows_from_trade(RR_PERP)
+ok([r["SIDE"] for r in rows] == ["SELL", "BUY", "BUY"],
+   f"the taker sold the call, bought the put and bought the hedge {[r['SIDE'] for r in rows]}")
+ok(pkg["check"], "the option legs net to the package price")
+ok(rows[2]["INSTRUMENT"] == "BTC-PERPETUAL" and rows[2]["RATIO"] == "0.9917",
+   "each row keeps its instrument and Paradigm's stated ratio")
+legs = az.ac.legs_from_instruments(rows)
+ok(legs is not None and [(l["cp"], l["sign"]) for l in legs] == [("C", -1), ("P", 1), ("FUT", 1)],
+   f"legs signed from each row's SIDE, whatever the package is called [{legs}]")
+ok(legs[2]["sized"] and abs(legs[2]["coins"] - 3387650 / 85400) < 1e-9,
+   "a Deribit inverse perp is QTY/PRICE coins, confirmed by the stated ratio")
+ok(abs(legs[2]["ratio"] * 40 - 39.668) < 0.001, f"39.67 BTC against a ×40 package [{legs[2]['ratio']}]")
+
+off = dict(rows[2], RATIO="0.5")
+ok(not az.ac.legs_from_instruments([rows[0], rows[1], off])[2]["sized"],
+   "a stated ratio the QTY does not bear out leaves the hedge unsized")
+ok(not az.ac.legs_from_instruments([rows[0], rows[1], dict(rows[2], RATIO="")])[2]["sized"],
+   "and so does a hedge with no stated ratio: one number is not a confirmed size")
+ok(not az.ac.legs_from_instruments([rows[0], rows[1], dict(rows[2], INSTRUMENT="BTC_USDC-PERPETUAL")])[2]["sized"],
+   "a linear USDC perp's QTY is not USD, so it is not read as one")
+ok(az.ac._instrument_leg("BTC-USD-30OCT26-85000-C")["strike"] == 85000.0,
+   "a Paradex-style option name parses too")
+ok(az.ac.legs_from_instruments([dict(rows[0], INSTRUMENT=""), rows[1]]) is None,
+   "an option row naming no instrument leaves the old path in charge")
+ok(ca.shaped([tape_row()])[0]["INSTRUMENT"] == "ETH-30OCT26-2450-P",
+   "the tape's instrument_name reaches the fill rows")
+
+DBT = {"BTC-30OCT26-85000-C": {"mark": 0.038, "bid": 0.0375, "ask": 0.0385, "iv": 33.54,
+                                "delta": 0.553, "gamma": 0.00002, "vega": 120.0, "theta": -50.0,
+                                "under": 85307.0, "index": 85307.0},
+       "BTC-30OCT26-85000-P": {"mark": 0.030, "bid": 0.0300, "ask": 0.0310, "iv": 33.54,
+                                "delta": -0.447, "gamma": 0.00002, "vega": 120.0, "theta": -50.0,
+                                "under": 85307.0, "index": 85307.0},
+       "BTC-PERPETUAL": {"mark": 85304.0, "bid": 85304.0, "ask": 85304.5, "index": 85307.0}}
+
+
+def render_rr(trade):
+    real_t, real_b, real_r = az.fetch_ticker, az.fetch_trades_bucket, ca.read_executions
+    az.fetch_ticker = lambda s: (s, DBT.get(s))
+    az.fetch_trades_bucket = lambda s, n: (s, None)
+    ca.read_executions = lambda *a, **k: {"rows": [], "coverage_complete": True,
+                                          "source_watermark_ms": 1791180000000}
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            ca.collect(trade["rfq_id"], Path(d), injected=trade,
+                       lookup=lambda *a, **k: (None, "unused"))
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                az._run(argparse.Namespace(csv_dir=d, now_ms=int(NOW), render=True))
+            return buf.getvalue()
+    finally:
+        az.fetch_ticker, az.fetch_trades_bucket, ca.read_executions = real_t, real_b, real_r
+
+
+block = render_rr(RR_PERP)
+ok("⚠" not in block, f"nothing is left for the model [{block}]")
+ok("| Seller |" in block and "Recd 0.0082" in block, f"Seller, received 0.0082 [{block.splitlines()[0]}]")
+ok("Combo + perp · hedge +39.67 BTC perp · signs verified" in block,
+   f"named from its legs, the hedge sized for the taker, signs verified [{block.splitlines()[2]}]")
+greeks = block.split("| Greeks |")[1].splitlines()[0]
+# 40 × (−0.553 − 0.447) + 39.668 = −0.33 BTC; vega/gamma/theta cancel.
+ok("Δ -0.33 BTC" in greeks and "Vega +0/v" in greeks, f"the hedge is in the net [{greeks}]")
+
+unsized = dict(RR_PERP, legs=[RR_PERP["legs"][0], RR_PERP["legs"][1], dict(RR_PERP["legs"][2], ratio=None)])
+block = render_rr(unsized)
+ok("⚠ net: confirm signs" in block,
+   "without a confirmed hedge size the net is still deferred, as before")
+
 # --- analyze.sh hands the attached trade to collect ------------------------
 SH = skillpath.scripts("paradigm-block-analyst") / "analyze.sh"
 

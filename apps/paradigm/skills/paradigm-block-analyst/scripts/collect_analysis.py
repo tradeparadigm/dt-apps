@@ -33,7 +33,8 @@ import fill_sources  # noqa: E402
 
 HORIZON = dt.timedelta(days=30)
 FILL_COLUMNS = ("PRODUCT", "DESCRIPTION", "QTY", "PRICE", "REF_PRICE", "SIDE",
-                "QUOTE_CURRENCY", "RFQ_ID", "TRADE_ID", "BLOCK_TRADE_ID")
+                "QUOTE_CURRENCY", "RFQ_ID", "TRADE_ID", "BLOCK_TRADE_ID",
+                "INSTRUMENT", "RATIO")
 HIST_COLUMNS = ("PRODUCT", "DESCRIPTION", "QTY", "PRICE", "REF_PRICE", "SIDE",
                 "BLOCK_TRADE_ID")
 
@@ -93,6 +94,7 @@ def shaped(rows: list[dict]) -> list[dict]:
             "REF_PRICE": row.get("mark_price"), "SIDE": row.get("taker_side"),
             "QUOTE_CURRENCY": quote_currency(row), "RFQ_ID": row.get("rfq_id"),
             "TRADE_ID": row.get("trade_id"), "BLOCK_TRADE_ID": row.get("block_trade_id"),
+            "INSTRUMENT": row.get("instrument_name"),
             "_DESC_N": normalised(row.get("description")),
         })
     return out

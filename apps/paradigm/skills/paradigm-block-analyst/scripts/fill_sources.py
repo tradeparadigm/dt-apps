@@ -111,6 +111,11 @@ def rows_from_trade(trade: dict) -> tuple[list[dict], dict]:
             "SIDE": "BUY" if sign > 0 else "SELL",
             "QUOTE_CURRENCY": (trade.get("quote_currency") or "").upper(),
             "RFQ_ID": rid, "TRADE_ID": f"{bid}:{i}", "BLOCK_TRADE_ID": bid,
+            # The leg's own instrument and Paradigm's stated ratio: analyze.py
+            # signs each leg from these when the package name cannot be parsed,
+            # and sizes a perp hedge only where its QTY and ratio agree.
+            "INSTRUMENT": leg.get("instrument_name") or "",
+            "RATIO": leg.get("ratio") if leg.get("ratio") is not None else "",
             "_DESC_N": (trade.get("description") or "").upper().replace(" ", ""),
         })
     price, mark = _f(trade.get("price")), _f(trade.get("mark_price"))

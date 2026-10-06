@@ -25,7 +25,7 @@ compatibility: Resolves the rfq_id against the Paradigm execution tape's daily
   unreachable, never fabricating the fill.
 metadata:
   author: tradeparadigm
-  version: "1.11"
+  version: "1.12"
 ---
 
 # Paradigm Block Trade Analyst
@@ -93,8 +93,9 @@ recompute, add commentary, or run extra steps — its stdout already is the anal
 and ~one round-trip; the only unavoidable cost is the tape scan.
 
 **Safe fallbacks (correctness > speed — finish these yourself; the script never guesses):**
-- `Greeks | ⚠ net: confirm signs …` — signs not reliably derivable (risk reversals, calendars,
-  perp combos). The per-leg greeks are already printed; apply the signs and replace that one line.
+- `Greeks | ⚠ net: confirm signs …` — signs not reliably derivable (a leg sign the rows do not
+  state, or a perp hedge whose size the trade does not confirm). The per-leg greeks are already
+  printed; apply the signs and replace that one line.
 - `⚠ UNMAPPED STRUCTURE …` / `⚠ analysis hit an error …` — the script couldn't map the structure,
   so it prints the **correct resolved tape rows** (`[Tape]`) + spot + recurrence. Build the full
   4-row block from those: infer the legs from the printed tape rows' `DESCRIPTION` (resolved —
@@ -103,7 +104,30 @@ and ~one round-trip; the only unavoidable cost is the tape scan.
 - `RFQ not resolved …` — relay as-is; never invent an asset/strike/structure.
 
 Single-leg, straddles/strangles, verticals, condors/flies (iron **and** call/put), explicit-sign
-customs, and per-leg-row combos come back **already-netted** — relay them verbatim.
+customs, per-leg-row combos, any package whose rows name each leg's instrument (risk reversals
+and names the parser does not know included), and perp hedges whose size the QTY and Paradigm's
+stated ratio agree on come back **already-netted** — relay them verbatim.
+
+### After an `/analyze` hand-off
+
+The terminal runs `analyze.sh` itself for `/analyze` and replies with a clean block directly. It
+hands you the turn only when the output needs finishing, with a note that opens
+`/analyze <rfq_id>: analyze.sh already ran for this message` followed by its exit code and stdout.
+That output is everything the script fetched and computed. **Do not run `analyze.sh` again and do
+not re-fetch** — finish from what is there:
+
+- **A block with `⚠` lines:** reply with the block verbatim, replacing only the `⚠` lines as the
+  safe fallbacks above describe, from the per-leg numbers printed. Nothing before the block and
+  nothing after it. `Buyer`/`Seller`, `Paid`/`Recd`,
+  `×N` and the offset are final, never re-derive them: the side comes from each leg's taker side
+  (the leg's side as Paradigm states it, times the trade's own side) and the script checks the legs
+  net to the package price. Leg prices read without the trade's side will disagree with it; that
+  is expected, not a conflict.
+- **A non-zero exit (no block):** if the message carries the trade JSON, build the analysis by hand
+  (Steps 1–7) and say it was built by hand; otherwise relay the `analyze:` line as the whole reply.
+- **A clean block (exit 0, no `⚠`):** relay it verbatim, then add the analyst read the hand-off
+  asks for.
+
 
 Steps 1–7 below are the **contract the script implements** and the **fallback** when scripts/tools
 are unavailable (then follow them by hand — the manual tape recipe is in

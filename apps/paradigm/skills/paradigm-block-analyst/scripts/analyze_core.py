@@ -282,8 +282,7 @@ def legs_from_rows(rows: list[dict]):
         pr = parse_product(r.get("PRODUCT", ""))
         sgn = 1 if (r.get("SIDE") or "BUY").upper() == "BUY" else -1
         if pr["kind"] in ("PERPETUAL", "FUTURE"):
-            out.append({"cp": "FUT", "strike": 0.0, "ratio": 1.0, "sign": sgn,
-                        "expiry_c": None, "_row": r})
+            out.append(_hedge_leg(r, sgn, base))
             continue
         d = parse_description(r.get("DESCRIPTION", ""))
         if d["classified"] and len(d["legs"]) == 1 and d["code"] in ("CL", "PL"):
@@ -296,6 +295,93 @@ def legs_from_rows(rows: list[dict]):
             return None                      # a combined-DESCRIPTION block, not per-leg
     return out
 
+
+
+_INSTRUMENT = re.compile(r"^(?P<asset>[A-Z0-9_]+)(?:-USDC?)?-(?P<d>\d{1,2})(?P<mon>[A-Z]{3})"
+                         r"(?P<yy>\d{2})-(?P<k>\d+(?:\.\d+)?)-(?P<cp>[CP])$")
+# Deribit's inverse contracts: QTY is USD notional, so coins = QTY / PRICE.
+_DERIBIT_INVERSE = re.compile(r"^(BTC|ETH)-(PERPETUAL|\d{1,2}[A-Z]{3}\d{2})$")
+
+
+def _instrument_leg(name: str):
+    """'BTC-30OCT26-85000-C' → a leg, or None when the name is not an option."""
+    m = _INSTRUMENT.match((name or "").strip().upper())
+    if not m:
+        return None
+    return _leg(m["cp"], m["k"], 1.0, None, f"{int(m['d'])}{m['mon']}{m['yy']}")
+
+
+def hedge_coins(row: dict) -> float | None:
+    """The coin size a perp or future row's QTY implies, or None when its unit
+    is not known.
+
+    QTY is in the venue's own unit: USD notional on Deribit's inverse BTC/ETH
+    contracts (coins = QTY / PRICE), coin on Paradex. Anything else — Deribit's
+    linear USDC contracts, a row naming no instrument — is None."""
+    qty, px = _f(row.get("QTY")), _f(row.get("PRICE"))
+    venue = parse_product(row.get("PRODUCT", "")).get("venue")
+    name = (row.get("INSTRUMENT") or "").strip().upper()
+    if not qty:
+        return None
+    if venue == "DBT" and _DERIBIT_INVERSE.match(name):
+        return qty / px if px else None
+    if venue == "PRDX":
+        return qty
+    return None
+
+
+def _hedge_leg(row: dict, sign: int, base: float) -> dict:
+    """A perp/future leg: delta 1 per coin, sized against the package base.
+
+    Sized only when two sources agree within 1%: the coins QTY implies, and
+    Paradigm's stated leg RATIO (coins per package unit). One number whose unit
+    cannot be cross-checked is not enough — an unsized hedge keeps ratio 1.0 and
+    the caller flags the net, as it always has."""
+    coins = hedge_coins(row)
+    stated = _f(row.get("RATIO"))
+    sized = bool(coins and stated and base
+                 and abs(coins / base - stated) <= 0.01 * stated)
+    return {"cp": "FUT", "strike": 0.0, "ratio": coins / base if sized else 1.0,
+            "sign": sign, "expiry_c": None, "sized": sized, "coins": coins if sized else None,
+            "_row": row}
+
+
+def legs_from_instruments(rows: list[dict]):
+    """Per-leg rows whose DESCRIPTION repeats the package, signed by INSTRUMENT.
+
+    Paradigm's API (and the tape's instrument_name) names each leg's instrument
+    even when every row carries the combined DESCRIPTION, so a structure whose
+    name is not mapped — a same-strike RRCall with a perp hedge, say — still has
+    exact legs: instrument for the strike and type, the row's own SIDE for the
+    sign. Returns None unless EVERY option row names a parseable instrument."""
+    if not rows or len(rows) < 2:
+        return None
+    base = structure_unit(rows)
+    out = []
+    for r in rows:
+        pr = parse_product(r.get("PRODUCT", ""))
+        sgn = 1 if (r.get("SIDE") or "BUY").upper() == "BUY" else -1
+        if pr["kind"] in ("PERPETUAL", "FUTURE"):
+            out.append(_hedge_leg(r, sgn, base))
+            continue
+        lg = _instrument_leg(r.get("INSTRUMENT") or "")
+        if lg is None:
+            return None
+        lg["sign"] = sgn
+        lg["ratio"] = (_f(r.get("QTY")) or base) / base
+        lg["_row"] = r
+        out.append(lg)
+    if not any(l["cp"] != "FUT" for l in out):
+        return None
+    return out
+
+
+def hedges_sized(legs: list[dict]) -> bool:
+    """Every perp/future leg's size is confirmed (a package with none is)."""
+    return all(l.get("sized") for l in legs if l["cp"] == "FUT")
+
+
+FUT_GREEKS = {"delta": 1.0, "gamma": 0.0, "vega": 0.0, "theta": 0.0}
 
 # ── direction / orientation ────────────────────────────────────────────────────
 
