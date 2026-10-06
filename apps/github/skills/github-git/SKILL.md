@@ -41,8 +41,8 @@ Before the first GitHub command in a chat, run the script beside this file:
 sh scripts/setup.sh
 ```
 
-It prints `configured:` and the halves it set up. It is safe to run again, and
-you must run it again after the user re-enrols a token, because the
+It prints `configured:` and the halves it set up, then the path of `gh`. It is
+safe to run again. Run it again after the user re-enrols a token, because the
 placeholder changes. It writes:
 
 - a git config entry that sends the git placeholder as Basic auth on every
@@ -50,9 +50,11 @@ placeholder changes. It writes:
   plain git would not send it until GitHub asked;
 - `insteadOf` rules, so `git@github.com:` and `ssh://git@github.com/` remotes
   go over HTTPS. SSH itself does not go through the proxy;
-- `gh`'s `hosts.yml`, holding the REST placeholder.
+- `gh`'s `hosts.yml`, holding the REST placeholder, in `~/.openclaw/gh`;
+- `~/.openclaw/bin/gh`, which runs `gh` with that config. The first time, it
+  downloads `gh` from GitHub's releases and checks its sha256.
 
-Everything it writes is a placeholder, so none of it is secret.
+None of it is secret. The config holds placeholders.
 
 ## Git
 
@@ -64,9 +66,10 @@ Git LFS objects are not covered.
 
 ## gh
 
-After setup, `gh` works as normal: `gh pr create`, `gh pr list`, `gh issue
-view`, `gh api`, `gh repo clone`. If `gh` is not installed, call the API with
-the script:
+After setup, run `gh` as `~/.openclaw/bin/gh`, or the path setup printed. It
+works as normal: `gh pr create`, `gh pr list`, `gh issue view`, `gh api`,
+`gh repo clone`. A bare `gh` does not see the config. If setup could not
+install `gh`, call the API with the script:
 
 ```sh
 TARGET=/user sh scripts/api.sh
@@ -125,6 +128,8 @@ changed, so it can be fixed here.
 | 403 with `rate limit` in the body | GitHub's rate limit. `x-ratelimit-reset` gives the reset time. |
 | `commit.mjs` says `expectedHeadOid` does not match | Someone pushed to the branch since your fetch. Pull or rebase, then run it again. |
 | `no GitHub … credential in the environment` from a script | The user has not enrolled that half, or enrolled it on a custom environment under another name. Run `env \| grep '^CRED_GITHUB'` and pass the right one as `GITHUB_GIT_CRED` or `GITHUB_REST_CRED`. |
+| `gh: command not found`, or `gh` says you are not logged in | You ran a bare `gh`. Run `~/.openclaw/bin/gh`. Or setup has not run in this pod: run it. |
+| `could not download gh`, `wrong sha256` or `no gh build` from setup | The download failed, GitHub changed the release file, or the machine is not arm64 or amd64. The git half and `scripts/api.sh` still work. Use `api.sh` and tell the user. |
 | `several GitHub … credentials` from a script | More than one matches. Pass the one for the right host, `CRED_GITHUB_GIT_GIT` or `CRED_GITHUB_API_REST`, as `GITHUB_GIT_CRED` or `GITHUB_REST_CRED`. |
 
 Report a permission failure to the user with the permission it needs. Do not

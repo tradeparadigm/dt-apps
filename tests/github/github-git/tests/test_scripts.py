@@ -1,7 +1,8 @@
 """Runs the shipped GitHub scripts.
 
 api.sh runs against a fake curl that records its argv. setup.sh runs real git
-in a throwaway HOME, with a fake curl answering /user. commit.mjs runs with
+in a throwaway HOME, with a fake curl answering /user and serving a gh tarball,
+and a fake uname and sha256sum. commit.mjs runs with
 --dry-run against a real repository whose origin is a local bare repository.
 """
 
@@ -11,6 +12,8 @@ import os
 import pathlib
 import subprocess
 import sys
+import io
+import tarfile
 import tempfile
 
 SCRIPTS = pathlib.Path(__file__).resolve().parents[4] / "apps/github/skills/github-git/scripts"
@@ -27,6 +30,11 @@ if "-D" in argv:
                 "X-RateLimit-Reset: 1791191261\\r\\n\\r\\n")
     print('{"ok":true}')
     print("HTTP 200")
+elif "-o" in argv:
+    if os.environ.get("CURL_FAIL"):
+        sys.exit(22)
+    with open(argv[argv.index("-o") + 1], "wb") as f:
+        f.write(open(os.environ["TARBALL"], "rb").read())
 elif argv[-1].endswith("/user") and not os.environ.get("CURL_EMPTY"):
     print('{"login":"octo","id":1}')
 EOF
@@ -44,15 +52,36 @@ def check(name, cond):
         failed.append(name)
 
 
-def run(script, env, home=None):
+ARM64_SUM = "7862c86c72f43df3a2d93ddde6f473285b4e2af61b494849846827e513ef6484"
+FAKES = {
+    "curl": FAKE_CURL,
+    "uname": '#!/bin/sh\necho "${ARCH:-aarch64}"\n',
+    "sha256sum": '#!/bin/sh\necho "${SUM:-%s}  $1"\n' % ARM64_SUM,
+}
+
+
+def gh_tarball(path, arch="arm64"):
+    """A tarball laid out like gh's release, whose gh prints its config dir and argv."""
+    exe = b'#!/bin/sh\necho "$GH_CONFIG_DIR $*"\n'
+    with tarfile.open(path, "w:gz") as t:
+        info = tarfile.TarInfo(f"gh_2.102.0_linux_{arch}/bin/gh")
+        info.size, info.mode = len(exe), 0o755
+        t.addfile(info, io.BytesIO(exe))
+
+
+def run(script, env, home=None, gh_on_path=False, path_first=None):
     args = env.pop("_ARGS", [])
     with tempfile.TemporaryDirectory() as d:
         bin_dir = pathlib.Path(d)
-        exe = bin_dir / "curl"
-        exe.write_text(FAKE_CURL)
-        exe.chmod(0o755)
+        fakes = dict(FAKES, gh="#!/bin/sh\n") if gh_on_path else FAKES
+        for name, text in fakes.items():
+            (bin_dir / name).write_text(text)
+            (bin_dir / name).chmod(0o755)
+        (bin_dir / "python3").symlink_to(sys.executable)
+        gh_tarball(bin_dir / "gh.tgz")
         record = bin_dir / "record.json"
-        full_env = {"PATH": f"{bin_dir}:/usr/bin:/bin:{os.path.dirname(sys.executable)}",
+        path = f"{bin_dir}:/usr/bin:/bin"
+        full_env = {"PATH": f"{path_first}:{path}" if path_first else path, "TARBALL": str(bin_dir / "gh.tgz"),
                     "RECORD": str(record), "HOME": home or d, **env}
         proc = subprocess.run(["sh", str(SCRIPTS / script), *args], env=full_env,
                               capture_output=True, text=True)
@@ -71,12 +100,31 @@ def git_config(home, key):
     return r.stdout.split("\n")[:-1]
 
 
+def gh(home, *a):
+    try:
+        return subprocess.run([str(pathlib.Path(home, ".openclaw/bin/gh")), *a],
+                              capture_output=True, text=True, timeout=10).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
 with tempfile.TemporaryDirectory() as home:
     env = {"CRED_GITHUB_GIT_GIT": "cred-github-git-git-AAA", "CRED_GITHUB_GIT_GIT_META": "{}",
            "CRED_GITHUB_API_REST": "cred-github-api-rest-BBB"}
     proc, rec = run("setup.sh", dict(env), home)
-    check("setup: runs both halves", proc.returncode == 0 and "configured: git gh" in proc.stdout)
-    run("setup.sh", dict(env), home)
+    keep = pathlib.Path(home, ".openclaw")
+    check("setup: runs both halves and prints gh's path",
+          proc.returncode == 0 and proc.stdout.split("\n")[:2] == ["configured: git gh", f"gh: {keep}/bin/gh"])
+    check("setup: downloads gh for the machine's architecture",
+          rec is not None and rec["argv"][-1] == "https://github.com/cli/cli/releases/download/"
+          "v2.102.0/gh_2.102.0_linux_arm64.tar.gz")
+    check("setup: gh runs with its config in ~/.openclaw", gh(home, "pr", "list") == f"{keep}/gh pr list")
+    proc, rec = run("setup.sh", dict(env), home)
+    check("setup: a second run does not download gh again",
+          proc.returncode == 0 and rec["argv"][-1] == "https://api.github.com/user")
+    proc, rec = run("setup.sh", dict(env), home, path_first=keep / "bin")
+    check("setup: with its own gh first on PATH, the wrapper still runs the download",
+          proc.returncode == 0 and gh(home, "x") == f"{keep}/gh x")
     headers = git_config(home, "http.https://github.com/.extraHeader")
     check("setup: a second run leaves one header", len(headers) == 1)
     if headers:
@@ -85,27 +133,36 @@ with tempfile.TemporaryDirectory() as home:
               == "x-access-token:cred-github-git-git-AAA")
     check("setup: git@ and ssh:// remotes go over HTTPS",
           git_config(home, "url.https://github.com/.insteadOf") == ["git@github.com:", "ssh://git@github.com/"])
-    hosts = pathlib.Path(home, ".config/gh/hosts.yml")
+    hosts = keep / "gh/hosts.yml"
     text = hosts.read_text() if hosts.exists() else ""
     check("setup: gh holds the REST placeholder", 'oauth_token: "cred-github-api-rest-BBB"' in text)
     check("setup: gh knows the login", 'user: "octo"' in text)
     check("setup: hosts.yml is private", hosts.exists() and hosts.stat().st_mode & 0o077 == 0)
 
 with tempfile.TemporaryDirectory() as home:
-    # The pod image links ~/.gitconfig and ~/.config/gh into the persistent
-    # ~/.openclaw volume before either target exists.
-    keep = pathlib.Path(home, ".openclaw")
-    keep.mkdir()
-    pathlib.Path(home, ".gitconfig").symlink_to(keep / "gitconfig")
-    pathlib.Path(home, ".config").mkdir()
-    pathlib.Path(home, ".config/gh").symlink_to(keep / "gh")
-    proc, rec = run("setup.sh", {"CRED_GITHUB_GIT_GIT": "cred-a", "CRED_GITHUB_API_REST": "cred-b"}, home)
-    check("setup: writes through links into the persistent volume",
-          proc.returncode == 0 and (keep / "gitconfig").is_file() and (keep / "gh/hosts.yml").is_file()
-          and pathlib.Path(home, ".gitconfig").is_symlink())
+    proc, rec = run("setup.sh", {"CRED_GITHUB_API_REST": "cred-a"}, home, gh_on_path=True)
+    check("setup: uses a gh already on PATH",
+          proc.returncode == 0 and rec["argv"][-1] == "https://api.github.com/user"
+          and not pathlib.Path(home, ".openclaw/bin/gh-2.102.0").exists()
+          and f'GH_CONFIG_DIR="{home}/.openclaw/gh" exec "/' in pathlib.Path(home, ".openclaw/bin/gh").read_text())
 
 with tempfile.TemporaryDirectory() as home:
-    hosts = pathlib.Path(home, ".config/gh/hosts.yml")
+    proc, rec = run("setup.sh", {"CRED_GITHUB_API_REST": "cred-a", "ARCH": "x86_64"}, home)
+    check("setup: a gh download with the wrong sha256 is not installed",
+          proc.returncode == 2 and "wrong sha256" in proc.stderr and "linux_amd64" in rec["argv"][-1]
+          and not pathlib.Path(home, ".openclaw/bin/gh-2.102.0").exists())
+
+with tempfile.TemporaryDirectory() as home:
+    proc, rec = run("setup.sh", {"CRED_GITHUB_API_REST": "cred-a", "CURL_FAIL": "1"}, home)
+    check("setup: a failed gh download is reported", proc.returncode == 2 and "could not download gh" in proc.stderr)
+
+with tempfile.TemporaryDirectory() as home:
+    proc, rec = run("setup.sh", {"CRED_GITHUB_API_REST": "cred-a", "ARCH": "riscv64"}, home)
+    check("setup: an architecture with no gh build is reported",
+          proc.returncode == 2 and "no gh build for riscv64" in proc.stderr)
+
+with tempfile.TemporaryDirectory() as home:
+    hosts = pathlib.Path(home, ".openclaw/gh/hosts.yml")
     hosts.parent.mkdir(parents=True)
     hosts.write_text("github.com: {}\n")
     hosts.chmod(0o644)
