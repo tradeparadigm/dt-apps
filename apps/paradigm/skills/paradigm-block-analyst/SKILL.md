@@ -69,7 +69,7 @@ injected.** Hand the injected JSON to it (below); the script resolves the fill f
 execution tape, then Paradigm's API, so a block too new for the tape still renders. Render by hand
 via Steps 1–7 only when `exec`/`uv` are unavailable.
 
-**Any `analyze:` line it prints is part of the answer — relay it verbatim, first.** On a non-zero exit that line is the whole reply; on exit `0` it qualifies the block (`recurrence is a FLOOR` means the 30d count is a lower bound). Exit `4` is a tape or environment failure, never an unknown RFQ — do not answer it with the not-resolved line. Codes in `references/rfq-lookup.md`.
+**Any `analyze:` line it prints is part of the answer — relay it verbatim, first.** On a non-zero exit that line is the whole reply; on exit `0` it qualifies the block. A History count marked `(as of <time>)` is a lower bound: blocks after that time are not in it. Exit `4` is a tape or environment failure, never an unknown RFQ — do not answer it with the not-resolved line. Codes in `references/rfq-lookup.md`.
 
 **Run one command and relay its stdout as your entire reply:**
 

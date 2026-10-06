@@ -236,6 +236,8 @@ def run(rows, rfq=core, injected=None, lookup=None, tape_error=None, **reader):
                    if (Path(d) / f"{n}.csv").exists() else [] for n in ("fill", "hist")}
             pkg = Path(d) / "package.json"
             out["package"] = json.loads(pkg.read_text()) if pkg.exists() else None
+            hist = Path(d) / "history.json"
+            out["history"] = json.loads(hist.read_text()) if hist.exists() else None
             return counts, out
     finally:
         ca.read_executions = real
@@ -247,7 +249,7 @@ ok(counts["source"] == "api" and len(out["fill"]) == 1, f"the API resolves a fil
 ok(out["package"] and abs(out["package"]["ref_net"] + 37.08115655) < 1e-9, "and hands over the package mark")
 ok({r["BLOCK_TRADE_ID"] for r in out["hist"]} == {"b_older", ETH_PUT["id"]},
    f"recurrence: the older tape block plus this one [{[r['BLOCK_TRADE_ID'] for r in out['hist']]}]")
-ok(any("Paradigm's API" in n for n in counts["notes"]), "and says where the fill came from")
+ok(not counts["notes"], "and does not narrate where the fill came from")
 
 _seen = {}
 
@@ -270,8 +272,8 @@ counts, out = run([tape_row(rfq_id="DRFQv2-" + core, block_trade_id="b_t")], inj
 ok(counts["source"] == "tape", "an injected payload without the RFQ falls through to the tape")
 
 counts, out = run([], lookup=api_hit, tape_error=RuntimeError("publication stale"))
-ok(counts["fill"] == 1 and any("history unavailable" in n for n in counts["notes"]),
-   f"an unreadable tape no longer stops a run another source can resolve [{counts.get('notes')}]")
+ok(counts["fill"] == 1 and out["history"] == {"unavailable": True, "as_of": ""},
+   f"an unreadable tape no longer stops a run another source can resolve [{out['history']}]")
 try:
     run([], lookup=lambda *a, **k: (None, "no production Paradigm key enrolled"),
         tape_error=RuntimeError("publication stale"))
@@ -291,6 +293,7 @@ ok(not _called, "an explicit GRFQ- id is not matched against the DRFQ tape")
 real_collect = ca.collect
 ca.collect = lambda *a, **k: {"fill": 0, "hist": 0, "blocks": 0, "coverage_complete": False,
                               "coverage_edge": "the read covers through 2026-10-05 08:00Z only",
+                              "history_as_of": "08:00 UTC",
                               "api_reason": "no production Paradigm key enrolled"}
 sys_argv, err = sys.argv, io.StringIO()
 sys.argv = ["collect_analysis.py", core, "--out-dir", "/tmp/x"]
@@ -298,7 +301,7 @@ with contextlib.redirect_stderr(err):
     rc = ca.main()
 sys.argv = sys_argv
 ca.collect = real_collect
-ok(rc == 6 and "08:00Z" in err.getvalue() and "No production Paradigm key" in err.getvalue(),
+ok(rc == 6 and "current to 08:00 UTC" in err.getvalue() and "No production Paradigm key" in err.getvalue(),
    f"exit 6 names the boundary and why the API did not help [{err.getvalue().strip()[:120]}]")
 
 # --- analyze.py: a PRDX block is benchmarked on Paradex -------------------
@@ -310,7 +313,13 @@ SUMMARY = {"ETH-USD-30OCT26-2450-P": {"symbol": "ETH-USD-30OCT26-2450-P", "mark_
                                       "underlying_price": "2721.5",
                                       "greeks": {"delta": "-0.184", "gamma": "0.00076", "vega": "1.89"}},
            "ETH-USD-PERP": {"symbol": "ETH-USD-PERP", "mark_price": "2722.0"}}
-BBO = {"ETH-USD-30OCT26-2450-P": {"bid": "36.56", "ask": "38.52"}}
+BBO = {"ETH-USD-30OCT26-2450-P": {"bid": "36.56", "ask": "38.52", "last_updated_at": 1791255147520},
+       # The real answer for a market nobody is quoting (ETH-USD-10OCT26-2600-P, 6 Oct 2026).
+       "ETH-USD-10OCT26-2600-P": {"bid": "0", "ask": "0", "last_updated_at": 0}}
+SUMMARY["ETH-USD-10OCT26-2600-P"] = {"symbol": "ETH-USD-10OCT26-2600-P", "mark_price": "11.97",
+                                     "mark_iv": "0.409", "bid": "", "ask": "",
+                                     "greeks": {"delta": "-0.18", "gamma": "0.0022",
+                                                "vega": "0.77", "theta": "-3.69"}}
 _paradex_calls = []
 
 
@@ -330,10 +339,17 @@ try:
     ok(tk["iv"] == 48.9, f"Paradex's decimal mark_iv is printed in vol points [{tk['iv']}]")
     ok(tk["bid"] == 36.56 and tk["ask"] == 38.52, "bid/ask come from bbo/ when the summary lacks them")
     ok(tk["theta"] is None and tk["vega"] == 1.89, "an unpublished greek is None, not 0")
+    _, empty = az.fetch_paradex_ticker("ETH-USD-10OCT26-2600-P")
+    ok(empty["bid"] is None and empty["ask"] is None,
+       f"an empty book is no quote, not a price of 0 [{empty['bid']}/{empty['ask']}]")
+    ok(az._quote(empty) == "no quotes", "and the Live row says so")
+    ok(az._quote({"bid": 0.0, "ask": 0.0}) == "no quotes", "a 0/0 from either venue is no quotes")
+    ok(az._quote({"bid": None, "ask": 9.88}) == "–/9.88", "a one-sided book shows the side it has")
 
     counts, _ = None, None
     real = ca.read_executions
-    ca.read_executions = lambda *a, **k: {"rows": [tape_row()]}
+    ca.read_executions = lambda *a, **k: {"rows": [tape_row()], "coverage_complete": False,
+                                          "source_watermark_ms": 1791180000000}
     with tempfile.TemporaryDirectory() as d:
         ca.collect(core, Path(d), lookup=api_hit)
         buf = io.StringIO()
@@ -349,7 +365,9 @@ try:
     ok("Deribit leg blocks" not in block, "a PRDX block makes no Deribit claim")
     ok("36.56/38.52" in block and "48.9v" in block, "the Live and Fair rows are Paradex's")
     ok("Spot 2,722" in block, "spot is the Paradex perp")
-    ok("2 same-structure block(s)" in block, "recurrence counts the tape's older block and this one")
+    ok("2 same-structure block(s) on Paradigm 30d (as of " in block,
+       f"recurrence, with when its history ends beside it [{block.split('| History |')[1].splitlines()[0]}]")
+    ok("analyze:" not in block and "FLOOR" not in block, "and no caveat line of its own")
 finally:
     az._paradex, az.fetch_ticker, az.fetch_trades_bucket = real_paradex, real_ticker, real_bucket
 

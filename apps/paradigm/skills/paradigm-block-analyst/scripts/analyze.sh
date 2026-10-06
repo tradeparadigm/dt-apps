@@ -79,9 +79,10 @@ if [ "$status" -ne 0 ]; then
   fi
   exit "$status"
 fi
-# Exit 0 can still carry a note — `recurrence is a FLOOR`. It is part of the
-# answer, so it goes to stdout with the block rather than being swallowed.
-[ -n "$note" ] && printf '%s\n' "$note"
+# Exit 0 can still carry a note (legs that do not net to the package price). It
+# is part of the answer, so it goes to stdout with the block rather than being
+# swallowed — followed by a blank line, or markdown joins it to the header.
+[ -n "$note" ] && printf '%s\n\n' "$note"
 
 # No exec — the EXIT trap must survive to clean the CSVs after the render.
 cd "$DIR" && uv run scripts/analyze.py --csv-dir "$OUT" --render

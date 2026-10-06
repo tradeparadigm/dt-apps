@@ -144,6 +144,20 @@ def _structure(row: dict) -> tuple[str, str, str]:
     return asset, venue.strip().upper(), row.get("_DESC_N") or ""
 
 
+def history_as_of(result: dict, now: dt.datetime) -> str:
+    """The tape's coverage edge as a reader would say it: '01:59 UTC', with the
+    date only when it is not today's. "" when the read reaches the end."""
+    if result.get("coverage_complete"):
+        return ""
+    watermark = result.get("source_watermark_ms")
+    if watermark is None:
+        return "an unknown time"
+    reached = dt.datetime.fromtimestamp(int(watermark) / 1000, dt.timezone.utc)
+    if reached.date() == now.astimezone(dt.timezone.utc).date():
+        return f"{reached:%H:%M} UTC"
+    return f"{reached:%-d %b %H:%M} UTC"
+
+
 def collect(rfq_id: str, out_dir: Path, *, now=None, s3=None, injected=None,
             lookup=None) -> dict:
     """Resolve the fill: the injected trade, then the tape, then Paradigm's API.
@@ -205,6 +219,7 @@ def collect(rfq_id: str, out_dir: Path, *, now=None, s3=None, injected=None,
 
     coverage = {"coverage_complete": bool(result.get("coverage_complete")),
                 "coverage_edge": "" if tape_error else coverage_edge(result),
+                "history_as_of": "" if tape_error else history_as_of(result, now),
                 "coverage_note": result.get("coverage_note")}
     if fill is None:
         if tape_error is not None:
@@ -227,11 +242,6 @@ def collect(rfq_id: str, out_dir: Path, *, now=None, s3=None, injected=None,
         structures = {_structure(r) for r in fill}
         hist = [r for r in rows if _structure(r) in structures
                 and core_id(r["RFQ_ID"] or "") != core] + fill
-        if tape_error is not None:
-            notes.append(f"30-day history unavailable — execution tape unreadable ({tape_error}); "
-                         "recurrence counts this block alone")
-        elif source == "api":
-            notes.append("fill read from Paradigm's API — the execution tape does not reach it yet")
         if package is not None and not package.get("check", True):
             notes.append("the legs' prices do not net to the package price on this trade, "
                          "so check Paid/Recd against the trade itself")
@@ -241,6 +251,12 @@ def collect(rfq_id: str, out_dir: Path, *, now=None, s3=None, injected=None,
     write(out_dir / "hist.csv", HIST_COLUMNS, hist)
     if package is not None:
         (out_dir / "package.json").write_text(json.dumps(package), encoding="utf-8")
+    # How far the History row's count reaches, for analyze.py to print beside
+    # the count it qualifies rather than as a line of its own above the block.
+    (out_dir / "history.json").write_text(json.dumps({
+        "unavailable": tape_error is not None,
+        "as_of": coverage["history_as_of"],
+    }), encoding="utf-8")
     # Coverage travels on BOTH paths. Reporting it only on a miss left
     # recurrence — the one figure the uncovered tail actually moves — rendered
     # as a fact while the same tail was being treated as decisive above.
@@ -283,26 +299,27 @@ def main() -> int:
         print(f"analyze: execution tape unavailable — {exc}", file=sys.stderr)
         return 4
     if not counts["fill"]:
-        edge = counts.get("coverage_edge") or ""
+        # Said to the person analysing the trade, not to whoever runs the tape:
+        # when the history ends, and what that means for a trade they just did.
+        as_of = counts.get("history_as_of") or ""
         api = counts.get("api_reason") or ""
-        tail = f" {api[0].upper()}{api[1:]}." if api else ""
-        if edge:
-            print(f"analyze: {rfq_id} not found — {edge}. A block traded after that "
-                  "boundary would not be in this read, so absence here is not absence from "
-                  f"the market.{tail}", file=sys.stderr)
+        if api.startswith("not among"):
+            tail = " (Also not found via Paradigm's API.)"
+        elif api:
+            tail = f" {api[0].upper()}{api[1:]}."
+        else:
+            tail = ""
+        if as_of:
+            print(f"analyze: Couldn't find {rfq_id}. Paradigm's history is current to {as_of}, "
+                  f"so a very recent trade may not show yet.{tail}", file=sys.stderr)
             return 6
-        print(f"analyze: {rfq_id} not found on the execution tape, whose read covered "
-              f"the full requested window.{tail}", file=sys.stderr)
+        print(f"analyze: Couldn't find {rfq_id} in Paradigm's 30-day history.{tail}",
+              file=sys.stderr)
         return 5
+    # A history that stops short is printed beside the count it qualifies, in
+    # the History row; only what the reader must act on goes above the block.
     for note in counts.get("notes") or []:
         print(f"analyze: {note}", file=sys.stderr)
-    if counts.get("coverage_edge"):
-        # Recurrence counts OTHER blocks of this structure over 30 days, so the
-        # uncovered tail lands on exactly that number. Saying the count is a
-        # floor is the same claim the not-found branch makes, on the path where
-        # it was previously dropped.
-        print(f"analyze: recurrence is a FLOOR — {counts['coverage_edge']}, so blocks "
-              "traded after that boundary are not counted", file=sys.stderr)
     print(f"fill={counts['fill']} hist={counts['hist']} blocks={counts['blocks']}")
     return 0
 

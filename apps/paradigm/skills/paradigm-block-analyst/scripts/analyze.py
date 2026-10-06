@@ -107,8 +107,11 @@ def fetch_paradex_ticker(sym):
         if bid is None or ask is None:
             try:
                 bbo = _paradex(f"bbo/{sym}")
-                bid = ac._f(bbo.get("bid")) if bid is None else bid
-                ask = ac._f(bbo.get("ask")) if ask is None else ask
+                # An empty book answers "0"/"0" with last_updated_at 0 — no
+                # quote, not a zero price — and the summary leaves both blank.
+                if bbo.get("last_updated_at"):
+                    bid = ac._f(bbo.get("bid")) if bid is None else bid
+                    ask = ac._f(bbo.get("ask")) if ask is None else ask
             except Exception as e:  # noqa: BLE001
                 warn(f"bbo {sym}: {e}")
         iv = ac._f(row.get("mark_iv"))
@@ -297,6 +300,8 @@ def _run(args):
             blocks.setdefault(b, []).append(r)
     recurrence = len(blocks)
 
+    history = _read_json(os.path.join(args.csv_dir, "history.json"))
+
     # grfq (multi-maker) vs drfq (directed) — from the resolved RFQ_ID's routing
     # prefix (GRFQ- / DRFQv2-), the authoritative source per SKILL Step 0.
     rfq_kind = "grfq" if (fill[0].get("RFQ_ID") or "").upper().startswith("GRFQ") else "drfq"
@@ -319,6 +324,8 @@ def _run(args):
                        "ref": ac._f(r.get("REF_PRICE")), "product": r.get("PRODUCT")}
                       for r in fill],
         "net_greeks": ng, "recurrence_blocks": recurrence, "warnings": WARN,
+        "history_unavailable": bool(history.get("unavailable")),
+        "history_as_of": history.get("as_of") or "",
     }
 
     if args.render:
@@ -400,6 +407,16 @@ def _offset_txt(off) -> str:
     return f"{t} {'above' if s > 0 else 'below' if s < 0 else 'at'} mark"
 
 
+def _quote(t) -> str:
+    """'7.58/9.88', 'no quotes' for an empty book, '–' for a missing side.
+    Both venues report an empty side as 0 or nothing; neither is a price."""
+    bid = t.get("bid") or None
+    ask = t.get("ask") or None
+    if bid is None and ask is None:
+        return "no quotes"
+    return f"{bid if bid is not None else '–'}/{ask if ask is not None else '–'}"
+
+
 def render(r) -> str:
     a = r["asset"]
     legs = r["legs"]
@@ -422,7 +439,11 @@ def render(r) -> str:
         for row in r["fill_rows"]:
             L.append(f"        {row['side']} {row['qty']:g} @ {row['price']} "
                      f"(ref {row['ref']}) · {row['desc']}")
-        L.append(f"[Recur] {r['recurrence_blocks']} same-structure block(s) on Paradigm 30d")
+        if r.get("history_unavailable"):
+            L.append("[Recur] Paradigm block history unavailable right now")
+        else:
+            as_of = f" (as of {r['history_as_of']})" if r.get("history_as_of") else ""
+            L.append(f"[Recur] {r['recurrence_blocks']} same-structure block(s) on Paradigm 30d{as_of}")
         sp = f"{r['spot']:,.0f}" if r.get("spot") else "n/a"
         L.append(f"[Spot]  {sp}")
         L.append("```")
@@ -475,11 +496,16 @@ def render(r) -> str:
                      for l in legs if l["cp"] != "FUT" and l.get("tkr"))
     rows.append(("Fair", f"{_offset_txt(r['offset'])} · {ivs}"))
     d30 = sum((l["trades"] or {}).get("30d", (0, 0, 0))[1] for l in legs if l.get("trades"))
-    history = f"{r['recurrence_blocks']} same-structure block(s) on Paradigm 30d"
+    if r.get("history_unavailable"):
+        history = "Paradigm block history unavailable right now"
+    else:
+        history = f"{r['recurrence_blocks']} same-structure block(s) on Paradigm 30d"
+        if r.get("history_as_of"):
+            history += f" (as of {r['history_as_of']})"
     if r["venue"] != "PRDX":
         history += f" · Deribit leg blocks 30d: {d30}"
     rows.append(("History", history))
-    live = " · ".join(f"{_leg_lbl(l, multi_exp)} {(l['tkr'] or {}).get('bid')}/{(l['tkr'] or {}).get('ask')}"
+    live = " · ".join(f"{_leg_lbl(l, multi_exp)} {_quote(l['tkr'] or {})}"
                       for l in legs if l["cp"] != "FUT" and l.get("tkr"))
     rows.append(("Live", live))
     L += ["|  | Detail |", "| --- | --- |"]
