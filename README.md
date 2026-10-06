@@ -93,10 +93,11 @@ that made the mistake:
 - no two apps claim the same skill name. openclaw resolves a collision by
   precedence rather than erroring, so one of them would simply never load;
 - an environment may list `extra_hosts`, further hosts the same credential is
-  used on, and a route may name the one `host` it applies to. That host has
-  to be one every environment has, or enrolling an environment without it is
-  refused. Together they let GitHub put git's endpoints on `github.com` and
-  every path on `api.github.com` under one token;
+  used on, and a route may name the one `host` it applies to. The checker
+  refuses a route host that some environment lacks. No host can be in two
+  environments, so only an app with one environment can give a route a host.
+  GitHub uses both to send git to `github.com` and the API to `api.github.com`
+  under one token;
 - hosts are bare lowercase hostnames — no scheme, port, path or underscore —
   because the proxy matches them case-sensitively and the enrolment path
   refuses anything that is not a hostname outright;
