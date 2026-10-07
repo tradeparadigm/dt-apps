@@ -25,6 +25,56 @@ Paradex is a Starknet-based perpetual futures exchange. This skill covers the
 calls you will actually make and where the stored credential fits into each
 one.
 
+## If `cex` is on your PATH
+
+Run `command -v cex` first. If it prints a path, use `cex` for anything it
+covers and skip the signing in the rest of this file. It finds your Paradex signing-key
+credential, takes the environment from the hosts the credential lists, and
+signs through the proxy.
+
+```sh
+cex balance
+cex positions
+cex orders --symbol BTC-USD-PERP
+cex fills --symbol BTC-USD-PERP --from <unix ms>
+cex income --from <unix ms>
+cex place --symbol BTC-USD-PERP --side buy --type limit --amount 0.01 --price <price>
+cex cancel --id <order id>
+```
+
+It covers perpetuals with a signing key (`sign-`). A read-only token (`cred-`) is REST only, and so are options, batch orders and the WebSocket. `cex --help` lists every flag.
+
+Each run prints one JSON document, and `--help` prints the usage.
+
+- `"ok": true`, exit 0: `data` is the answer.
+- `"ok": false`, exit 1: the venue or the proxy refused, or nothing answered.
+  - `refused` lists each refused request with its status and body. Read them
+    against "When the proxy refuses" below for a 403 from the proxy. Anything else is Paradex's own answer, and `body` carries its error code.
+  - `error` with `status` and `body`: one call failed outright. Read it the
+    same way.
+  - `errors`: what the client itself reported, sometimes with no `refused`
+    entry. `data` is whatever came back anyway.
+  - `could not load paradex markets`: the market list did not load. `refused`
+    names the request. A proxy 403 or the venue being down are the usual
+    causes.
+  - `no answer within 60s`: the venue or the proxy is slow or unreachable. Run
+    it once more with `--timeout 120`, then report it.
+- exit 2: the command was wrong, and nothing was changed.
+  - An unknown symbol. It suggests close matches.
+  - A missing or malformed flag.
+  - Several venue credentials. Pass `--cred CRED_<NAME>`. A `--cred` that names
+    no `sign-` credential, or one whose hosts `cex` does not know, is refused
+    the same way.
+  - No `sign-` credential it can use. None is enrolled, the one enrolled is a
+    read-only `cred-` token, or its `_META` has no `_hosts` because the
+    terminal predates them. Use REST.
+  - `no open order matches`: the order already filled or was cancelled, or the
+    id is wrong. `cex orders` shows what is open.
+
+For anything `cex` does not cover, or when it is not installed, use the REST
+instructions below. If `cex` fails in a way this list does not explain, say
+what you ran and what it printed, then use REST.
+
 ## Paradex is not Paradigm
 
 These trip over each other constantly, so check which one you are being asked
@@ -94,11 +144,12 @@ This is the credential that can trade.
 need both — neither is derivable from the other on your side, and the auth URL
 is addressed to the public key.
 
-It is scoped to exactly three endpoints:
+It is scoped to exactly these endpoints:
 
 - `POST /v1/auth/*`
 - `POST /v1/onboarding`
 - `POST /v1/orders`
+- `PUT /v1/orders/*`, amending an order
 
 Everything else on the host is forwarded untouched and needs no placeholder.
 That includes all market data, all account reads, and cancelling orders.
@@ -180,7 +231,7 @@ request:
 rm -rf ~/.openclaw/workspace/tools/paradex/paradex-api
 mkdir -p ~/.openclaw/workspace/tools/paradex/paradex-api
 find ~/.openclaw/workspace/tools/paradex -maxdepth 1 -name '*.mjs' -delete
-cat > ~/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.1.2.mjs <<'EOF'
+cat > ~/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.2.0.mjs <<'EOF'
 import { typedData as td, shortString } from 'starknet';
 
 const V = Object.keys(process.env).find(k => (process.env[k] || '').startsWith('sign-paradex'));
@@ -263,7 +314,7 @@ Reading is then one call:
 
 ```sh
 node --input-type=module -e "
-import { auth, HOST } from '$HOME/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.1.2.mjs';
+import { auth, HOST } from '$HOME/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.2.0.mjs';
 const jwt = await auth();
 const r = await fetch(\`https://\${HOST}/v1/account\`, { headers: { Authorization: 'Bearer ' + jwt } });
 console.log(r.status, await r.text());
@@ -294,7 +345,7 @@ useful explanation.
 **Keep the token.** The response carries `jwt_token`. Use it as
 `Authorization: Bearer <jwt_token>` on everything below. Re-auth when it
 expires rather than re-signing every request — the signing credential is scoped
-to three endpoints and the token is what reaches the rest of the API.
+to the endpoints above, and the token is what reaches the rest of the API.
 
 If the account has never traded, `POST /v1/onboarding` comes first. It uses the
 same signing pattern and is idempotent, so calling it when already onboarded is
@@ -462,7 +513,7 @@ error objects; codes from -32768 to -32000 are the standard JSON-RPC set.
 A `403` from the DIME proxy is not a Paradex error — Paradex never saw the
 request. The body says what was missing. The usual causes here:
 
-- The placeholder absent from a request to one of the three scoped endpoints.
+- The placeholder absent from a request to one of the scoped endpoints.
 - The `X-Dime-Sign-` header missing, or named from the placeholder instead of
   from the `CRED_<NAME>` variable.
 - A sign payload that is not exactly 32 bytes, which means you sent something
