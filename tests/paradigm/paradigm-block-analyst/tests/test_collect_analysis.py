@@ -380,6 +380,8 @@ def run_sh(code, note="analyze: stub said so", rfq="r_target"):
         marker = Path(bin_dir) / "second-call"
         stub.write_text(
             "#!/bin/sh\n"
+            # interest.py has nothing to add here; test_interest.py covers it.
+            'case "$*" in *scripts/interest.py*) exit 0 ;; esac\n'
             f"if [ -f {shlex.quote(str(marker))} ]; then\n"
             f"  echo REACHED_ANALYZE_PY\n"
             "  exit 0\n"
@@ -454,7 +456,8 @@ ok("r_target" not in _argv, f"and not the bare core {_argv}")
 
 # The render call's flags decide the reply: without --render analyze.py prints
 # json.dumps(result), and SKILL.md relays stdout verbatim.
-_calls = run_sh_argv("r_target", code=0)
+# interest.py runs beside the render (test_interest.py covers it); left out here.
+_calls = [c for c in run_sh_argv("r_target", code=0) if "scripts/interest.py" not in c]
 ok(len(_calls) == 2, f"a clean resolve goes on to call analyze.py [{len(_calls)} calls]")
 ok(_calls[-1][:2] == ["run", "scripts/analyze.py"] and "--render" in _calls[-1]
    and "--csv-dir" in _calls[-1], f"and asks it for the rendered block {_calls[-1:]}")
@@ -500,6 +503,8 @@ def run_render(code, out=""):
         marker = Path(bin_dir) / "second-call"
         stub.write_text(
             "#!/bin/sh\n"
+            # interest.py has nothing to add here; test_interest.py covers it.
+            'case "$*" in *scripts/interest.py*) exit 0 ;; esac\n'
             f"if [ -f {shlex.quote(str(marker))} ]; then\n"
             f"  printf '%s' {shlex.quote(out)}\n"
             f"  exit {code}\n"
