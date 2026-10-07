@@ -7,6 +7,7 @@ captured from the tape, so the script can never ship a wrong Greeks sign or a
 mis-parsed structure. If a convention here is wrong, this fails before it ships.
 """
 import os
+import json
 import sys
 
 import sys as _sys, pathlib as _pl
@@ -442,18 +443,20 @@ for _rows, _want, _never, _label in (
     ok(_want in _out, f"header sizes {_label} {_want} [{_out[:110]}]")
     ok(_never not in _out, f"header never sizes {_label} {_never}")
 
-# An inferred size says so where the reader sees it, not in a trailing comment.
+# An inferred size says so where the reader sees it, not in a trailing comment,
+# and it is the user's to read, not the agent's: no agent knows the package
+# better than the trade data does.
 _amb = _rendered(clipped)
-ok("⚠ ×N INFERRED" in _amb, f"an inferred size is declared in the body [{_amb[:110]}]")
-# The doubt covers the premium and the offset too, not just the size: they are
-# netted against the same base, so they are wrong by the same factor.
-ok("bps offset are wrong by the same factor" in _amb,
-   "and the warning scopes the error to all three")
+ok("state no ratio" in _amb and "takes the smallest leg as one package" in _amb,
+   f"an inferred size is declared in the body [{_amb[:110]}]")
+# The doubt covers the premium and a bps offset too, not just the size: they
+# are netted against the same base, so they move with it.
+ok("×N, Paid and a bps offset change with it" in _amb or "×N, Recd and a bps offset change with it" in _amb,
+   "and the note scopes the doubt to all three")
+ok("## For the agent" not in _amb, "and it does not wait on an agent")
 _tail_out = _rendered(tail)
-ok("⚠ ×N INFERRED" in _tail_out and "wrong by a whole multiple" in _tail_out,
-   f"and the warning says the size is wrong, not merely unconfirmed [{_tail_out[:90]}]")
-ok("bps offset are wrong by the same factor" in _tail_out,
-   "and that the offset is wrong with it")
+ok("state no ratio" in _tail_out and "the greeks are for the whole block either way" in _tail_out,
+   f"and the greeks are said to be unaffected [{_tail_out[:90]}]")
 
 # A Cstm whose second leg omits its ratio: the CSTM pattern requires one, so
 # that leg was dropped and the block sized off its own QTY as if it were a
@@ -464,8 +467,8 @@ _half = [{"PRODUCT": "BTC OPTION - DBT", "QTY": 40, "PRICE": 0.01, "REF_PRICE": 
 ok(ac.parse_description(_half[0]["DESCRIPTION"])["classified"] is False,
    "a Cstm that drops a leg does not classify")
 _out = _rendered(_half)
-ok("⚠ unmapped structure" in _out,
-   f"and the reader is told the structure was not mapped [{_out[:100]}]")
+ok("## For the agent" in _out and "can miss a leg" in _out,
+   f"and the agent is asked to check the legs against the rows [{_out[:100]}]")
 
 # The rendered contract itself. The eval rewrite dropped 11 of 13 format
 # assertions, and nothing here checked the shape either — deleting the whole
@@ -478,7 +481,7 @@ ok(_lines[1].startswith("Spot "), f"line 2 is the view line [{_lines[1][:60]}]")
 ok("```" not in _shape and "|  | Detail |" in _shape, "the rows sit in a table, not a code fence")
 for _row in ("Greeks", "Fair", "History", "Live"):
     ok(f"\n| {_row} | " in _shape, f"the {_row} row is rendered")
-ok(_rendered(ratio_rows).count("⚠ ×N INFERRED") == 0,
+ok(_rendered(ratio_rows).count("state no ratio") == 0,
    "and an unambiguous one says nothing")
 
 # ── a delta hedge is not premium ──────────────────────────────────────────────
@@ -506,6 +509,153 @@ ok(ac.package_offset(0.001, -0.002, "BTC")["val"] == 30.0, "debit against a cred
 ok(ac.package_offset(0.0450, 0.0443, "BTC")["val"] == 7.0, "two debits still compare on magnitude")
 ok(ac.package_offset(-0.0009, -0.0015, "BTC")["val"] == -6.0, "and so do two credits")
 ok(ac.package_offset(0.001, 0, "BTC")["txt"] == "n/a", "no mark, no offset")
+
+# ── the exit contract: 0 is the user's answer, 1 carries a task for the agent ──
+def _rendered_rc(rows, tickers=None, buckets=None):
+    """(stdout, exit code) of analyze.py's _run over `rows`, with the network
+    stubbed: `tickers` maps symbol → ticker dict (missing = the fetch failed)."""
+    import csv as _csv, io, tempfile, types
+    from contextlib import redirect_stdout
+    tickers = tickers or {}
+    saved = (az.fetch_ticker, az.fetch_trades_bucket)
+    az.fetch_ticker = lambda sym: (sym, tickers.get(sym))
+    az.fetch_trades_bucket = lambda sym, now_ms: (sym, (buckets or {}).get(
+        sym, {"24h": (0, 0, 0.0), "7d": (0, 0, 0.0), "30d": (0, 0, 0.0)}))
+    directory = tempfile.mkdtemp()
+    try:
+        fields = sorted({k for r in rows for k in r})
+        with open(os.path.join(directory, "fill.csv"), "w", newline="") as handle:
+            writer = _csv.DictWriter(handle, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(rows)
+        out = io.StringIO()
+        with redirect_stdout(out):
+            rc = az._run(types.SimpleNamespace(csv_dir=directory, now_ms=1_752_000_000_000,
+                                               render=True))
+        return out.getvalue(), rc
+    finally:
+        az.fetch_ticker, az.fetch_trades_bucket = saved
+
+
+def _tk(delta, iv=50.0):
+    return {"mark": 0.04, "bid": 0.039, "ask": 0.041, "iv": iv, "delta": delta,
+            "gamma": 0.00002, "vega": 100.0, "theta": -40.0, "under": 62000.0, "index": 62000.0}
+
+
+STRADDLE_TK = {"BTC-25SEP26-62000-C": _tk(0.52), "BTC-25SEP26-62000-P": _tk(-0.48),
+               "BTC-PERPETUAL": {"mark": 62010.0, "index": 62000.0}}
+_out, _rc = _rendered_rc(straddle, STRADDLE_TK)
+ok(_rc == 0 and "## For the agent" not in _out and "signs verified" in _out,
+   f"a clean block exits 0 with nothing for an agent [{_rc}]")
+ok("_No live data" not in _out, "and claims no gap it does not have")
+
+# A leg whose live data did not come back: said in the block, never a net that
+# silently leaves the leg out, never an agent asked to fetch it.
+_out, _rc = _rendered_rc(straddle, {k: v for k, v in STRADDLE_TK.items() if not k.endswith("-C")})
+ok(_rc == 0, f"a missing leg is still the user's answer [{_rc}]")
+ok("| Greeks | net unavailable — no live data for 62kC |" in _out,
+   f"the net is not computed without the leg [{_out.split('| Greeks |')[1].splitlines()[0]}]")
+ok("62kC no data" in _out.split("| Fair |")[1].splitlines()[0]
+   and "62kC no data" in _out.split("| Live |")[1].splitlines()[0],
+   "Fair and Live name the leg that is missing")
+ok("_No live data for 62kC after a retry. Rerun /analyze to try again._" in _out,
+   "and one line tells the user to rerun")
+
+_out, _rc = _rendered_rc(straddle, {k: v for k, v in STRADDLE_TK.items() if k != "BTC-PERPETUAL"},
+                         buckets={"BTC-25SEP26-62000-C": None})
+ok(_rc == 0 and "Spot 62,000" in _out, "spot falls back to a leg's underlying")
+ok("Deribit leg blocks 30d: –" in _out and "Deribit's 30-day leg counts" in _out,
+   "a failed 30-day count is a dash and a note, not a silent undercount")
+_out, _rc = _rendered_rc(straddle, {})
+ok("Spot unavailable" in _out and "62kC, 62kP, spot" in _out, "and no spot at all is said so")
+
+# Bybit/OKX blocks are benchmarked on Deribit; the block says so.
+_byb = [dict(r, PRODUCT="BTC OPTION - BYB") for r in straddle]
+_out, _rc = _rendered_rc(_byb, STRADDLE_TK)
+ok(_rc == 0 and "_Benchmarked on Deribit._" in _out, "a block from a venue the script does not read says where its live data is from")
+ok("Benchmarked" not in _rendered_rc(straddle, STRADDLE_TK)[0], "and a Deribit block does not")
+
+# Only what the trade data cannot settle reaches the agent, with the numbers.
+_rr = [{"PRODUCT": "BTC OPTION - DBT", "DESCRIPTION": "RRCall 25 Sep 26 58000/66000",
+        "QTY": 50, "PRICE": 0.012, "REF_PRICE": 0.0118, "SIDE": "BUY"}] * 2
+_out, _rc = _rendered_rc(_rr, {"BTC-25SEP26-58000-P": _tk(-0.3), "BTC-25SEP26-66000-C": _tk(0.35),
+                               "BTC-PERPETUAL": {"mark": 62010.0}})
+ok(_rc == 1 and "## For the agent" in _out and "Which legs the taker is long" in _out,
+   f"a risk reversal without per-leg sides hands its signs to the agent [{_rc}]")
+_data = json.loads(_out.split("```json")[1].split("```")[0])
+ok({l["strike"] for l in _data["legs"]} == {58000.0, 66000.0}
+   and all(l["greeks"]["delta"] is not None for l in _data["legs"]),
+   "with every leg's greeks in the data")
+ok("Do not run analyze.sh again and do not fetch anything" in _out,
+   "and tells it to fetch nothing")
+
+_unk = [{"PRODUCT": "BTC OPTION - DBT", "DESCRIPTION": "Zebra 25 Sep 26 62000",
+         "QTY": 10, "PRICE": 0.01, "REF_PRICE": 0.01, "SIDE": "BUY"}]
+_out, _rc = _rendered_rc(_unk, STRADDLE_TK)
+ok(_rc == 1 and "could not be read from the trade data" in _out and "fill_rows" in _out,
+   f"a structure with no readable legs goes to the agent with its rows [{_rc}]")
+
+# A crash after the trade was found hands the rows on, rather than a traceback.
+import subprocess as _sp, tempfile as _tf, csv as _csv2  # noqa: E402
+with _tf.TemporaryDirectory() as _d:
+    with open(os.path.join(_d, "fill.csv"), "w", newline="") as _h:
+        _w = _csv2.DictWriter(_h, fieldnames=["PRODUCT", "DESCRIPTION", "QTY", "PRICE", "SIDE"])
+        _w.writeheader()
+        _w.writerow({"PRODUCT": "BTC OPTION - DBT", "DESCRIPTION": "Call 25 Sep 26 62000",
+                     "QTY": "not a number", "PRICE": "x", "SIDE": "BUY"})
+    _saved_run = az._run
+    az._run = lambda args: (_ for _ in ()).throw(ZeroDivisionError("boom"))
+    import io as _io, types as _types  # noqa: E402
+    from contextlib import redirect_stdout as _rs  # noqa: E402
+    _buf = _io.StringIO()
+    _argv = sys.argv
+    sys.argv = ["analyze.py", "--csv-dir", _d, "--render"]
+    try:
+        with _rs(_buf):
+            _rc = az.main()
+    finally:
+        az._run, sys.argv = _saved_run, _argv
+ok(_rc == 1 and "ZeroDivisionError: boom" in _buf.getvalue() and "## For the agent" in _buf.getvalue()
+   and "Call 25 Sep 26 62000" in _buf.getvalue(), "a render crash exits 1 with the rows for the agent")
+
+# One retry for what a retry can fix, none for an answer.
+import urllib.error as _ue  # noqa: E402
+_calls = []
+
+
+class _Resp:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self):
+        return b'{"result": {"ok": 1}}'
+
+
+def _flaky(url, timeout):
+    _calls.append(url)
+    if len(_calls) == 1:
+        raise _ue.URLError("reset")
+    return _Resp()
+
+
+_saved_open = az.urllib.request.urlopen
+az.urllib.request.urlopen = _flaky
+try:
+    ok(az._get("ticker", {"instrument_name": "X"}) == {"ok": 1} and len(_calls) == 2,
+       "a dropped connection is retried once")
+    _calls.clear()
+    az.urllib.request.urlopen = lambda url, timeout: (_calls.append(url), (_ for _ in ()).throw(
+        _ue.HTTPError(url, 400, "bad", None, None)))[1]
+    try:
+        az._get("ticker", {"instrument_name": "X"})
+    except _ue.HTTPError:
+        pass
+    ok(len(_calls) == 1, "a 400 (no such instrument) is not")
+finally:
+    az.urllib.request.urlopen = _saved_open
 
 print(f"\n{_p} passed, {_f} failed")
 sys.exit(1 if _f else 0)

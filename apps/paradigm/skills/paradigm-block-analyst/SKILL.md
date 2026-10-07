@@ -25,7 +25,7 @@ compatibility: Resolves the rfq_id against the Paradigm execution tape's daily
   unreachable, never fabricating the fill.
 metadata:
   author: tradeparadigm
-  version: "1.11"
+  version: "1.12"
 ---
 
 # Paradigm Block Trade Analyst
@@ -69,9 +69,20 @@ injected.** Hand the injected JSON to it (below); the script resolves the fill f
 execution tape, then Paradigm's API, so a block too new for the tape still renders. Render by hand
 via Steps 1–7 only when `exec`/`uv` are unavailable.
 
-**Any `analyze:` line it prints is part of the answer — relay it verbatim, first.** On a non-zero exit that line is the whole reply; on exit `0` it qualifies the block. A History count marked `(as of <time>)` is a lower bound: blocks after that time are not in it. Exit `4` is a tape or environment failure, never an unknown RFQ — do not answer it with the not-resolved line. Codes in `references/rfq-lookup.md`.
+**Its exit code says what to do with its stdout, and nothing else:**
 
-**Run one command and relay its stdout as your entire reply:**
+| exit | what it means | what you do |
+|---|---|---|
+| `0` | the answer: a block, or a one-line `analyze:` message (not found, bad id, history down) | relay stdout verbatim as your entire reply |
+| `1` | it needs you: stdout ends with a `## For the agent` section | do exactly that section's task, with the data it carries, and reply as it says |
+| anything else | the script itself did not run | follow Steps 1–7 below by hand |
+
+A block on exit `0` already says what it could not settle — a leg with no live data, an
+unconfirmed hedge size, a package size the legs do not state — in a line under its table. Relay
+those as printed; there is nothing for you to resolve. A History count marked `(as of <time>)`
+is a lower bound: blocks after that time are not in it.
+
+**Run one command:**
 
 ```bash
 bash scripts/analyze.sh <rfq_id>      # the id only; ignore any description after it
@@ -85,25 +96,12 @@ bash scripts/analyze.sh <rfq_id> --fill-json - <<'EOF'
 EOF
 ```
 
-`analyze.sh` does everything — `collect_analysis.py` resolves the `FILL` legs by `RFQ_ID` plus
-the 30d same-structure `HIST` off the execution tape (ID-authoritative), then `analyze.py`
-(concurrent Deribit fetch of every leg's ticker + 30d trades, net greeks, fill-vs-mark offset
-in the right unit, recurrence) and prints the finished block. **Do not** re-fetch, reformat,
-recompute, add commentary, or run extra steps — its stdout already is the analysis. Deterministic
-and ~one round-trip; the only unavoidable cost is the tape scan.
-
-**Safe fallbacks (correctness > speed — finish these yourself; the script never guesses):**
-- `Greeks | ⚠ net: confirm signs …` — signs not reliably derivable (risk reversals, calendars,
-  perp combos). The per-leg greeks are already printed; apply the signs and replace that one line.
-- `⚠ UNMAPPED STRUCTURE …` / `⚠ analysis hit an error …` — the script couldn't map the structure,
-  so it prints the **correct resolved tape rows** (`[Tape]`) + spot + recurrence. Build the full
-  4-row block from those: infer the legs from the printed tape rows' `DESCRIPTION` (resolved —
-  never from the user's inline `<rfq description>`), fetch each leg on Deribit, net the greeks,
-  render. Slower, but the loaded data is authoritative — don't invent or skip.
-- `RFQ not resolved …` — relay as-is; never invent an asset/strike/structure.
-
-Single-leg, straddles/strangles, verticals, condors/flies (iron **and** call/put), explicit-sign
-customs, and per-leg-row combos come back **already-netted** — relay them verbatim.
+`analyze.sh` does everything — `collect_analysis.py` resolves the `FILL` legs by `RFQ_ID` (the
+attached JSON, then the execution tape, then Paradigm's API) plus the 30d same-structure `HIST`,
+then `analyze.py` fetches every leg's live ticker and 30d trades concurrently (one retry each),
+nets the greeks, benchmarks the fill against the mark and prints the finished block. **Do not**
+re-fetch, reformat, recompute or add commentary on exit `0`. In the terminal, `/analyze` runs this
+script itself and reaches you only on exit `1` or a failure, with its output in the turn.
 
 Steps 1–7 below are the **contract the script implements** and the **fallback** when scripts/tools
 are unavailable (then follow them by hand — the manual tape recipe is in
@@ -211,7 +209,7 @@ convention reasoning.
 
 > **Live script path: skip this step.** `analyze.sh` already fetched every leg's
 > Deribit ticker/greeks. Steps 2a/2b apply on the manual fallback only (script
-> unavailable / injected data), or when filling in a `⚠ UNMAPPED` block.
+> unavailable), or when an exit-1 hand-off asks you to fetch a leg.
 
 **Step 2a — surface anchor (one DuckDB read).** Anchor each leg's IV against
 its venue's current ATM (rich/cheap framing) from the normalized
@@ -476,7 +474,7 @@ Spot 62,728 · 60k −4.3% OTM · long near-Γ / short far-vega · max loss at 6
 `<COIN> <EXPIRY DDMMMYY> <strikes k/k> <ratio a×b> <Structure> | <Buyer|Seller> | <size/leg> BTC | <Paid|Recd> <price> <±N bps> <above|below> mark`
 - Plain structure name ("Call Ratio", "Straddle", "Risk Reversal") — never the raw code (CS/SD/RR).
 - `Buyer` if the taker paid a net debit, `Seller` if they took in a net credit.
-- `×N` (block qty) = the base `struct_net` weights against, taken from the strongest evidence: stated ratios (`Cstm -2.00/+1.00` filled 40/20 → `×20`), else equal legs, else clips of ONE instrument summed (30+20 → `×50`). When the legs are unequal and nothing states their ratios the script emits `⚠ ×N INFERRED` and uses the smallest, which for a spread with a small tail is wrong by a whole multiple — relay that warning and read the leg sizes off the tape rows; `×N`, `Paid`/`Recd` AND the bps offset are wrong together, never one alone. Size **per leg in coin** = block qty × each leg ratio.
+- `×N` (block qty) = the base `struct_net` weights against, taken from the strongest evidence: stated ratios (`Cstm -2.00/+1.00` filled 40/20 → `×20`), else equal legs, else clips of ONE instrument summed (30+20 → `×50`). When the legs are unequal and nothing states their ratios the script uses the smallest and says so in a line under the block, naming the leg sizes: for a spread with a small tail that is wrong by a whole multiple, and `×N`, `Paid`/`Recd` and a bps offset move together, never one alone. The greeks are for the whole block either way. Size **per leg in coin** = block qty × each leg ratio.
 - Premium: `Paid`/`Recd` <net package price> + `<±N bps> above/below mark` per the **Net package offset** rule below — never a single leg's `OFFSET_BPS` in a package header.
 
 **Net package offset (the ONE convention — identical in the header, the `Fair` row, and the script):**
