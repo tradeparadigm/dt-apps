@@ -61,7 +61,7 @@ ok(interest.line_for(resp(1.04, 0.95)) is None, "1.04 (coin only) says nothing")
 ok(interest.line_for(resp(0.03, 0.95)) is None, "0.03 (another coin) says nothing")
 ok(interest.line_for(resp(2.9, 0.4)) is None, "an unsure score says nothing")
 ok(interest.line_for(resp(2.9)) is None, "a score with no confidence says nothing")
-ok("haven't closed it" in (interest.line_for(resp(2.9, 0.9, "still_open", 0.85)) or ""),
+ok("hasn't closed it" in (interest.line_for(resp(2.9, 0.9, "still_open", 0.85)) or ""),
    "an open position outranks the kind of trade")
 ok("Your kind of trade" in (interest.line_for(resp(2.9, 0.9, "still_open", 0.6)) or ""),
    "an unsure open position falls back to the kind of trade")
@@ -103,7 +103,7 @@ REAL = {"model": "jev-1.13.0", "answers": {
     "usage": {"input_tokens": 361, "output_tokens": 44}}
 ok("Your kind of trade" in (interest.line_for(REAL) or ""), "the real response shape is read")
 REAL["answers"]["still_holds_it"].update(choice="still_open", probabilities={"still_open": 0.9})
-ok("haven't closed it" in (interest.line_for(REAL) or ""), "and its choice answer too")
+ok("hasn't closed it" in (interest.line_for(REAL) or ""), "and its choice answer too")
 
 # --- what history JEV gets ---------------------------------------------------
 NOW = dt.datetime(2026, 10, 7, 9, 0, tzinfo=dt.timezone.utc)
@@ -141,6 +141,35 @@ ok(interest.coin_of("BTC-PERPETUAL") == "BTC" and interest.coin_of("Put 23 Oct 2
    "a perpetual names its coin; a bare description names none")
 ok(len(interest.history_rows([dict(trades[1], rfq_id=f"r_{i}") for i in range(500)], "", NOW))
    == interest.HISTORY_ROWS, "history is capped")
+
+# Paradigm's documented GET /v2/drfq/trades response (two of its results, as
+# published), plus a rejected trade: the shape history_rows has to read.
+DOC = [
+    {"id": "bt_2IbpRmMSOqnQKwPkGEDr2VDZp5e", "rfq_id": "r_2IbpMsUESAt5bfVEQp7c32SbIDJ", "venue": "DBT",
+     "kind": "OPTION", "state": "COMPLETED", "role": "TAKER", "executed_at": 1670460131896.015,
+     "side": "BUY", "price": "0.2397", "quantity": "50",
+     "legs": [{"instrument_name": "BTC-30JUN23-14000-P", "price": "0.2397", "quantity": "50", "ratio": "1",
+               "side": "BUY"}],
+     "strategy_description": "DO_BTC-30JUN23-14000-P", "description": "Put  30 Jun 23  14000"},
+    {"id": "bt_2IbpBwZLazIBOcI24DYsD7ihRoy", "rfq_id": "r_2Ibp7AUyp9HTimRTY1TiGqNcI9a", "venue": "DBT",
+     "kind": "OPTION", "state": "COMPLETED", "role": "MAKER", "executed_at": 1670460005229.808,
+     "side": "SELL", "price": "4.4713", "quantity": "50",
+     "legs": [{"instrument_name": "BTC-30JUN23-100000-P", "quantity": "50", "ratio": "1", "side": "BUY"},
+              {"instrument_name": "BTC-30JUN23-15000-P", "quantity": "100", "ratio": "2", "side": "SELL"}],
+     "strategy_description": "DO_BTC-30JUN23-100000-P_BTC-30JUN23-15000-P",
+     "description": "Cstm  +1  Put  30 Jun 23  100000\n      -2  Put  30 Jun 23  15000"},
+    {"id": "bt_rej", "rfq_id": "r_rej", "state": "REJECTED", "executed_at": 1670460000000.0, "side": "BUY",
+     "quantity": "5", "legs": [{"instrument_name": "BTC-30JUN23-20000-P", "quantity": "5", "side": "BUY"}],
+     "description": "Put  30 Jun 23  20000"},
+]
+doc_rows = interest.history_rows(DOC, "", dt.datetime(2022, 12, 9, tzinfo=dt.timezone.utc))
+doc_descs = [r["description"] for r in doc_rows]
+ok(len(doc_rows) == 2 and "20000" not in json.dumps(doc_rows), f"a rejected trade is not history [{doc_descs}]")
+ok(doc_rows[0] == {"date": "2022-12-08", "description": "BTC Put 30 Jun 23 14000: bought BTC-30JUN23-14000-P x50",
+                   "side": "BUY", "quantity": "50", "price": "0.2397"}, f"the documented row reads [{doc_rows[0]}]")
+ok(doc_descs[1] == "BTC Cstm +1 Put 30 Jun 23 100000 -2 Put 30 Jun 23 15000: "
+                   "sold BTC-30JUN23-100000-P x50; bought BTC-30JUN23-15000-P x100",
+   f"a maker's SELL of a package holds its legs flipped, on one line [{doc_descs[1]}]")
 
 # --- which credentials --------------------------------------------------------
 saved = dict(os.environ)

@@ -217,8 +217,10 @@ def paradigm_get(creds, target):
 
 
 def fetch_trades(creds, pages=3):
-    """The user's cleared blocks, newest first as Paradigm returns them."""
-    rows, target = [], "/v2/drfq/trades/"
+    """Every trade the user's desk was party to, newest first as Paradigm
+    returns them, taker or maker. `side` is the desk's own direction either
+    way; `legs[].side` is each leg's direction within the package."""
+    rows, target = [], "/v2/drfq/trades/?page_size=100"
     for _ in range(pages):
         body = paradigm_get(creds, target)
         if body is None:
@@ -299,6 +301,9 @@ def history_rows(trades, exclude_rfq, now):
         rfq = str(_first(t, "rfq_id") or "")
         if exclude_rfq and rfq and rfq.removeprefix("r_") == exclude_rfq.removeprefix("r_"):
             continue
+        # A rejected trade never settled: nothing was bought or sold.
+        if str(t.get("state") or "").upper() == "REJECTED":
+            continue
         when = _when(_first(t, "traded_at", "executed_at", "created_at", "created", "timestamp"))
         if when and (now - when).days > HISTORY_DAYS:
             continue
@@ -311,7 +316,8 @@ def history_rows(trades, exclude_rfq, now):
             + (f" x{l['quantity']}" if l.get("quantity") not in (None, "") else "")
             for l in (t.get("legs") or []) if isinstance(l, dict)) or None
         strategy = _first(t, "strategy_description")
-        desc = _first(t, "description", "structure") or strategy or legs
+        # "Cstm  +1  Put  30 Jun 23  100000\n      -2  Put ..." in the API: one line.
+        desc = " ".join(str(_first(t, "description", "structure") or "").split()) or strategy or legs
         if not desc:
             continue
         coin = coin_of(strategy, legs, desc) or (str(_first(t, "base_currency", "underlying") or "").upper() or None)
@@ -426,7 +432,7 @@ def bet_line(resp, coin, price_bet=None):
 
 def history_line(resp):
     if _choice(resp, "still_holds_it") == "still_open":
-        return "*You opened this on Paradigm and haven't closed it there: this print shows where it trades now.*"
+        return "*Your desk opened this on Paradigm and hasn't closed it there: this print shows where it trades now.*"
 
     kind = answer(resp, "your_kind_of_trade") or {}
     score = _num(kind.get("score") if "score" in kind else kind.get("value"))
