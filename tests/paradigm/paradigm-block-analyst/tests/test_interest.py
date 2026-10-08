@@ -3,10 +3,11 @@
 Unit tests for interest.py, the "why this matters to you" line — no network.
 Run: python3 tests/test_interest.py
 
-The line comes from JEV through the sidecar's loopback relay, over the user's own
+The line comes from JEV through the sidecar's loopback relay: the taker's bet,
+from the block alone, and what the block is to the user, from their own
 Paradigm history. These pin what the line says for each answer, that silence is
-the answer whenever something is missing or unsure, what history JEV is sent,
-and where analyze.sh puts the line.
+the answer whenever something is missing or unsure, what JEV is sent, and where
+analyze.sh puts the line.
 """
 import datetime as dt
 import http.server
@@ -40,8 +41,12 @@ def ok(cond, msg):
 
 # --- what each answer says ---------------------------------------------------
 
-def resp(score=None, conf=None, choice=None, p_open=None):
+def resp(score=None, conf=None, choice=None, p_open=None, price=None, vol=None, p=0.9):
     a = {}
+    if price is not None:
+        a["trade_price_bet"] = {"choice": price, "probabilities": {price: p}}
+    if vol is not None:
+        a["trade_vol_bet"] = {"choice": vol, "probabilities": {vol: p}}
     if score is not None:
         a["your_kind_of_trade"] = {"score": score, "confidence": conf}
     if choice is not None:
@@ -63,6 +68,18 @@ ok("Your kind of trade" in (interest.line_for(resp(2.9, 0.9, "still_open", 0.6))
 ok(interest.line_for(resp(choice="closed", p_open=0.05)) is None, "closed with no score says nothing")
 ok("Your kind" in (interest.line_for({"your_kind_of_trade": {"score": 3, "confidence": 0.9}}) or ""),
    "answers at the top level are read too")
+
+# The taker's bet, which needs no history.
+ok(interest.line_for(resp(price="down", vol="rises"), "ETH") == "*The taker is betting ETH falls and volatility rises.*",
+   "a put bought: ETH falls and volatility rises")
+ok(interest.line_for(resp(price="neither", vol="falls"), "BTC") == "*The taker is betting volatility falls.*",
+   "no price direction: only the volatility half")
+ok(interest.line_for(resp(price="up", vol="neither"), None) == "*The taker is betting the price rises.*",
+   "no coin known: 'the price'")
+ok(interest.line_for(resp(price="up", vol="rises", p=0.5), "BTC") is None, "an unsure bet says nothing")
+ok(interest.line_for(resp(2.87, 0.88, price="up", vol="falls"), "BTC")
+   == "*The taker is betting BTC rises and volatility falls.* *Your kind of trade: you've traded this "
+      "structure on this coin at similar strikes and expiries.*", "the bet comes first, then the history")
 
 # The shape JEV answered through LiteLLM on testnet (jev-1.13.0), names swapped in.
 REAL = {"model": "jev-1.13.0", "answers": {
@@ -88,12 +105,22 @@ trades = [
     {"rfq_id": "r_OLD", "description": "BTC 26JUN26 90000 Put", "side": "SELL",
      "quantity": 10, "price": 0.01, "created_at": "2026-05-01T00:00:00Z"},
     {"rfq_id": "r_NODESC", "side": "BUY", "quantity": 1, "created_at": "2026-10-01T00:00:00Z"},
+    {"rfq_id": "r_C", "description": "Put 23 Oct 26 2200", "strategy_description": "XB_ETH-23OCT26-2200-P",
+     "side": "SELL", "quantity": 20, "created_at": "2026-09-30T00:00:00Z"},
+    {"rfq_id": "r_D", "description": "Call 30 Oct 26 4000", "base_currency": "eth",
+     "side": "BUY", "quantity": 5, "created_at": "2026-09-29T00:00:00Z"},
 ]
 rows = interest.history_rows(trades, "r_THIS", NOW)
 descs = [r["description"] for r in rows]
-ok("r_THIS" not in json.dumps(rows) and len(rows) == 2, f"the analysed block, old and unreadable rows are left out [{descs}]")
+ok("r_THIS" not in json.dumps(rows) and len(rows) == 4, f"the analysed block, old and unreadable rows are left out [{descs}]")
 ok(rows[0]["date"] == "2026-09-22" and rows[0]["side"] == "BUY", f"an epoch-ms time becomes a date [{rows[0]}]")
-ok(descs[1] == "buy BTC-25SEP26-105000-P", f"a row without a description is described by its legs [{descs[1]}]")
+ok(descs[1] == "BTC buy BTC-25SEP26-105000-P", f"a row without a description is described by its legs [{descs[1]}]")
+ok(descs[0] == "BTC 30OCT26 110000/130000 RR", f"a description that leads with its coin is kept [{descs[0]}]")
+ok(descs[2] == "ETH Put 23 Oct 26 2200 (XB_ETH-23OCT26-2200-P)",
+   f"a coinless description gets the coin and instrument of its strategy [{descs[2]}]")
+ok(descs[3] == "ETH Call 30 Oct 26 4000", f"or the coin of base_currency [{descs[3]}]")
+ok(interest.coin_of("BTC-PERPETUAL") == "BTC" and interest.coin_of("Put 23 Oct 26 2200") is None,
+   "a perpetual names its coin; a bare description names none")
 ok(len(interest.history_rows([dict(trades[1], rfq_id=f"r_{i}") for i in range(500)], "", NOW))
    == interest.HISTORY_ROWS, "history is capped")
 
@@ -147,7 +174,13 @@ interest.fetch_trades = lambda creds, pages=3: trades
 
 tmp = Path(tempfile.mkdtemp())
 fill = tmp / "fill.csv"
-fill.write_text("PRODUCT,DESCRIPTION,QTY,SIDE,RFQ_ID\nBTC,BTC 30OCT26 110000/130000 RR,250,BUY,r_THIS\n")
+fill.write_text("PRODUCT,DESCRIPTION,QTY,SIDE,RFQ_ID,INSTRUMENT\n"
+                "BTC OPTION - DBT,30 Oct 26 110000/130000 RR,250,BUY,r_THIS,BTC-30OCT26-110000-P\n"
+                "BTC OPTION - DBT,30 Oct 26 110000/130000 RR,250,BUY,r_THIS,BTC-30OCT26-130000-C\n")
+eth = tmp / "eth.csv"
+eth.write_text("PRODUCT,DESCRIPTION,QTY,SIDE,RFQ_ID\nETH OPTION - DBT,Put 23 Oct 26 2200,50,SELL,r_E\n")
+ok(interest.block_trade(str(eth)) == ("ETH Put 23 Oct 26 2200 x50, taker sell", "r_E", "ETH"),
+   f"no INSTRUMENT column: the coin comes from PRODUCT [{interest.block_trade(str(eth))}]")
 
 
 def run_main(*extra):
@@ -162,9 +195,10 @@ def run_main(*extra):
 code, out = run_main()
 sent = Relay.asked[-1]
 ok(code == 0 and "Your kind of trade" in out, f"the relay's answer becomes the line [{out}]")
-ok(set(sent["questions"]) == {"your_kind_of_trade", "still_holds_it"}
-   and sent["state"]["trade"] == "BTC 30OCT26 110000/130000 RR x250, taker buy",
-   f"JEV is asked both questions about the block [{sent['state']['trade']}]")
+ok(set(sent["questions"]) == {"trade_price_bet", "trade_vol_bet", "your_kind_of_trade", "still_holds_it"}
+   and sent["state"]["trade"]
+   == "BTC 30 Oct 26 110000/130000 RR (BTC-30OCT26-110000-P / BTC-30OCT26-130000-C) x250, taker buy",
+   f"JEV is asked every question about the block, coin and instruments named [{sent['state']['trade']}]")
 ok("r_THIS" not in sent["state"]["trade_history"] and "r_A" not in sent["state"]["trade_history"]
    and "110000/130000" in sent["state"]["trade_history"], "the history sent is the slim rows, without the block itself")
 
@@ -178,12 +212,19 @@ code, out = run_main()
 ok(code == 0 and out == "", "a key without credit says nothing")
 Relay.jev_status, Relay.answer = 200, resp(2.87, 0.88)
 code, out = run_main("--print-request")
-ok(code == 0 and json.loads(out)["state"]["trade"].startswith("BTC 30OCT26"),
+ok(code == 0 and json.loads(out)["state"]["trade"].startswith("BTC 30 Oct 26"),
    "--print-request prints the request for the playground")
+Relay.answer = resp(price="up", vol="rises")
 interest.fetch_trades = lambda creds, pages=3: []
-n = len(Relay.asked)
 code, out = run_main()
-ok(code == 0 and out == "" and len(Relay.asked) == n, "no history: nothing is asked")
+sent = Relay.asked[-1]
+ok(code == 0 and out == "*The taker is betting BTC rises and volatility rises.*"
+   and set(sent["questions"]) == {"trade_price_bet", "trade_vol_bet"} and "trade_history" not in sent["state"],
+   f"no history: only the bet is asked, and answered [{out}]")
+interest.paradigm_credentials = lambda: None
+code, out = run_main()
+ok(code == 0 and out.startswith("*The taker is betting") and "trade_history" not in Relay.asked[-1]["state"],
+   "no Paradigm credentials: the bet still is")
 srv.shutdown()
 
 # --- where analyze.sh puts the line ------------------------------------------

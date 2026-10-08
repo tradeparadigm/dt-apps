@@ -6,13 +6,14 @@
 """
 interest.py — one line on why an analysed block matters to THIS user.
 
-It reads the user's own cleared blocks from Paradigm (their credentials, signed
-through the credential proxy like the paradigm-api helper does), asks JEV two
-questions about the block against that history through the sidecar's relay,
-and prints at most one italic line for the block. Nothing at all when it has
-nothing to say, or when anything on the way is missing: no relay on this agent,
-no Paradigm credentials, no history, JEV not answering. It never fails the
-analysis; analyze.sh appends whatever it prints.
+It asks JEV, through the sidecar's relay, what the taker of the block is
+betting on, which needs nothing but the block. With the user's own cleared
+blocks from Paradigm (their credentials, signed through the credential proxy
+like the paradigm-api helper does) it also asks how the block relates to that
+history. It prints at most one line for the block: nothing at all when it has
+nothing sure to say or when the relay or JEV is missing, and without the
+history part when there are no Paradigm credentials or no history. It never
+fails the analysis; analyze.sh appends whatever it prints.
 
     uv run scripts/interest.py --fill-csv <dir>/fill.csv [--debug] [--print-request]
 
@@ -41,25 +42,58 @@ HISTORY_ROWS = 200
 TIMEOUT_S = 8
 DEBUG = False
 
-# The two questions. Wording tested in the playground: your_kind_of_trade at
-# v4 (each level within 0.15 of its target at 88-97% confidence);
-# still_holds_it is untested.
-QUESTIONS = {
+# What the taker is betting on: about the block alone, so it is asked for every
+# block, with or without the user's history. Price and volatility are two
+# questions, not one: JEV reads one fact at a time sharply (pilot 2: 87-95%)
+# and blurs two asked together.
+BET_QUESTIONS = {
+    "trade_price_bet": {
+        "type": "choice",
+        "instructions": (
+            "Which way does the taker's `trade` gain from the price of its coin? Bought calls and "
+            "sold puts gain when the price rises; sold calls and bought puts gain when it falls. A "
+            "call and a put bought or sold together at the same strike is neither."),
+        "criteria": {
+            "up": "It gains mainly if the price rises.",
+            "down": "It gains mainly if the price falls.",
+            "neither": "It has no clear price direction.",
+        },
+    },
+    "trade_vol_bet": {
+        "type": "choice",
+        "instructions": (
+            "Does the taker's `trade` gain if volatility rises or falls? Buying options (calls or "
+            "puts) gains when volatility rises; selling them gains when it falls. Buying one option "
+            "and selling another of the same kind is neither."),
+        "criteria": {
+            "rises": "It is mainly bought options: it gains if volatility rises.",
+            "falls": "It is mainly sold options: it gains if volatility falls.",
+            "neither": "It has no clear volatility direction.",
+        },
+    },
+}
+
+# About the block against the user's own history, asked only when there is one.
+# your_kind_of_trade: v4 tested in the playground (each level within 0.15 of its
+# target at 88-97% confidence), then v5: the top level says what "similar" means
+# (neighbouring strikes and expiries), since a block a strike or a week from the
+# user's own split between 2 and 3. still_holds_it is untested.
+HISTORY_QUESTIONS = {
     "your_kind_of_trade": {
         "type": "score",
         "instructions": (
             "How closely does the trade in `trade` resemble what this user trades, judging only "
-            "by `trade_history`? Check the coin first: if they have never traded it, nothing else "
-            "counts."),
+            "by `trade_history`? Check the coin first (the first word of each description): if "
+            "they have never traded it, nothing else counts."),
         "criteria": [
             "They have never traded this coin. The structure does not matter.",
             "They trade this coin, but have never traded this structure on it. Structures differ "
             "by name: a straddle is not a risk reversal, and a single put or call is not a spread.",
-            "They have traded this structure on this coin, but this trade's expiry is more than a "
-            "month after the latest they have traded, or one of its strikes is outside the lowest "
-            "to highest they have used.",
-            "They have traded this structure on this coin at similar strikes and expiries, or this "
-            "very trade.",
+            "They have traded this structure on this coin, but far from where they trade it: this "
+            "trade's expiry is more than a month after the latest they have traded, or one of its "
+            "strikes is outside the lowest to highest they have used.",
+            "They have traded this structure on this coin at similar strikes and expiries. Similar "
+            "includes neighbouring strikes and expiries a few weeks apart, and this very trade.",
         ],
     },
     "still_holds_it": {
@@ -121,8 +155,8 @@ def relay_available():
     return True
 
 
-def ask_jev(state):
-    body = json.dumps({"model": JEV_MODEL, "questions": QUESTIONS, "state": state}).encode()
+def ask_jev(questions, state):
+    body = json.dumps({"model": JEV_MODEL, "questions": questions, "state": state}).encode()
     status, resp = http_json(JEV_URL, method="POST", body=body,
                              headers={"Content-Type": "application/json"}, timeout=25)
     debug(f"JEV answered {status}: {json.dumps(resp)[:2000] if resp is not None else None}")
@@ -223,6 +257,28 @@ def _when(v):
     return None
 
 
+# An instrument name's coin: BTC-30OCT26-110000-C, ETH-PERPETUAL, and the
+# strategy form Paradigm prefixes with a code (XB_ETH-23OCT26-2200-P).
+_INSTRUMENT_COIN = re.compile(r"(?:^|[_\s/(])([A-Z][A-Z0-9]{1,9})-(?:\d{1,2}[A-Z]{3}\d{2}|PERP)")
+
+
+def coin_of(*texts):
+    """The coin the first of texts that names one names, or None."""
+    for text in texts:
+        m = _INSTRUMENT_COIN.search(str(text or "").upper())
+        if m:
+            return m.group(1)
+    return None
+
+
+def with_coin(coin, desc):
+    """desc led by its coin, which JEV checks first; Paradigm's descriptions
+    ("Put 23 Oct 26 2200") do not carry it."""
+    if not coin or desc.upper().split()[:1] == [coin]:
+        return desc
+    return f"{coin} {desc}"
+
+
 def history_rows(trades, exclude_rfq, now):
     """The rows JEV reads: date, description, side, quantity, price. The
     analysed block itself is left out, so a user analysing their own trade is
@@ -235,14 +291,19 @@ def history_rows(trades, exclude_rfq, now):
         when = _when(_first(t, "traded_at", "executed_at", "created_at", "created", "timestamp"))
         if when and (now - when).days > HISTORY_DAYS:
             continue
-        desc = _first(t, "description", "strategy_description", "structure")
-        if not desc:
-            legs = t.get("legs") or []
-            desc = " / ".join(f"{(l.get('side') or '').lower()} {l.get('instrument_name') or l.get('instrument') or ''}".strip()
-                              for l in legs if isinstance(l, dict)) or None
+        legs = " / ".join(f"{(l.get('side') or '').lower()} {l.get('instrument_name') or l.get('instrument') or ''}".strip()
+                          for l in (t.get("legs") or []) if isinstance(l, dict)) or None
+        strategy = _first(t, "strategy_description")
+        desc = _first(t, "description", "structure") or strategy or legs
         if not desc:
             continue
-        out.append({"date": when.date().isoformat() if when else None, "description": desc,
+        coin = coin_of(strategy, legs, desc) or (str(_first(t, "base_currency", "underlying") or "").upper() or None)
+        # The structure's name and the instruments it is made of: the name for
+        # matching structures, the instruments for strikes and expiries.
+        instruments = strategy or legs
+        if instruments and instruments != desc:
+            desc = f"{desc} ({instruments})"
+        out.append({"date": when.date().isoformat() if when else None, "description": with_coin(coin, str(desc)),
                     "side": _first(t, "side", "direction"), "quantity": _first(t, "quantity", "size", "amount"),
                     "price": _first(t, "price")})
         if len(out) >= HISTORY_ROWS:
@@ -253,18 +314,23 @@ def history_rows(trades, exclude_rfq, now):
 # ------------------------------------------------------------- the block
 
 def block_trade(fill_csv):
-    """(description for JEV, rfq id) from the fill collect_analysis.py wrote."""
+    """(description for JEV, rfq id, coin) from the fill collect_analysis.py
+    wrote. The description leads with the coin and names the instruments."""
     with open(fill_csv, encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     if not rows:
-        return None, None
+        return None, None, None
     r = rows[0]
     desc = (r.get("DESCRIPTION") or "").strip()
     if not desc:
-        return None, None
+        return None, None, None
+    instruments = list(dict.fromkeys(i for i in ((x.get("INSTRUMENT") or "").strip() for x in rows) if i))
+    product = (r.get("PRODUCT") or "").split()
+    coin = coin_of(*instruments) or (product[0].upper() if product else None)
     side, qty = (r.get("SIDE") or "").strip(), (r.get("QTY") or "").strip()
-    text = desc + (f" x{qty}" if qty else "") + (f", taker {side.lower()}" if side else "")
-    return text, (r.get("RFQ_ID") or "").strip()
+    text = (with_coin(coin, desc) + (f" ({' / '.join(instruments)})" if instruments else "")
+            + (f" x{qty}" if qty else "") + (f", taker {side.lower()}" if side else ""))
+    return text, (r.get("RFQ_ID") or "").strip(), coin
 
 
 # ---------------------------------------------------------------- the line
@@ -284,11 +350,26 @@ def _num(v):
         return None
 
 
-def line_for(resp):
-    held = answer(resp, "still_holds_it") or {}
-    choice = held.get("choice") or held.get("answer")
-    probs = held.get("probabilities") or {}
-    if choice == "still_open" and (_num(probs.get("still_open")) or 0) >= MIN_CHOICE_PROBABILITY:
+def _choice(resp, key):
+    """The chosen option of a choice answer, or None when JEV is not sure of it."""
+    a = answer(resp, key) or {}
+    choice = a.get("choice") or a.get("answer")
+    if choice and (_num((a.get("probabilities") or {}).get(choice)) or 0) >= MIN_CHOICE_PROBABILITY:
+        return choice
+    return None
+
+
+def bet_line(resp, coin):
+    """'The taker is betting ETH falls and volatility rises.', or None."""
+    price = {"up": f"{coin or 'the price'} rises", "down": f"{coin or 'the price'} falls"}.get(
+        _choice(resp, "trade_price_bet"))
+    vol = {"rises": "volatility rises", "falls": "volatility falls"}.get(_choice(resp, "trade_vol_bet"))
+    parts = [p for p in (price, vol) if p]
+    return f"*The taker is betting {' and '.join(parts)}.*" if parts else None
+
+
+def history_line(resp):
+    if _choice(resp, "still_holds_it") == "still_open":
         return "*You opened this on Paradigm and haven't closed it there: this print shows where it trades now.*"
 
     kind = answer(resp, "your_kind_of_trade") or {}
@@ -304,6 +385,13 @@ def line_for(resp):
     return None
 
 
+def line_for(resp, coin=None):
+    """One line: the taker's bet, then what the block is to the user. Either
+    half is left out when JEV is unsure of it."""
+    parts = [p for p in (bet_line(resp, coin), history_line(resp)) if p]
+    return " ".join(parts) or None
+
+
 def main(argv=None):
     global DEBUG
     ap = argparse.ArgumentParser()
@@ -313,27 +401,28 @@ def main(argv=None):
     a = ap.parse_args(argv)
     DEBUG = a.debug or a.print_request
 
-    trade, rfq = block_trade(a.fill_csv)
+    trade, rfq, coin = block_trade(a.fill_csv)
     if not trade:
         debug("no trade description in the fill")
         return 0
     if not a.print_request and not relay_available():
         return 0
-    creds = paradigm_credentials()
-    if not creds:
-        return 0
     now = dt.datetime.now(dt.timezone.utc)
-    history = history_rows(fetch_trades(creds), rfq, now)
-    if not history:
+    state = {"today": now.date().isoformat(), "trade": trade}
+    questions = dict(BET_QUESTIONS)
+    # The history half needs the user's Paradigm account; the bet does not.
+    creds = paradigm_credentials()
+    history = history_rows(fetch_trades(creds), rfq, now) if creds else []
+    if history:
+        state["trade_history"] = json.dumps(history, separators=(",", ":"))
+        questions.update(HISTORY_QUESTIONS)
+    elif creds:
         debug("no Paradigm history in the last 90 days")
-        return 0
-    state = {"today": now.date().isoformat(), "trade": trade,
-             "trade_history": json.dumps(history, separators=(",", ":"))}
     if a.print_request:
-        print(json.dumps({"model": JEV_MODEL, "questions": QUESTIONS, "state": state}, indent=2))
+        print(json.dumps({"model": JEV_MODEL, "questions": questions, "state": state}, indent=2))
         return 0
-    resp = ask_jev(state)
-    line = line_for(resp) if resp else None
+    resp = ask_jev(questions, state)
+    line = line_for(resp, coin) if resp else None
     if line:
         print(line)
     return 0
