@@ -114,6 +114,12 @@ def main(argv=None):
     if os.environ.get("TYPESAFE_API_KEY") and not os.environ.get("JEV_URL"):
         url = (os.environ.get("TYPESAFE_API_BASE") or "https://api.typesafe.ai").rstrip("/") + "/v1/systemone"
         key = os.environ["TYPESAFE_API_KEY"]
+    if not (key or os.environ.get("JEV_URL") or os.environ.get("TERMINAL_JEV_URL")):
+        # Only an agent pod has the relay; anywhere else this would be a
+        # connection refused per case, which reads like 25 wrong answers.
+        print("No JEV to ask: set TYPESAFE_API_KEY (or JEV_URL and JEV_KEY), or run this on an agent,\n"
+              "where TERMINAL_JEV_URL points at the sidecar's relay.", file=sys.stderr)
+        return 2
     print(f"JEV at {url}, {a.trials} trial(s) per case\n")
     failed = 0
     for case in cases:
