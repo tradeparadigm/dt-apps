@@ -50,9 +50,10 @@ BET_QUESTIONS = {
     "trade_price_bet": {
         "type": "choice",
         "instructions": (
-            "Which way does the taker's `trade` gain from the price of its coin? Bought calls and "
-            "sold puts gain when the price rises; sold calls and bought puts gain when it falls. A "
-            "call and a put bought or sold together at the same strike is neither."),
+            "Which way does the taker's `trade` gain from the price of its coin? Go leg by leg: "
+            "each says whether the taker bought or sold it. Bought calls and sold puts gain when "
+            "the price rises; sold calls and bought puts gain when it falls. Legs that pull both "
+            "ways equally, like a call and a put bought together at the same strike, are neither."),
         "criteria": {
             "up": "It gains mainly if the price rises.",
             "down": "It gains mainly if the price falls.",
@@ -62,9 +63,10 @@ BET_QUESTIONS = {
     "trade_vol_bet": {
         "type": "choice",
         "instructions": (
-            "Does the taker's `trade` gain if volatility rises or falls? Buying options (calls or "
-            "puts) gains when volatility rises; selling them gains when it falls. Buying one option "
-            "and selling another of the same kind is neither."),
+            "Does the taker's `trade` gain if volatility rises or falls? Go leg by leg: each says "
+            "whether the taker bought or sold it. Bought options (calls or puts) gain when "
+            "volatility rises; sold options gain when it falls. One option bought and another "
+            "sold, as in a spread, is neither."),
         "criteria": {
             "rises": "It is mainly bought options: it gains if volatility rises.",
             "falls": "It is mainly sold options: it gains if volatility falls.",
@@ -279,6 +281,13 @@ def with_coin(coin, desc):
     return f"{coin} {desc}"
 
 
+def _held(package_side, leg_side):
+    """'bought' or 'sold': a leg as the holder of the package holds it."""
+    flip = str(package_side).upper() == "SELL"
+    sold = str(leg_side or "BUY").upper() == "SELL"
+    return "sold" if sold != flip else "bought"
+
+
 def history_rows(trades, exclude_rfq, now):
     """The rows JEV reads: date, description, side, quantity, price. The
     analysed block itself is left out, so a user analysing their own trade is
@@ -291,18 +300,24 @@ def history_rows(trades, exclude_rfq, now):
         when = _when(_first(t, "traded_at", "executed_at", "created_at", "created", "timestamp"))
         if when and (now - when).days > HISTORY_DAYS:
             continue
-        legs = " / ".join(f"{(l.get('side') or '').lower()} {l.get('instrument_name') or l.get('instrument') or ''}".strip()
-                          for l in (t.get("legs") or []) if isinstance(l, dict)) or None
+        # The DRFQv2 trade object (fill_sources.rows_from_trade reads the same
+        # one): legs state the structure, the package side the direction, and a
+        # leg is held as the two combined.
+        top = "SELL" if str(t.get("side") or "BUY").upper() == "SELL" else "BUY"
+        legs = "; ".join(
+            f"{_held(top, l.get('side'))} {l.get('instrument_name') or l.get('instrument') or ''}".strip()
+            + (f" x{l['quantity']}" if l.get("quantity") not in (None, "") else "")
+            for l in (t.get("legs") or []) if isinstance(l, dict)) or None
         strategy = _first(t, "strategy_description")
         desc = _first(t, "description", "structure") or strategy or legs
         if not desc:
             continue
         coin = coin_of(strategy, legs, desc) or (str(_first(t, "base_currency", "underlying") or "").upper() or None)
-        # The structure's name and the instruments it is made of: the name for
-        # matching structures, the instruments for strikes and expiries.
-        instruments = strategy or legs
-        if instruments and instruments != desc:
-            desc = f"{desc} ({instruments})"
+        # The structure's name, then what was bought and sold: the name for
+        # matching structures, the legs for strikes, expiries and direction.
+        detail = legs or strategy
+        if detail and detail != desc:
+            desc = f"{desc}: {detail}" if legs else f"{desc} ({detail})"
         out.append({"date": when.date().isoformat() if when else None, "description": with_coin(coin, str(desc)),
                     "side": _first(t, "side", "direction"), "quantity": _first(t, "quantity", "size", "amount"),
                     "price": _first(t, "price")})
@@ -324,12 +339,20 @@ def block_trade(fill_csv):
     desc = (r.get("DESCRIPTION") or "").strip()
     if not desc:
         return None, None, None
-    instruments = list(dict.fromkeys(i for i in ((x.get("INSTRUMENT") or "").strip() for x in rows) if i))
+    instruments = [(x.get("INSTRUMENT") or "").strip() for x in rows]
     product = (r.get("PRODUCT") or "").split()
     coin = coin_of(*instruments) or (product[0].upper() if product else None)
-    side, qty = (r.get("SIDE") or "").strip(), (r.get("QTY") or "").strip()
-    text = (with_coin(coin, desc) + (f" ({' / '.join(instruments)})" if instruments else "")
-            + (f" x{qty}" if qty else "") + (f", taker {side.lower()}" if side else ""))
+    # Each row is one leg, and its SIDE is that leg as the taker holds it
+    # (analyze_core.legs_from_rows signs legs the same way). Said leg by leg,
+    # so a sold spread is not read off one side for the whole package.
+    legs = []
+    for x in rows:
+        side = (x.get("SIDE") or "").strip().upper()
+        name = (x.get("INSTRUMENT") or "").strip() or ("it" if len(rows) == 1 else "")
+        qty = (x.get("QTY") or "").strip()
+        if side in ("BUY", "SELL") and name:
+            legs.append(f"{'bought' if side == 'BUY' else 'sold'} {name}" + (f" x{qty}" if qty else ""))
+    text = with_coin(coin, desc) + (": the taker " + "; ".join(legs) if legs else "")
     return text, (r.get("RFQ_ID") or "").strip(), coin
 
 

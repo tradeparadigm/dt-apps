@@ -107,18 +107,24 @@ trades = [
     {"rfq_id": "r_NODESC", "side": "BUY", "quantity": 1, "created_at": "2026-10-01T00:00:00Z"},
     {"rfq_id": "r_C", "description": "Put 23 Oct 26 2200", "strategy_description": "XB_ETH-23OCT26-2200-P",
      "side": "SELL", "quantity": 20, "created_at": "2026-09-30T00:00:00Z"},
+    {"rfq_id": "r_SPD", "description": "PSpd 27 Nov 26 2200/2000", "side": "SELL", "quantity": "50",
+     "executed_at": 1791000000000, "legs": [
+         {"instrument_name": "ETH-27NOV26-2200-P", "side": "BUY", "quantity": "50"},
+         {"instrument_name": "ETH-27NOV26-2000-P", "side": "SELL", "quantity": "50"}]},
     {"rfq_id": "r_D", "description": "Call 30 Oct 26 4000", "base_currency": "eth",
      "side": "BUY", "quantity": 5, "created_at": "2026-09-29T00:00:00Z"},
 ]
 rows = interest.history_rows(trades, "r_THIS", NOW)
 descs = [r["description"] for r in rows]
-ok("r_THIS" not in json.dumps(rows) and len(rows) == 4, f"the analysed block, old and unreadable rows are left out [{descs}]")
+ok("r_THIS" not in json.dumps(rows) and len(rows) == 5, f"the analysed block, old and unreadable rows are left out [{descs}]")
 ok(rows[0]["date"] == "2026-09-22" and rows[0]["side"] == "BUY", f"an epoch-ms time becomes a date [{rows[0]}]")
-ok(descs[1] == "BTC buy BTC-25SEP26-105000-P", f"a row without a description is described by its legs [{descs[1]}]")
+ok(descs[1] == "BTC bought BTC-25SEP26-105000-P", f"a row without a description is described by its legs [{descs[1]}]")
 ok(descs[0] == "BTC 30OCT26 110000/130000 RR", f"a description that leads with its coin is kept [{descs[0]}]")
 ok(descs[2] == "ETH Put 23 Oct 26 2200 (XB_ETH-23OCT26-2200-P)",
    f"a coinless description gets the coin and instrument of its strategy [{descs[2]}]")
-ok(descs[3] == "ETH Call 30 Oct 26 4000", f"or the coin of base_currency [{descs[3]}]")
+ok(descs[3] == "ETH PSpd 27 Nov 26 2200/2000: sold ETH-27NOV26-2200-P x50; bought ETH-27NOV26-2000-P x50",
+   f"a sold package's legs are held flipped [{descs[3]}]")
+ok(descs[4] == "ETH Call 30 Oct 26 4000", f"or the coin of base_currency [{descs[4]}]")
 ok(interest.coin_of("BTC-PERPETUAL") == "BTC" and interest.coin_of("Put 23 Oct 26 2200") is None,
    "a perpetual names its coin; a bare description names none")
 ok(len(interest.history_rows([dict(trades[1], rfq_id=f"r_{i}") for i in range(500)], "", NOW))
@@ -175,11 +181,11 @@ interest.fetch_trades = lambda creds, pages=3: trades
 tmp = Path(tempfile.mkdtemp())
 fill = tmp / "fill.csv"
 fill.write_text("PRODUCT,DESCRIPTION,QTY,SIDE,RFQ_ID,INSTRUMENT\n"
-                "BTC OPTION - DBT,30 Oct 26 110000/130000 RR,250,BUY,r_THIS,BTC-30OCT26-110000-P\n"
+                "BTC OPTION - DBT,30 Oct 26 110000/130000 RR,250,SELL,r_THIS,BTC-30OCT26-110000-P\n"
                 "BTC OPTION - DBT,30 Oct 26 110000/130000 RR,250,BUY,r_THIS,BTC-30OCT26-130000-C\n")
 eth = tmp / "eth.csv"
 eth.write_text("PRODUCT,DESCRIPTION,QTY,SIDE,RFQ_ID\nETH OPTION - DBT,Put 23 Oct 26 2200,50,SELL,r_E\n")
-ok(interest.block_trade(str(eth)) == ("ETH Put 23 Oct 26 2200 x50, taker sell", "r_E", "ETH"),
+ok(interest.block_trade(str(eth)) == ("ETH Put 23 Oct 26 2200: the taker sold it x50", "r_E", "ETH"),
    f"no INSTRUMENT column: the coin comes from PRODUCT [{interest.block_trade(str(eth))}]")
 
 
@@ -197,7 +203,7 @@ sent = Relay.asked[-1]
 ok(code == 0 and "Your kind of trade" in out, f"the relay's answer becomes the line [{out}]")
 ok(set(sent["questions"]) == {"trade_price_bet", "trade_vol_bet", "your_kind_of_trade", "still_holds_it"}
    and sent["state"]["trade"]
-   == "BTC 30 Oct 26 110000/130000 RR (BTC-30OCT26-110000-P / BTC-30OCT26-130000-C) x250, taker buy",
+   == "BTC 30 Oct 26 110000/130000 RR: the taker sold BTC-30OCT26-110000-P x250; bought BTC-30OCT26-130000-C x250",
    f"JEV is asked every question about the block, coin and instruments named [{sent['state']['trade']}]")
 ok("r_THIS" not in sent["state"]["trade_history"] and "r_A" not in sent["state"]["trade_history"]
    and "110000/130000" in sent["state"]["trade_history"], "the history sent is the slim rows, without the block itself")
