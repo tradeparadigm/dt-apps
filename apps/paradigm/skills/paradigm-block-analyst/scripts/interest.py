@@ -44,8 +44,10 @@ DEBUG = False
 
 # What the taker is betting on: about the block alone, so it is asked for every
 # block, with or without the user's history. Price and volatility are two
-# questions, not one: JEV reads one fact at a time sharply (pilot 2: 87-95%)
-# and blurs two asked together.
+# questions, not one: JEV reads one fact at a time sharply and blurs two asked
+# together. Playground, legs named bought or sold: singles, straddles,
+# strangles and a risk reversal 94-100% on both; spreads 98% on volatility but
+# a coin toss on price, which spread_price_bet works out instead.
 BET_QUESTIONS = {
     "trade_price_bet": {
         "type": "choice",
@@ -328,32 +330,62 @@ def history_rows(trades, exclude_rfq, now):
 
 # ------------------------------------------------------------- the block
 
+_LEG = re.compile(r"^(?P<coin>[A-Z0-9]+)-(?P<expiry>\d{1,2}[A-Z]{3}\d{2})-(?P<strike>[\d.]+)-(?P<cp>[CP])$")
+
+
+def spread_price_bet(legs):
+    """'up' or 'down' for a vertical spread, else None. legs: (side, instrument).
+
+    JEV reads a single option, a straddle or a risk reversal leg by leg, but not
+    a spread: one bought and one sold of the same kind comes down to which
+    strike is higher, and it compares strikes no better than a coin toss even
+    with the legs labelled. The answer is certain from the legs, so it is
+    worked out here: the lower call or the higher put decides, and that leg
+    bought gains on a fall for puts, a rise for calls.
+    """
+    if len(legs) != 2:
+        return None
+    parsed = [(side, _LEG.match(name.upper())) for side, name in legs]
+    if not all(m for _, m in parsed):
+        return None
+    (s1, a), (s2, b) = parsed
+    if (a["coin"], a["expiry"], a["cp"]) != (b["coin"], b["expiry"], b["cp"]) or s1 == s2 \
+            or float(a["strike"]) == float(b["strike"]):
+        return None
+    calls = a["cp"] == "C"
+    lo, hi = sorted(parsed, key=lambda x: float(x[1]["strike"]))
+    side = (lo if calls else hi)[0]
+    return ("up" if side == "BUY" else "down") if calls else ("up" if side == "SELL" else "down")
+
+
 def block_trade(fill_csv):
-    """(description for JEV, rfq id, coin) from the fill collect_analysis.py
-    wrote. The description leads with the coin and names the instruments."""
+    """(description for JEV, rfq id, coin, spread direction or None) from the
+    fill collect_analysis.py wrote. The description leads with the coin and
+    names each leg as the taker bought or sold it."""
     with open(fill_csv, encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     if not rows:
-        return None, None, None
+        return None, None, None, None
     r = rows[0]
     desc = (r.get("DESCRIPTION") or "").strip()
     if not desc:
-        return None, None, None
+        return None, None, None, None
     instruments = [(x.get("INSTRUMENT") or "").strip() for x in rows]
     product = (r.get("PRODUCT") or "").split()
     coin = coin_of(*instruments) or (product[0].upper() if product else None)
     # Each row is one leg, and its SIDE is that leg as the taker holds it
     # (analyze_core.legs_from_rows signs legs the same way). Said leg by leg,
     # so a sold spread is not read off one side for the whole package.
-    legs = []
+    legs, signed = [], []
     for x in rows:
         side = (x.get("SIDE") or "").strip().upper()
         name = (x.get("INSTRUMENT") or "").strip() or ("it" if len(rows) == 1 else "")
         qty = (x.get("QTY") or "").strip()
         if side in ("BUY", "SELL") and name:
+            signed.append((side, name))
             legs.append(f"{'bought' if side == 'BUY' else 'sold'} {name}" + (f" x{qty}" if qty else ""))
     text = with_coin(coin, desc) + (": the taker " + "; ".join(legs) if legs else "")
-    return text, (r.get("RFQ_ID") or "").strip(), coin
+    return text, (r.get("RFQ_ID") or "").strip(), coin, spread_price_bet(signed)
 
 
 # ---------------------------------------------------------------- the line
@@ -382,10 +414,11 @@ def _choice(resp, key):
     return None
 
 
-def bet_line(resp, coin):
-    """'The taker is betting ETH falls and volatility rises.', or None."""
+def bet_line(resp, coin, price_bet=None):
+    """'The taker is betting ETH falls and volatility rises.', or None.
+    price_bet, when the code knows it (a spread), stands in for JEV's."""
     price = {"up": f"{coin or 'the price'} rises", "down": f"{coin or 'the price'} falls"}.get(
-        _choice(resp, "trade_price_bet"))
+        price_bet or _choice(resp, "trade_price_bet"))
     vol = {"rises": "volatility rises", "falls": "volatility falls"}.get(_choice(resp, "trade_vol_bet"))
     parts = [p for p in (price, vol) if p]
     return f"*The taker is betting {' and '.join(parts)}.*" if parts else None
@@ -408,10 +441,10 @@ def history_line(resp):
     return None
 
 
-def line_for(resp, coin=None):
+def line_for(resp, coin=None, price_bet=None):
     """One line: the taker's bet, then what the block is to the user. Either
     half is left out when JEV is unsure of it."""
-    parts = [p for p in (bet_line(resp, coin), history_line(resp)) if p]
+    parts = [p for p in (bet_line(resp, coin, price_bet), history_line(resp)) if p]
     return " ".join(parts) or None
 
 
@@ -424,7 +457,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     DEBUG = a.debug or a.print_request
 
-    trade, rfq, coin = block_trade(a.fill_csv)
+    trade, rfq, coin, price_bet = block_trade(a.fill_csv)
     if not trade:
         debug("no trade description in the fill")
         return 0
@@ -433,6 +466,8 @@ def main(argv=None):
     now = dt.datetime.now(dt.timezone.utc)
     state = {"today": now.date().isoformat(), "trade": trade}
     questions = dict(BET_QUESTIONS)
+    if price_bet:
+        del questions["trade_price_bet"]
     # The history half needs the user's Paradigm account; the bet does not.
     creds = paradigm_credentials()
     history = history_rows(fetch_trades(creds), rfq, now) if creds else []
@@ -445,7 +480,7 @@ def main(argv=None):
         print(json.dumps({"model": JEV_MODEL, "questions": questions, "state": state}, indent=2))
         return 0
     resp = ask_jev(questions, state)
-    line = line_for(resp, coin) if resp else None
+    line = line_for(resp, coin, price_bet) if resp else None
     if line:
         print(line)
     return 0

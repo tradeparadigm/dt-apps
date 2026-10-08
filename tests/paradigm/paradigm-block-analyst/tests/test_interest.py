@@ -81,6 +81,18 @@ ok(interest.line_for(resp(2.87, 0.88, price="up", vol="falls"), "BTC")
    == "*The taker is betting BTC rises and volatility falls.* *Your kind of trade: you've traded this "
       "structure on this coin at similar strikes and expiries.*", "the bet comes first, then the history")
 
+# A vertical spread's direction is worked out, not asked (JEV split 50/50 on them).
+SPB = interest.spread_price_bet
+ok(SPB([("BUY", "BTC-27NOV26-120000-C"), ("SELL", "BTC-27NOV26-130000-C")]) == "up", "call spread bought: up")
+ok(SPB([("SELL", "BTC-27NOV26-120000-C"), ("BUY", "BTC-27NOV26-130000-C")]) == "down", "call spread sold: down")
+ok(SPB([("SELL", "ETH-27NOV26-2200-P"), ("BUY", "ETH-27NOV26-2000-P")]) == "up", "put spread sold: up")
+ok(SPB([("BUY", "ETH-27NOV26-2200-P"), ("SELL", "ETH-27NOV26-2000-P")]) == "down", "put spread bought: down")
+ok(SPB([("BUY", "ETH-27NOV26-2200-P"), ("BUY", "ETH-27NOV26-2200-C")]) is None, "a straddle is not a spread")
+ok(SPB([("SELL", "BTC-27NOV26-110000-P"), ("BUY", "BTC-27NOV26-130000-C")]) is None, "a risk reversal is not a spread")
+ok(SPB([("BUY", "ETH-27NOV26-2200-P"), ("SELL", "ETH-25DEC26-2200-P")]) is None, "a calendar is not a vertical spread")
+ok(interest.line_for(resp(vol="neither"), "ETH", "up") == "*The taker is betting ETH rises.*",
+   "a spread's worked-out direction stands in for JEV's")
+
 # The shape JEV answered through LiteLLM on testnet (jev-1.13.0), names swapped in.
 REAL = {"model": "jev-1.13.0", "answers": {
     "your_kind_of_trade": {"type": "score", "score": 2.92, "confidence": 0.9,
@@ -185,7 +197,7 @@ fill.write_text("PRODUCT,DESCRIPTION,QTY,SIDE,RFQ_ID,INSTRUMENT\n"
                 "BTC OPTION - DBT,30 Oct 26 110000/130000 RR,250,BUY,r_THIS,BTC-30OCT26-130000-C\n")
 eth = tmp / "eth.csv"
 eth.write_text("PRODUCT,DESCRIPTION,QTY,SIDE,RFQ_ID\nETH OPTION - DBT,Put 23 Oct 26 2200,50,SELL,r_E\n")
-ok(interest.block_trade(str(eth)) == ("ETH Put 23 Oct 26 2200: the taker sold it x50", "r_E", "ETH"),
+ok(interest.block_trade(str(eth)) == ("ETH Put 23 Oct 26 2200: the taker sold it x50", "r_E", "ETH", None),
    f"no INSTRUMENT column: the coin comes from PRODUCT [{interest.block_trade(str(eth))}]")
 
 
@@ -217,6 +229,18 @@ Relay.jev_status, Relay.answer = 429, {"error": "Budget has been exceeded"}
 code, out = run_main()
 ok(code == 0 and out == "", "a key without credit says nothing")
 Relay.jev_status, Relay.answer = 200, resp(2.87, 0.88)
+spread = tmp / "spread.csv"
+spread.write_text("PRODUCT,DESCRIPTION,QTY,SIDE,RFQ_ID,INSTRUMENT\n"
+                  "ETH OPTION - DBT,PSpd 27 Nov 26 2200/2000,50,SELL,r_S,ETH-27NOV26-2200-P\n"
+                  "ETH OPTION - DBT,PSpd 27 Nov 26 2200/2000,50,BUY,r_S,ETH-27NOV26-2000-P\n")
+Relay.answer = resp(2.87, 0.88, vol="neither")
+import contextlib, io
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    interest.main(["--fill-csv", str(spread)])
+ok("trade_price_bet" not in Relay.asked[-1]["questions"] and buf.getvalue().startswith("*The taker is betting ETH rises.*"),
+   f"a spread is not asked its direction; the line still says it [{buf.getvalue().strip()}]")
+Relay.answer = resp(2.87, 0.88)
 code, out = run_main("--print-request")
 ok(code == 0 and json.loads(out)["state"]["trade"].startswith("BTC 30 Oct 26"),
    "--print-request prints the request for the playground")
