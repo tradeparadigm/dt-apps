@@ -64,6 +64,18 @@ ok(interest.line_for(resp(choice="closed", p_open=0.05)) is None, "closed with n
 ok("Your kind" in (interest.line_for({"your_kind_of_trade": {"score": 3, "confidence": 0.9}}) or ""),
    "answers at the top level are read too")
 
+# The shape JEV answered through LiteLLM on testnet (jev-1.13.0), names swapped in.
+REAL = {"model": "jev-1.13.0", "answers": {
+    "your_kind_of_trade": {"type": "score", "score": 2.92, "confidence": 0.9,
+                           "legend": {"0": "a", "1": "b", "2": "c", "3": "d"},
+                           "probabilities": {"0": 0.0, "1": 0.02, "2": 0.04, "3": 0.94}},
+    "still_holds_it": {"type": "choice", "choice": "closed", "confidence": 0.95,
+                       "probabilities": {"still_open": 0.03, "closed": 0.95, "never": 0.02}}},
+    "usage": {"input_tokens": 361, "output_tokens": 44}}
+ok("Your kind of trade" in (interest.line_for(REAL) or ""), "the real response shape is read")
+REAL["answers"]["still_holds_it"].update(choice="still_open", probabilities={"still_open": 0.9})
+ok("haven't closed it" in (interest.line_for(REAL) or ""), "and its choice answer too")
+
 # --- what history JEV gets ---------------------------------------------------
 NOW = dt.datetime(2026, 10, 7, 9, 0, tzinfo=dt.timezone.utc)
 trades = [
