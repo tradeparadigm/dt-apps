@@ -448,6 +448,21 @@ def line_for(resp, coin=None, price_bet=None):
     return " ".join(parts) or None
 
 
+def build_request(trade, rfq, price_bet, trades, now):
+    """(questions, state) for one block: what JEV is asked. The JEV evals
+    (tests/paradigm/paradigm-block-analyst/evals/jev_evals.py) build their
+    requests here too, so they test exactly what the script sends."""
+    state = {"today": now.date().isoformat(), "trade": trade}
+    questions = dict(BET_QUESTIONS)
+    if price_bet:
+        del questions["trade_price_bet"]
+    history = history_rows(trades, rfq, now)
+    if history:
+        state["trade_history"] = json.dumps(history, separators=(",", ":"))
+        questions.update(HISTORY_QUESTIONS)
+    return questions, state
+
+
 def main(argv=None):
     global DEBUG
     ap = argparse.ArgumentParser()
@@ -464,17 +479,11 @@ def main(argv=None):
     if not a.print_request and not relay_available():
         return 0
     now = dt.datetime.now(dt.timezone.utc)
-    state = {"today": now.date().isoformat(), "trade": trade}
-    questions = dict(BET_QUESTIONS)
-    if price_bet:
-        del questions["trade_price_bet"]
     # The history half needs the user's Paradigm account; the bet does not.
     creds = paradigm_credentials()
-    history = history_rows(fetch_trades(creds), rfq, now) if creds else []
-    if history:
-        state["trade_history"] = json.dumps(history, separators=(",", ":"))
-        questions.update(HISTORY_QUESTIONS)
-    elif creds:
+    trades = fetch_trades(creds) if creds else []
+    questions, state = build_request(trade, rfq, price_bet, trades, now)
+    if creds and "trade_history" not in state:
         debug("no Paradigm history in the last 90 days")
     if a.print_request:
         print(json.dumps({"model": JEV_MODEL, "questions": questions, "state": state}, indent=2))

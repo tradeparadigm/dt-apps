@@ -1,0 +1,656 @@
+{
+ "about": "Cases for the questions interest.py asks JEV. jev_evals.py builds each request through interest.build_request, so a case tests exactly what the script would send. A case passes when JEV gives the expected answer sure enough for the line to show it (interest.MIN_CHOICE_PROBABILITY, MIN_SCORE_CONFIDENCE). `block` is the fill (one leg per row: instrument, the taker's side for that leg, quantity); `trades` are the user's trades in the DRFQv2 trade shape fill_sources.rows_from_trade reads; `today` is fixed so dates in them stay inside the 90-day window.",
+ "today": "2026-10-08",
+ "cases": [
+  {
+   "id": "bet-put-bought",
+   "note": "",
+   "block": {
+    "description": "Put 27 Nov 26 2200",
+    "legs": [
+     [
+      "ETH-27NOV26-2200-P",
+      "BUY",
+      1
+     ]
+    ]
+   },
+   "trades": [],
+   "expect": {
+    "trade_price_bet": "down",
+    "trade_vol_bet": "rises"
+   }
+  },
+  {
+   "id": "bet-put-sold",
+   "note": "",
+   "block": {
+    "description": "Put 27 Nov 26 2200",
+    "legs": [
+     [
+      "ETH-27NOV26-2200-P",
+      "SELL",
+      1
+     ]
+    ]
+   },
+   "trades": [],
+   "expect": {
+    "trade_price_bet": "up",
+    "trade_vol_bet": "falls"
+   }
+  },
+  {
+   "id": "bet-call-sold",
+   "note": "",
+   "block": {
+    "description": "C 27 Nov 26 130000",
+    "legs": [
+     [
+      "BTC-27NOV26-130000-C",
+      "SELL",
+      10
+     ]
+    ]
+   },
+   "trades": [],
+   "expect": {
+    "trade_price_bet": "down",
+    "trade_vol_bet": "falls"
+   }
+  },
+  {
+   "id": "bet-straddle-bought",
+   "note": "",
+   "block": {
+    "description": "SD 27 Nov 26 120000",
+    "legs": [
+     [
+      "BTC-27NOV26-120000-C",
+      "BUY",
+      10
+     ],
+     [
+      "BTC-27NOV26-120000-P",
+      "BUY",
+      10
+     ]
+    ]
+   },
+   "trades": [],
+   "expect": {
+    "trade_price_bet": "neither",
+    "trade_vol_bet": "rises"
+   }
+  },
+  {
+   "id": "bet-straddle-sold",
+   "note": "",
+   "block": {
+    "description": "SD 27 Nov 26 120000",
+    "legs": [
+     [
+      "BTC-27NOV26-120000-C",
+      "SELL",
+      10
+     ],
+     [
+      "BTC-27NOV26-120000-P",
+      "SELL",
+      10
+     ]
+    ]
+   },
+   "trades": [],
+   "expect": {
+    "trade_price_bet": "neither",
+    "trade_vol_bet": "falls"
+   }
+  },
+  {
+   "id": "bet-risk-reversal",
+   "note": "sold put, bought call",
+   "block": {
+    "description": "RRCall 27 Nov 26 110000/130000",
+    "legs": [
+     [
+      "BTC-27NOV26-110000-P",
+      "SELL",
+      10
+     ],
+     [
+      "BTC-27NOV26-130000-C",
+      "BUY",
+      10
+     ]
+    ]
+   },
+   "trades": [],
+   "expect": {
+    "trade_price_bet": "up",
+    "trade_vol_bet": "neither"
+   }
+  },
+  {
+   "id": "bet-strangle-sold",
+   "note": "",
+   "block": {
+    "description": "Strangle 27 Nov 26 2600/2850",
+    "legs": [
+     [
+      "ETH-27NOV26-2600-P",
+      "SELL",
+      50
+     ],
+     [
+      "ETH-27NOV26-2850-C",
+      "SELL",
+      50
+     ]
+    ]
+   },
+   "trades": [],
+   "expect": {
+    "trade_price_bet": "neither",
+    "trade_vol_bet": "falls"
+   }
+  },
+  {
+   "id": "bet-call-spread-bought",
+   "note": "price worked out in code",
+   "block": {
+    "description": "CSpd 27 Nov 26 120000/130000",
+    "legs": [
+     [
+      "BTC-27NOV26-120000-C",
+      "BUY",
+      10
+     ],
+     [
+      "BTC-27NOV26-130000-C",
+      "SELL",
+      10
+     ]
+    ]
+   },
+   "trades": [],
+   "expect": {
+    "trade_vol_bet": "neither"
+   },
+   "price_worked_out": true
+  },
+  {
+   "id": "bet-put-spread-sold",
+   "note": "price worked out in code",
+   "block": {
+    "description": "PSpd 27 Nov 26 2200/2000",
+    "legs": [
+     [
+      "ETH-27NOV26-2200-P",
+      "SELL",
+      50
+     ],
+     [
+      "ETH-27NOV26-2000-P",
+      "BUY",
+      50
+     ]
+    ]
+   },
+   "trades": [],
+   "expect": {
+    "trade_vol_bet": "neither"
+   },
+   "price_worked_out": true
+  },
+  {
+   "id": "kind-nearby",
+   "note": "history: ETH puts, 30 Oct and 16 Oct, strikes 2100-2400",
+   "block": {
+    "description": "Put 23 Oct 26 2200",
+    "legs": [
+     [
+      "ETH-23OCT26-2200-P",
+      "BUY",
+      50
+     ]
+    ]
+   },
+   "trades": [
+    {
+     "description": "Put 30 Oct 26 2100",
+     "side": "BUY",
+     "quantity": "50",
+     "executed_at": "2026-09-18T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-30OCT26-2100-P",
+       "side": "BUY",
+       "quantity": "50"
+      }
+     ]
+    },
+    {
+     "description": "Put 30 Oct 26 2300",
+     "side": "BUY",
+     "quantity": "30",
+     "executed_at": "2026-09-25T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-30OCT26-2300-P",
+       "side": "BUY",
+       "quantity": "30"
+      }
+     ]
+    },
+    {
+     "description": "Put 16 Oct 26 2400",
+     "side": "SELL",
+     "quantity": "40",
+     "executed_at": "2026-09-02T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-16OCT26-2400-P",
+       "side": "BUY",
+       "quantity": "40"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "your_kind_of_trade": 3
+   }
+  },
+  {
+   "id": "kind-exact",
+   "note": "history: ETH puts, 30 Oct and 16 Oct, strikes 2100-2400",
+   "block": {
+    "description": "Put 30 Oct 26 2100",
+    "legs": [
+     [
+      "ETH-30OCT26-2100-P",
+      "BUY",
+      50
+     ]
+    ]
+   },
+   "trades": [
+    {
+     "description": "Put 30 Oct 26 2100",
+     "side": "BUY",
+     "quantity": "50",
+     "executed_at": "2026-09-18T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-30OCT26-2100-P",
+       "side": "BUY",
+       "quantity": "50"
+      }
+     ]
+    },
+    {
+     "description": "Put 30 Oct 26 2300",
+     "side": "BUY",
+     "quantity": "30",
+     "executed_at": "2026-09-25T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-30OCT26-2300-P",
+       "side": "BUY",
+       "quantity": "30"
+      }
+     ]
+    },
+    {
+     "description": "Put 16 Oct 26 2400",
+     "side": "SELL",
+     "quantity": "40",
+     "executed_at": "2026-09-02T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-16OCT26-2400-P",
+       "side": "BUY",
+       "quantity": "40"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "your_kind_of_trade": 3
+   }
+  },
+  {
+   "id": "kind-far",
+   "note": "history: ETH puts, 30 Oct and 16 Oct, strikes 2100-2400",
+   "block": {
+    "description": "Put 25 Dec 26 1500",
+    "legs": [
+     [
+      "ETH-25DEC26-1500-P",
+      "BUY",
+      50
+     ]
+    ]
+   },
+   "trades": [
+    {
+     "description": "Put 30 Oct 26 2100",
+     "side": "BUY",
+     "quantity": "50",
+     "executed_at": "2026-09-18T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-30OCT26-2100-P",
+       "side": "BUY",
+       "quantity": "50"
+      }
+     ]
+    },
+    {
+     "description": "Put 30 Oct 26 2300",
+     "side": "BUY",
+     "quantity": "30",
+     "executed_at": "2026-09-25T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-30OCT26-2300-P",
+       "side": "BUY",
+       "quantity": "30"
+      }
+     ]
+    },
+    {
+     "description": "Put 16 Oct 26 2400",
+     "side": "SELL",
+     "quantity": "40",
+     "executed_at": "2026-09-02T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-16OCT26-2400-P",
+       "side": "BUY",
+       "quantity": "40"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "your_kind_of_trade": 2
+   }
+  },
+  {
+   "id": "kind-other-structure",
+   "note": "history: ETH puts, 30 Oct and 16 Oct, strikes 2100-2400",
+   "block": {
+    "description": "SD 30 Oct 26 2200",
+    "legs": [
+     [
+      "ETH-30OCT26-2200-C",
+      "BUY",
+      50
+     ],
+     [
+      "ETH-30OCT26-2200-P",
+      "BUY",
+      50
+     ]
+    ]
+   },
+   "trades": [
+    {
+     "description": "Put 30 Oct 26 2100",
+     "side": "BUY",
+     "quantity": "50",
+     "executed_at": "2026-09-18T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-30OCT26-2100-P",
+       "side": "BUY",
+       "quantity": "50"
+      }
+     ]
+    },
+    {
+     "description": "Put 30 Oct 26 2300",
+     "side": "BUY",
+     "quantity": "30",
+     "executed_at": "2026-09-25T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-30OCT26-2300-P",
+       "side": "BUY",
+       "quantity": "30"
+      }
+     ]
+    },
+    {
+     "description": "Put 16 Oct 26 2400",
+     "side": "SELL",
+     "quantity": "40",
+     "executed_at": "2026-09-02T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-16OCT26-2400-P",
+       "side": "BUY",
+       "quantity": "40"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "your_kind_of_trade": 1
+   }
+  },
+  {
+   "id": "kind-other-coin",
+   "note": "history: ETH puts, 30 Oct and 16 Oct, strikes 2100-2400",
+   "block": {
+    "description": "Put 30 Oct 26 100000",
+    "legs": [
+     [
+      "BTC-30OCT26-100000-P",
+      "BUY",
+      5
+     ]
+    ]
+   },
+   "trades": [
+    {
+     "description": "Put 30 Oct 26 2100",
+     "side": "BUY",
+     "quantity": "50",
+     "executed_at": "2026-09-18T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-30OCT26-2100-P",
+       "side": "BUY",
+       "quantity": "50"
+      }
+     ]
+    },
+    {
+     "description": "Put 30 Oct 26 2300",
+     "side": "BUY",
+     "quantity": "30",
+     "executed_at": "2026-09-25T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-30OCT26-2300-P",
+       "side": "BUY",
+       "quantity": "30"
+      }
+     ]
+    },
+    {
+     "description": "Put 16 Oct 26 2400",
+     "side": "SELL",
+     "quantity": "40",
+     "executed_at": "2026-09-02T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-16OCT26-2400-P",
+       "side": "BUY",
+       "quantity": "40"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "your_kind_of_trade": 0
+   }
+  },
+  {
+   "id": "holds-open",
+   "note": "bought 50, never sold",
+   "block": {
+    "description": "Put 30 Oct 26 2100",
+    "legs": [
+     [
+      "ETH-30OCT26-2100-P",
+      "BUY",
+      50
+     ]
+    ]
+   },
+   "trades": [
+    {
+     "description": "Put 30 Oct 26 2100",
+     "side": "BUY",
+     "quantity": "50",
+     "executed_at": "2026-09-18T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-30OCT26-2100-P",
+       "side": "BUY",
+       "quantity": "50"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "still_holds_it": "still_open"
+   }
+  },
+  {
+   "id": "holds-closed",
+   "note": "bought 50, sold 50",
+   "block": {
+    "description": "Put 30 Oct 26 2100",
+    "legs": [
+     [
+      "ETH-30OCT26-2100-P",
+      "BUY",
+      50
+     ]
+    ]
+   },
+   "trades": [
+    {
+     "description": "Put 30 Oct 26 2100",
+     "side": "SELL",
+     "quantity": "50",
+     "executed_at": "2026-10-01T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-30OCT26-2100-P",
+       "side": "BUY",
+       "quantity": "50"
+      }
+     ]
+    },
+    {
+     "description": "Put 30 Oct 26 2100",
+     "side": "BUY",
+     "quantity": "50",
+     "executed_at": "2026-09-18T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-30OCT26-2100-P",
+       "side": "BUY",
+       "quantity": "50"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "still_holds_it": "closed"
+   }
+  },
+  {
+   "id": "holds-partly-closed",
+   "note": "bought 50, sold 20",
+   "block": {
+    "description": "Put 30 Oct 26 2100",
+    "legs": [
+     [
+      "ETH-30OCT26-2100-P",
+      "BUY",
+      50
+     ]
+    ]
+   },
+   "trades": [
+    {
+     "description": "Put 30 Oct 26 2100",
+     "side": "SELL",
+     "quantity": "20",
+     "executed_at": "2026-10-01T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-30OCT26-2100-P",
+       "side": "BUY",
+       "quantity": "20"
+      }
+     ]
+    },
+    {
+     "description": "Put 30 Oct 26 2100",
+     "side": "BUY",
+     "quantity": "50",
+     "executed_at": "2026-09-18T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-30OCT26-2100-P",
+       "side": "BUY",
+       "quantity": "50"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "still_holds_it": "still_open"
+   }
+  },
+  {
+   "id": "holds-neighbour-only",
+   "note": "only the 2200 strike",
+   "block": {
+    "description": "Put 30 Oct 26 2100",
+    "legs": [
+     [
+      "ETH-30OCT26-2100-P",
+      "BUY",
+      50
+     ]
+    ]
+   },
+   "trades": [
+    {
+     "description": "Put 30 Oct 26 2200",
+     "side": "BUY",
+     "quantity": "50",
+     "executed_at": "2026-09-18T10:00:00Z",
+     "legs": [
+      {
+       "instrument_name": "ETH-30OCT26-2200-P",
+       "side": "BUY",
+       "quantity": "50"
+      }
+     ]
+    }
+   ],
+   "expect": {
+    "still_holds_it": "never"
+   }
+  }
+ ]
+}
