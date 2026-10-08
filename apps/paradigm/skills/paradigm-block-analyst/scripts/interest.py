@@ -33,6 +33,8 @@ import urllib.parse
 import urllib.request
 
 SIDECAR = os.environ.get("TERMINAL_SIDECAR_URL") or "http://127.0.0.1:8081"
+# The relay has its own port, bound to 127.0.0.1 only; the main port refuses it.
+JEV_URL = os.environ.get("TERMINAL_JEV_URL") or "http://127.0.0.1:8091/api/jev"
 JEV_MODEL = os.environ.get("JEV_MODEL") or "jev-latest"
 HISTORY_DAYS = 90
 HISTORY_ROWS = 200
@@ -121,7 +123,7 @@ def relay_available():
 
 def ask_jev(state):
     body = json.dumps({"model": JEV_MODEL, "questions": QUESTIONS, "state": state}).encode()
-    status, resp = http_json(f"{SIDECAR}/api/jev", method="POST", body=body,
+    status, resp = http_json(JEV_URL, method="POST", body=body,
                              headers={"Content-Type": "application/json"}, timeout=25)
     debug(f"JEV answered {status}: {json.dumps(resp)[:2000] if resp is not None else None}")
     if status != 200 or not isinstance(resp, dict):

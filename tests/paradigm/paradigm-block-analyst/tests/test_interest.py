@@ -141,6 +141,7 @@ class Relay(http.server.BaseHTTPRequestHandler):
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Relay)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 interest.SIDECAR = f"http://127.0.0.1:{srv.server_address[1]}"
+interest.JEV_URL = f"http://127.0.0.1:{srv.server_address[1]}/api/jev"
 interest.paradigm_credentials = lambda: ("A", "S", "h")
 interest.fetch_trades = lambda creds, pages=3: trades
 
