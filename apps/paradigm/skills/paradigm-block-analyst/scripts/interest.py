@@ -236,7 +236,7 @@ def fetch_trades(creds, pages=3):
         if cursor.startswith(("/", "http")):
             target = re.sub(r"^https?://[^/]+", "", cursor)
         else:
-            target = "/v2/drfq/trades/?" + urllib.parse.urlencode({"cursor": cursor})
+            target = "/v2/drfq/trades/?" + urllib.parse.urlencode({"cursor": cursor, "page_size": 100})
     if rows:
         debug(f"{len(rows)} trades; first row's fields: {sorted(rows[0])}")
     return rows
