@@ -10,10 +10,15 @@ A case passes when JEV gives the expected answer sure enough for the line to
 show it. JEV is not deterministic: a case near the threshold can flip between
 runs, so --trials N asks each case N times and reports the worst.
 
+    # Anywhere, straight to TypeSafe (what CI would use)
+    TYPESAFE_API_KEY=... python3 tests/paradigm/paradigm-block-analyst/evals/jev_evals.py
     # On an agent: the sidecar's relay, no key
     python3 tests/paradigm/paradigm-block-analyst/evals/jev_evals.py
-    # Anywhere else: LiteLLM's TypeSafe route with a LiteLLM key
+    # Through LiteLLM's TypeSafe route, with a LiteLLM key
     JEV_URL=https://<litellm>/typesafe/v1/systemone JEV_KEY=sk-... python3 .../jev_evals.py
+
+LiteLLM's route only forwards the body to TypeSafe's /v1/systemone with its
+own key as a Bearer token, so all three ask the same model the same thing.
 
     --only kind-       cases whose id starts with this
     --trials 3         ask each case 3 times
@@ -106,6 +111,9 @@ def main(argv=None):
 
     url = os.environ.get("JEV_URL") or os.environ.get("TERMINAL_JEV_URL") or interest.JEV_URL
     key = os.environ.get("JEV_KEY")
+    if os.environ.get("TYPESAFE_API_KEY") and not os.environ.get("JEV_URL"):
+        url = (os.environ.get("TYPESAFE_API_BASE") or "https://api.typesafe.ai").rstrip("/") + "/v1/systemone"
+        key = os.environ["TYPESAFE_API_KEY"]
     print(f"JEV at {url}, {a.trials} trial(s) per case\n")
     failed = 0
     for case in cases:
