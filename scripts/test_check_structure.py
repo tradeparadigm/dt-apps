@@ -743,6 +743,12 @@ class TestMcpServer(unittest.TestCase):
                 self.refuses("X_TOKEN: ${placeholder}", f"X_TOKEN: '{value}'",
                              "has a $ outside")
 
+    def test_environments_need_a_credential_type(self):
+        start = self.VALID.index("  credential_types:\n")
+        end = self.VALID.index("  environments:\n")
+        self.refuses(self.VALID[start:end], "",
+                     "mcp_server.environments needs mcp_server.credential_types")
+
     def test_an_environment_value_is_a_literal(self):
         self.refuses("X_ENV: prod", "X_ENV: ${label}", "env.X_ENV is a literal")
 

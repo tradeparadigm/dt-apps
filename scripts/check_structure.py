@@ -527,6 +527,11 @@ def check_mcp_server(man: str, doc: dict, failures: list[str]) -> None:
                     "and ${detail.<key>}"
                 )
 
+    if mcp.get("environments") and not mcp.get("credential_types"):
+        failures.append(
+            f"{man}: mcp_server.environments needs mcp_server.credential_types: "
+            "environment env is added only to a bound credential"
+        )
     env_ids = {e.get("id") for e in doc.get("environments") or [] if isinstance(e, dict)}
     for ref, env in check_mcp_list(man, "mcp_server.environments", mcp.get("environments"),
                                    "mcp_environment", "id", env_ids, failures):
