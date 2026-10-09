@@ -178,9 +178,9 @@ mcp_server:
   command: uvx
   args:
     - --from
-    - git+https://github.com/samparadigm/mcp-paradex-py@069a5d2289b868a0ce19cd561095877a85e6fb48
+    - git+https://github.com/samparadigm/mcp-paradex-py@3c0c42eab93e6a34d46cf90c2155990f32e7f1ec
     - --with
-    - git+https://github.com/samparadigm/paradex-py@961c1b2e4311645ae11e1f7f90fe70f595e7ec09
+    - git+https://github.com/samparadigm/paradex-py@1a4dec8dc1ec5e5e30108a98f2ec0cb954af0efb
     - mcp-paradex
   credential_types:
     - type: priv-key
