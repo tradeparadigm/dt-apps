@@ -703,7 +703,9 @@ class TestMcpServer(unittest.TestCase):
         self.refuses("x_write]", "x_read]", "mcp_server.tools[1] 'x_read' is listed twice")
 
     def test_an_env_name_must_be_upper_case(self):
-        self.refuses("X_ENV:", "x_env:", "x_env is not an environment variable name")
+        for name in ("x_env", "xENV", "X-ENV", "1ENV"):
+            with self.subTest(name=name):
+                self.refuses("X_ENV:", f"{name}:", f"{name} is not an environment variable name")
 
     def test_an_env_name_has_at_most_64_characters(self):
         self.refuses("X_ENV:", "X" * 65 + ":", "is not an environment variable name")
@@ -748,6 +750,24 @@ class TestMcpServer(unittest.TestCase):
         end = self.VALID.index("  environments:\n")
         self.refuses(self.VALID[start:end], "",
                      "mcp_server.environments needs mcp_server.credential_types")
+
+    def test_a_malformed_shape_is_refused(self):
+        cases = [
+            ("  command: uvx\n", "  command: '  '\n", "mcp_server.command is required"),
+            ("  args: [--from, 'git+https://example.com/x@abc', x-server]\n", "  args: x\n",
+             "mcp_server.args must be a list of strings"),
+            ("  tools: [x_read, x_write]\n", "  tools: x_read\n", "mcp_server.tools is not a list"),
+            ("x_write]", "'  ']", "mcp_server.tools[1] must be a non-empty tool name"),
+            ("        X_ENV: prod\n", "        - X_ENV\n", "environments[0].env is not a mapping"),
+            ("  environments:\n    - id: mainnet\n      env:\n        X_ENV: prod\n",
+             "  environments: mainnet\n", "mcp_server.environments is not a list"),
+            ("    - id: mainnet\n      env:\n        X_ENV: prod\n", "    - mainnet\n",
+             "mcp_server.environments[0] is not a mapping"),
+            ("X_ENV: prod", "X_ENV: [prod]", "env.X_ENV must be a string"),
+        ]
+        for old, new, because in cases:
+            with self.subTest(because=because):
+                self.refuses(old, new, because)
 
     def test_an_environment_value_is_a_literal(self):
         self.refuses("X_ENV: prod", "X_ENV: ${label}", "env.X_ENV is a literal")
