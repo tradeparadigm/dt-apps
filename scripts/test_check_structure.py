@@ -17,7 +17,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from check_structure import MAX_SKILLS  # noqa: E402
+from check_structure import MAX_SKILLS, MCP_RESERVED_ENV  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURE = ROOT / "scripts" / "testdata" / "apps"
@@ -605,7 +605,8 @@ class TestMcpServer(unittest.TestCase):
     """mcp_server, checked against the app's own credential types and environments.
 
     The fixture's api-key injects its secret and so has no placeholder. The
-    token type added here replaces one, which is what ${placeholder} needs.
+    token type added here replaces one, which is what ${placeholder} needs,
+    and declares public_key, which api-key does not.
     """
 
     TOKEN = (
@@ -616,6 +617,8 @@ class TestMcpServer(unittest.TestCase):
         "    detail_fields:\n"
         "      - key: account\n"
         "        label: Account\n"
+        "      - key: public_key\n"
+        "        label: Public key\n"
         "    delivery:\n"
         "      mode: replace\n"
         "    summary: Swaps the placeholder for the token.\n"
@@ -670,6 +673,29 @@ class TestMcpServer(unittest.TestCase):
         self.refuses("    - id: mainnet\n", "    - id: mainnet\n      host: x\n",
                      "mcp_server.environments[0].host is not a field")
 
+    def test_mcp_server_must_be_a_mapping(self):
+        code, out = check(append("mcp_server: 5\n"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("mcp_server is not a mapping", out)
+
+    def test_an_unknown_key_in_a_credential_type_is_refused(self):
+        self.refuses("    - type: api-key\n", "    - type: api-key\n      slug: key\n",
+                     "mcp_server.credential_types[1].slug is not a field")
+
+    def test_an_empty_tool_list_is_refused(self):
+        self.refuses("  tools: [x_read, x_write]\n", "  tools: []\n",
+                     "mcp_server.tools is empty: omit it")
+
+    def test_a_value_cannot_hold_a_nul_or_a_line_break(self):
+        for value in ('"a\\x00b"', '"a\\nb"', '"a\\rb"'):
+            for old in ("X_ENV: prod", "X_HEADER: X-Dime-Sign-${label}"):
+                with self.subTest(value=value, where=old):
+                    self.refuses(old, old.split(":")[0] + ": " + value,
+                                 "may not contain a NUL or a line break")
+
+    def test_an_env_name_with_a_trailing_newline_is_refused(self):
+        self.refuses("X_ENV: prod", '"X_ENV\\n": prod', "is not an environment variable name")
+
     def test_a_tool_name_cannot_be_empty(self):
         self.refuses("x_write]", "'']", "mcp_server.tools[1] must be a non-empty tool name")
 
@@ -683,7 +709,7 @@ class TestMcpServer(unittest.TestCase):
         self.refuses("X_ENV:", "X" * 65 + ":", "is not an environment variable name")
 
     def test_a_reserved_env_name_is_refused(self):
-        for name in ("PATH", "HOME", "UV_CONSTRAINT", "NODE_EXTRA_CA_CERTS"):
+        for name in sorted(MCP_RESERVED_ENV):
             with self.subTest(name=name):
                 self.refuses("X_ENV:", f"{name}:", f"{name} is set by the sidecar")
 
@@ -702,9 +728,9 @@ class TestMcpServer(unittest.TestCase):
                      "environments.id[1] 'mainnet' is listed twice")
 
     def test_a_detail_must_be_one_the_type_declares(self):
-        self.refuses("X_ACCOUNT: ${detail.account}\n        X_TOKEN",
-                     "X_ACCOUNT: ${detail.public_key}\n        X_TOKEN",
-                     "names ${detail.public_key}, and 'token' has no such detail field")
+        self.refuses("X_ACCOUNT: ${detail.account}\n  environments",
+                     "X_ACCOUNT: ${detail.public_key}\n  environments",
+                     "names ${detail.public_key}, and 'api-key' has no such detail field")
 
     def test_a_placeholder_needs_a_mode_that_has_one(self):
         self.refuses("    - type: api-key\n      env:\n",

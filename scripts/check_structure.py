@@ -200,7 +200,7 @@ MCP_RESERVED_ENV = {
     "PATH", "HOME", "SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS", "REQUESTS_CA_BUNDLE",
     "CURL_CA_BUNDLE", "AWS_CA_BUNDLE", "GIT_SSL_CAINFO", "UV_CACHE_DIR", "UV_CONSTRAINT",
 }
-MCP_TEMPLATE_RE = re.compile(r"\$\{(?:placeholder|label|detail\.([^}]*))\}")
+MCP_TEMPLATE_RE = re.compile(r"\$\{(?:placeholder|label|detail\.([a-z0-9_]+))\}")
 # Only inject has no placeholder: the secret goes out as itself.
 MODES_WITHOUT_PLACEHOLDER = {"inject"}
 
@@ -433,7 +433,7 @@ def check_mcp_env(man: str, where: str, env: object, failures: list[str]) -> dic
         return {}
     pairs = {}
     for name, value in env.items():
-        if not isinstance(name, str) or not MCP_ENV_NAME_RE.match(name):
+        if not isinstance(name, str) or not MCP_ENV_NAME_RE.fullmatch(name):
             failures.append(
                 f"{man}: {where}.{name} is not an environment variable name "
                 "(upper case letters, digits and underscores, at most 64)"
@@ -445,6 +445,9 @@ def check_mcp_env(man: str, where: str, env: object, failures: list[str]) -> dic
         text = as_text(value)
         if text is None:
             failures.append(f"{man}: {where}.{name} must be a string")
+            continue
+        if any(c in text for c in "\x00\n\r"):
+            failures.append(f"{man}: {where}.{name} may not contain a NUL or a line break")
             continue
         pairs[name] = text
     return pairs
@@ -481,7 +484,8 @@ def check_mcp_server(man: str, doc: dict, failures: list[str]) -> None:
         failures.append(f"{man}: mcp_server is not a mapping")
         return
     check_known(man, "mcp_server", mcp, "mcp_server", failures)
-    require(man, "mcp_server", mcp, ("command",), failures)
+    if not (as_text(mcp.get("command")) or "").strip():
+        failures.append(f"{man}: mcp_server.command is required")
 
     args = mcp.get("args")
     if args is not None and (
@@ -493,6 +497,8 @@ def check_mcp_server(man: str, doc: dict, failures: list[str]) -> None:
     if tools is not None:
         if not isinstance(tools, list):
             failures.append(f"{man}: mcp_server.tools is not a list")
+        elif not tools:
+            failures.append(f"{man}: mcp_server.tools is empty: omit it to expose every tool")
         else:
             for i, t in enumerate(tools):
                 if not (as_text(t) or "").strip():

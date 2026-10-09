@@ -146,7 +146,7 @@ credential_types:
     # GET and DELETE on /v1/orders/<id> stay unmatched and need nothing.
     #
     # A method on each, which is what makes listing open orders possible at all:
-    # the GET on that same path matches no rule, is forwarded untouched, and
+    # GET /v1/orders matches no rule, is forwarded untouched, and
     # needs neither the payload header nor the placeholder. A path-only
     # narrowing would have demanded a signature for a read that never wanted
     # one.

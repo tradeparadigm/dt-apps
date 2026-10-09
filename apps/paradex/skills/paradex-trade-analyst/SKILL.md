@@ -13,7 +13,7 @@ description: >
   Paradigm RFQ blocks belong to paradigm-block-analyst.
 compatibility: >
   Needs the paradex-api skill's `paradex__*` tools, which means a Paradex
-  credential enrolled. Reports what it could not read rather than estimating.
+  credential enrolled. Names every read that failed.
 metadata:
   author: tradeparadigm
   version: "1.0"
@@ -43,9 +43,8 @@ Without it, search for the fill with
 `market_id` set to the label's market. There is no fill-id filter and no
 single-fill tool.
 
-Start with the last 24 hours and step the window back a day at a time. Each
-call returns one page, so split a window that may hold more fills than that
-and search both halves. Compare each row's `id` against the fill id as
+Start with the last 24 hours and step the window back a day at a time.
+Compare each row's `id` against the fill id as
 strings. Stop at the exact match, and stop after ten windows without one.
 
 Report and stop when no row matches. Never read a fill from the label, and

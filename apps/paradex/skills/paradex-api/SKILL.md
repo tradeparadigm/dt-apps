@@ -83,7 +83,17 @@ Market symbols look like `ETH-USD-PERP`. Take exact names from
 
 ## When there are no `paradex__` tools
 
-The app needs a Paradex credential enrolled. Tell the user that in one line.
+The server did not start for this account. Tell the user which of these
+applies, cheapest to check first:
+
+- The change has not reached the agent yet. Ask the user to reload, or retry
+  shortly.
+- No Paradex credential is enrolled.
+- The credential was enrolled with a custom host. Only a credential for one of
+  the app's environments (mainnet, testnet, nightly) starts the server.
+- The credential is missing its account address, or a signing key is missing
+  its public key.
+- Another MCP server is already named `paradex`.
 
 ## Anything not covered here
 
