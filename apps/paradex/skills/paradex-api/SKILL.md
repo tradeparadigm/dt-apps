@@ -94,11 +94,12 @@ This is the credential that can trade.
 need both — neither is derivable from the other on your side, and the auth URL
 is addressed to the public key.
 
-It is scoped to exactly three endpoints:
+It is scoped to exactly these endpoints:
 
 - `POST /v1/auth/*`
 - `POST /v1/onboarding`
 - `POST /v1/orders`
+- `PUT /v1/orders/*`, amending an order
 
 Everything else on the host is forwarded untouched and needs no placeholder.
 That includes all market data, all account reads, and cancelling orders.
@@ -180,7 +181,7 @@ request:
 rm -rf ~/.openclaw/workspace/tools/paradex/paradex-api
 mkdir -p ~/.openclaw/workspace/tools/paradex/paradex-api
 find ~/.openclaw/workspace/tools/paradex -maxdepth 1 -name '*.mjs' -delete
-cat > ~/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.1.2.mjs <<'EOF'
+cat > ~/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.2.0.mjs <<'EOF'
 import { typedData as td, shortString } from 'starknet';
 
 const V = Object.keys(process.env).find(k => (process.env[k] || '').startsWith('sign-paradex'));
@@ -263,7 +264,7 @@ Reading is then one call:
 
 ```sh
 node --input-type=module -e "
-import { auth, HOST } from '$HOME/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.1.2.mjs';
+import { auth, HOST } from '$HOME/.openclaw/workspace/tools/paradex/paradex-api/paradex-api-1.2.0.mjs';
 const jwt = await auth();
 const r = await fetch(\`https://\${HOST}/v1/account\`, { headers: { Authorization: 'Bearer ' + jwt } });
 console.log(r.status, await r.text());
@@ -294,7 +295,7 @@ useful explanation.
 **Keep the token.** The response carries `jwt_token`. Use it as
 `Authorization: Bearer <jwt_token>` on everything below. Re-auth when it
 expires rather than re-signing every request — the signing credential is scoped
-to three endpoints and the token is what reaches the rest of the API.
+to the endpoints above, and the token is what reaches the rest of the API.
 
 If the account has never traded, `POST /v1/onboarding` comes first. It uses the
 same signing pattern and is idempotent, so calling it when already onboarded is
@@ -462,7 +463,7 @@ error objects; codes from -32768 to -32000 are the standard JSON-RPC set.
 A `403` from the DIME proxy is not a Paradex error — Paradex never saw the
 request. The body says what was missing. The usual causes here:
 
-- The placeholder absent from a request to one of the three scoped endpoints.
+- The placeholder absent from a request to one of the scoped endpoints.
 - The `X-Dime-Sign-` header missing, or named from the placeholder instead of
   from the `CRED_<NAME>` variable.
 - A sign payload that is not exactly 32 bytes, which means you sent something

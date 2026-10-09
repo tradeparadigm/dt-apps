@@ -16,7 +16,7 @@
 schema_version: 1
 
 id: paradex
-version: 1.1.2
+version: 1.2.0
 name: Paradex
 blurb: Trade perpetual futures on Paradex with a key your agent never holds.
 
@@ -143,7 +143,8 @@ credential_types:
     # credential cannot place an order at all — which is most of the reason to
     # hold one. Exact rather than a prefix keeps it to the collection, so
     # GET /v1/orders/<id> and DELETE /v1/orders/<id> stay unmatched and need
-    # nothing.
+    # nothing. PUT /v1/orders/<id> amends an order and carries a signature in
+    # its body, so it has a rule of its own, narrowed to PUT.
     #
     # POST on each, which is what makes listing open orders possible at all:
     # the GET on that same path matches no rule, is forwarded untouched, and
@@ -160,6 +161,8 @@ credential_types:
         methods: [POST]
       - path: /v1/orders
         methods: [POST]
+      - path: /v1/orders/*
+        methods: [PUT]
     # match_body as well as headers: the auth signature rides in a header and
     # an order's rides in the JSON body, and one credential serves both.
     delivery:
@@ -170,4 +173,4 @@ credential_types:
     summary: >-
       Sets: signing credential, STARK curve, (r,s) pair, substituted into any
       request header and the request body, on POST to /v1/auth/*,
-      /v1/onboarding and /v1/orders.
+      /v1/onboarding and /v1/orders, and on PUT to /v1/orders/*.

@@ -7,7 +7,7 @@
 schema_version: 1
 
 id: binance
-version: 1.1.0
+version: 1.2.0
 name: Binance
 blurb: Trade Binance spot and USD-M futures without your agent seeing the API key or secret.
 
@@ -110,6 +110,9 @@ credential_types:
       - path: /fapi/v1/openOrders
       - path: /fapi/v1/allOpenOrders
       - path: /fapi/v1/allOrders
+      - path: /fapi/v1/algoOrder
+      - path: /fapi/v1/openAlgoOrders
+      - path: /fapi/v1/algoOpenOrders
       - path: /fapi/v1/countdownCancelAll
       - path: /fapi/v1/userTrades
       - path: /fapi/v1/income/*
@@ -170,6 +173,9 @@ credential_types:
       - path: /fapi/v1/openOrders
       - path: /fapi/v1/allOpenOrders
       - path: /fapi/v1/allOrders
+      - path: /fapi/v1/algoOrder
+      - path: /fapi/v1/openAlgoOrders
+      - path: /fapi/v1/algoOpenOrders
       - path: /fapi/v1/countdownCancelAll
       - path: /fapi/v1/userTrades
       - path: /fapi/v1/income/*

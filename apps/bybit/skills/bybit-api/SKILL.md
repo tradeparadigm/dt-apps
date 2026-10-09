@@ -42,9 +42,10 @@ markets, demo trading is mainnet's real market data with a simulated balance.
 **The credential decides the host, not the machine you are running on.** The
 name of your own host says nothing about it: a box called `…-testnet-…`
 routinely holds a mainnet credential, and treating the hostname as evidence
-gets you a real order you believed was a paper one. The credential's variable
-name is the only thing that answers this — `CRED_BYBIT_MAINNET_SECRET` is
-mainnet, and mainnet is real money.
+gets you a real order you believed was a paper one. `_hosts` in the
+credential's `_META` answers this: `api.bybit.com` is mainnet, and mainnet is
+real money. A terminal too old to publish `_hosts` leaves only the variable
+name, as in `CRED_BYBIT_MAINNET_SECRET`.
 
 ## What you hold
 
@@ -122,7 +123,7 @@ Read it when a call fails, not before.
 
 ### When this client is wrong
 
-Check `~/.openclaw/workspace/tools/bybit/errata-1.1.1.md` before your first
+Check `~/.openclaw/workspace/tools/bybit/errata-1.2.0.md` before your first
 call. An earlier chat writes it when this client turns out to be wrong against
 the live venue, and it says what to change. The version in the name is this
 app's version, so a file naming any other version is stale: delete it and

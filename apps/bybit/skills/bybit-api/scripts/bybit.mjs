@@ -16,10 +16,13 @@ if (all.length > 1 && !process.env.BYBIT_CRED) {
 }
 const HDR = 'X-Dime-Sign-' + V.replace(/^CRED_/, '').toLowerCase().replaceAll('_', '-');
 
-const KEY = JSON.parse(process.env[V + '_META']).api_key;
-const HOST = /TESTNET/.test(V) ? 'api-testnet.bybit.com'
-           : /DEMO/.test(V)    ? 'api-demo.bybit.com'
-           :                     'api.bybit.com';
+const META = JSON.parse(process.env[V + '_META']);
+const KEY = META.api_key;
+// _hosts names the environment. The label is read only on a terminal too old to publish it.
+const HOST = (META._hosts || '').split(',').find(h => /^api(-testnet|-demo)?\.bybit\.com$/.test(h))
+           || (/TESTNET/.test(V) ? 'api-testnet.bybit.com'
+             : /DEMO/.test(V)    ? 'api-demo.bybit.com'
+             :                     'api.bybit.com');
 
 const method = (process.env.METHOD || 'GET').toUpperCase();
 const body = process.env.BODY || '';
