@@ -380,6 +380,8 @@ def run_sh(code, note="analyze: stub said so", rfq="r_target"):
         marker = Path(bin_dir) / "second-call"
         stub.write_text(
             "#!/bin/sh\n"
+            # interest.py has nothing to add here; test_interest.py covers it.
+            'case "$*" in *scripts/interest.py*) exit 0 ;; esac\n'
             f"if [ -f {shlex.quote(str(marker))} ]; then\n"
             f"  echo REACHED_ANALYZE_PY\n"
             "  exit 0\n"
@@ -437,9 +439,15 @@ def run_sh_argv(rfq, code=4):
     with tempfile.TemporaryDirectory() as bin_dir:
         stub = Path(bin_dir) / "uv"
         out = Path(bin_dir) / "argv.txt"
+        # analyze.sh runs interest.py beside the render, so two calls can log at
+        # once: each takes a lock (mkdir is atomic, and flock is not on macOS)
+        # so one call's lines never land inside another's `---` record.
+        lock = shlex.quote(str(out) + ".lock")
         stub.write_text("#!/bin/sh\n"
+                        f"until mkdir {lock} 2>/dev/null; do sleep 0.01; done\n"
                         f"for a in \"$@\"; do printf '%s\\n' \"$a\"; done >> {shlex.quote(str(out))}\n"
                         f"echo --- >> {shlex.quote(str(out))}\n"
+                        f"rmdir {lock}\n"
                         f"exit {code}\n")
         stub.chmod(0o755)
         env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")
@@ -454,7 +462,8 @@ ok("r_target" not in _argv, f"and not the bare core {_argv}")
 
 # The render call's flags decide the reply: without --render analyze.py prints
 # json.dumps(result), and SKILL.md relays stdout verbatim.
-_calls = run_sh_argv("r_target", code=0)
+# interest.py runs beside the render (test_interest.py covers it); left out here.
+_calls = [c for c in run_sh_argv("r_target", code=0) if "scripts/interest.py" not in c]
 ok(len(_calls) == 2, f"a clean resolve goes on to call analyze.py [{len(_calls)} calls]")
 ok(_calls[-1][:2] == ["run", "scripts/analyze.py"] and "--render" in _calls[-1]
    and "--csv-dir" in _calls[-1], f"and asks it for the rendered block {_calls[-1:]}")
@@ -500,6 +509,8 @@ def run_render(code, out=""):
         marker = Path(bin_dir) / "second-call"
         stub.write_text(
             "#!/bin/sh\n"
+            # interest.py has nothing to add here; test_interest.py covers it.
+            'case "$*" in *scripts/interest.py*) exit 0 ;; esac\n'
             f"if [ -f {shlex.quote(str(marker))} ]; then\n"
             f"  printf '%s' {shlex.quote(out)}\n"
             f"  exit {code}\n"
