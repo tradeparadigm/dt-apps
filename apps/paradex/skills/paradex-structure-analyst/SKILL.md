@@ -69,7 +69,7 @@ the chart. Build it from `nearby_strikes`, which are already priced, and
 still run no commands.
 
 Only if the strike you want is missing from `nearby_strikes` may you make one
-`GET /v1/markets/summary?market=<symbol>`. If that fails, draw at your own
+`paradex__paradex_market_summaries(market_ids: ["<symbol>"])` call. If that fails, draw at your own
 estimate and say in one line that the price is an estimate.
 
 The chart is the last thing in the message, written as this object:
