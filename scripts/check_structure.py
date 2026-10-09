@@ -71,6 +71,9 @@ What is checked, in each case because the consumer refuses the app without it:
     per-app file ceiling is the product.
   * Every directory under skills/ holds a SKILL.md whose frontmatter `name`
     equals the directory, with a non-empty description.
+  * An optional mcp_server names only this app's credential types and
+    environments, sets no env name the sidecar reserves, and uses templates
+    only where a credential fills them.
   * No two apps claim the same skill name. openclaw resolves a collision by
     precedence rather than erroring, so one app's skill would simply never
     load and nothing would say so. The consumer has a backstop — it keeps the
@@ -170,7 +173,7 @@ KNOWN = {
         "schema_version", "id", "version", "name", "blurb", "description",
         "access", "maturity", "default_install",
         "environments", "exclusive_credential_types", "credential_types",
-        "developer", "developer_url", "tint", "icon",
+        "developer", "developer_url", "tint", "icon", "mcp_server",
     },
     "icon": {"path", "view_box"},
     "environment": {"id", "label", "host"},
@@ -185,7 +188,21 @@ KNOWN = {
         "match_query",
     },
     "route": {"path", "methods"},
+    "mcp_server": {"command", "args", "tools", "credential_types", "environments"},
+    "mcp_credential_type": {"type", "env"},
+    "mcp_environment": {"id", "env"},
 }
+
+# Mirrored from pkg/apps: the mcp_server env rules. The sidecar sets the
+# reserved names itself, so a manifest may not.
+MCP_ENV_NAME_RE = re.compile(r"^[A-Z_][A-Z0-9_]{0,63}$")
+MCP_RESERVED_ENV = {
+    "PATH", "HOME", "SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS", "REQUESTS_CA_BUNDLE",
+    "CURL_CA_BUNDLE", "AWS_CA_BUNDLE", "GIT_SSL_CAINFO", "UV_CACHE_DIR", "UV_CONSTRAINT",
+}
+MCP_TEMPLATE_RE = re.compile(r"\$\{(?:placeholder|label|detail\.([a-z0-9_]+))\}")
+# Only inject has no placeholder: the secret goes out as itself.
+MODES_WITHOUT_PLACEHOLDER = {"inject"}
 
 # Which delivery fields each mode actually uses. The consumer canonicalises a
 # delivery and refuses any difference from what was declared, so a field its
@@ -407,6 +424,125 @@ def check_credential_types(man: str, types: object, failures: list[str]) -> None
     check_unique(man, "credential_types.slug", [c.get("slug") for c in types if isinstance(c, dict)], failures)
 
 
+def check_mcp_env(man: str, where: str, env: object, failures: list[str]) -> dict[str, str]:
+    """Names well formed and not reserved, values strings. Returns the readable pairs."""
+    if env is None:
+        return {}
+    if not isinstance(env, dict):
+        failures.append(f"{man}: {where} is not a mapping")
+        return {}
+    pairs = {}
+    for name, value in env.items():
+        if not isinstance(name, str) or not MCP_ENV_NAME_RE.fullmatch(name):
+            failures.append(
+                f"{man}: {where}.{name} is not an environment variable name "
+                "(upper case letters, digits and underscores, at most 64)"
+            )
+            continue
+        if name in MCP_RESERVED_ENV:
+            failures.append(f"{man}: {where}.{name} is set by the sidecar and an app may not set it")
+            continue
+        text = as_text(value)
+        if text is None:
+            failures.append(f"{man}: {where}.{name} must be a string")
+            continue
+        if any(c in text for c in "\x00\n\r"):
+            failures.append(f"{man}: {where}.{name} may not contain a NUL or a line break")
+            continue
+        pairs[name] = text
+    return pairs
+
+
+def check_mcp_list(man: str, where: str, rows: object, kind: str, key: str,
+                   allowed: set[str], failures: list[str]) -> list[tuple[str, dict[str, str]]]:
+    """One of mcp_server's two lists: each row names an app id once, plus its env."""
+    if rows is None:
+        return []
+    if not isinstance(rows, list):
+        failures.append(f"{man}: {where} is not a list")
+        return []
+    out = []
+    for i, row in enumerate(rows):
+        check_known(man, f"{where}[{i}]", row, kind, failures)
+        if not isinstance(row, dict):
+            failures.append(f"{man}: {where}[{i}] is not a mapping")
+            continue
+        ref = row.get(key) if isinstance(row.get(key), str) else None
+        if ref not in allowed:
+            failures.append(f"{man}: {where}[{i}].{key} {ref!r} is not one of this app's {sorted(allowed)}")
+        out.append((ref, check_mcp_env(man, f"{where}[{i}].env", row.get("env"), failures)))
+    check_unique(man, f"{where}.{key}", [ref for ref, _ in out], failures)
+    return out
+
+
+def check_mcp_server(man: str, doc: dict, failures: list[str]) -> None:
+    """The optional MCP server an app runs, as pkg/apps validates it."""
+    mcp = doc.get("mcp_server")
+    if mcp is None:
+        return
+    if not isinstance(mcp, dict):
+        failures.append(f"{man}: mcp_server is not a mapping")
+        return
+    check_known(man, "mcp_server", mcp, "mcp_server", failures)
+    if not (as_text(mcp.get("command")) or "").strip():
+        failures.append(f"{man}: mcp_server.command is required")
+
+    args = mcp.get("args")
+    if args is not None and (
+        not isinstance(args, list) or any(as_text(a) is None for a in args)
+    ):
+        failures.append(f"{man}: mcp_server.args must be a list of strings")
+
+    tools = mcp.get("tools")
+    if tools is not None:
+        if not isinstance(tools, list):
+            failures.append(f"{man}: mcp_server.tools is not a list")
+        elif not tools:
+            failures.append(f"{man}: mcp_server.tools is empty: omit it to expose every tool")
+        else:
+            for i, t in enumerate(tools):
+                if not (as_text(t) or "").strip():
+                    failures.append(f"{man}: mcp_server.tools[{i}] must be a non-empty tool name")
+            check_unique(man, "mcp_server.tools", [as_text(t) for t in tools], failures)
+
+    types = {c.get("id"): c for c in doc.get("credential_types") or [] if isinstance(c, dict)}
+    for ref, env in check_mcp_list(man, "mcp_server.credential_types", mcp.get("credential_types"),
+                                   "mcp_credential_type", "type", set(types), failures):
+        ct = types.get(ref) or {}
+        delivery = ct.get("delivery") if isinstance(ct.get("delivery"), dict) else {}
+        details = {d.get("key") for d in ct.get("detail_fields") or [] if isinstance(d, dict)}
+        for name, value in env.items():
+            where = f"mcp_server.credential_types[type={ref}].env.{name}"
+            for m in MCP_TEMPLATE_RE.finditer(value):
+                key = m.group(1)
+                if key is not None and key not in details:
+                    failures.append(f"{man}: {where} names ${{detail.{key}}}, and {ref!r} has no such detail field")
+                if m.group(0) == "${placeholder}" and delivery.get("mode") in MODES_WITHOUT_PLACEHOLDER:
+                    failures.append(
+                        f"{man}: {where} uses ${{placeholder}}, and mode {delivery.get('mode')!r} has no placeholder"
+                    )
+            if "$" in MCP_TEMPLATE_RE.sub("", value):
+                failures.append(
+                    f"{man}: {where} {value!r} has a $ outside ${{placeholder}}, ${{label}} "
+                    "and ${detail.<key>}"
+                )
+
+    if mcp.get("environments") and not mcp.get("credential_types"):
+        failures.append(
+            f"{man}: mcp_server.environments needs mcp_server.credential_types: "
+            "environment env is added only to a bound credential"
+        )
+    env_ids = {e.get("id") for e in doc.get("environments") or [] if isinstance(e, dict)}
+    for ref, env in check_mcp_list(man, "mcp_server.environments", mcp.get("environments"),
+                                   "mcp_environment", "id", env_ids, failures):
+        for name, value in env.items():
+            if "$" in value:
+                failures.append(
+                    f"{man}: mcp_server.environments[id={ref}].env.{name} is a literal; "
+                    "templates belong in credential_types"
+                )
+
+
 def as_text(value: object) -> str | None:
     """The string the consumer will see for a field it declares as a string.
 
@@ -553,6 +689,7 @@ def check_manifest(app: str, text: str, failures: list[str]) -> str:
     check_scope(man, doc, failures)
     check_environments(man, doc.get("environments"), failures)
     check_credential_types(man, doc.get("credential_types"), failures)
+    check_mcp_server(man, doc, failures)
     return as_text(doc.get("version")) or ""
 
 

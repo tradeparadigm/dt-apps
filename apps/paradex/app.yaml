@@ -16,7 +16,7 @@
 schema_version: 1
 
 id: paradex
-version: 1.1.2
+version: 1.2.0
 name: Paradex
 blurb: Trade perpetual futures on Paradex with a key your agent never holds.
 
@@ -41,10 +41,10 @@ default_install: true
 description: |
   Paradex is a Starknet-based perpetual futures exchange.
 
-  This app installs a skill that teaches your agent how to authenticate to
-  Paradex through the credential proxy, and adds Paradex to the credentials
-  form so you can enrol either of the two credentials Paradex issues without
-  filling in the signing details by hand.
+  This app gives your agent Paradex's MCP server, which signs through the
+  credential proxy, and adds Paradex to the credentials form so you can enrol
+  either of the two credentials Paradex issues without filling in the signing
+  details by hand.
 
   You can hold the read-only token or the signing key, but not both at once —
   see "One credential at a time" below.
@@ -171,3 +171,56 @@ credential_types:
       Sets: signing credential, STARK curve, (r,s) pair, substituted into any
       request header and the request body, on POST to /v1/auth/*,
       /v1/onboarding and /v1/orders.
+
+# Paradex's own MCP server, pinned to forks by commit until Paradex merges
+# signer support. The signing key comes first: it can trade.
+mcp_server:
+  command: uvx
+  args:
+    - --from
+    - git+https://github.com/samparadigm/mcp-paradex-py@3c0c42eab93e6a34d46cf90c2155990f32e7f1ec
+    - --with
+    - git+https://github.com/samparadigm/paradex-py@1a4dec8dc1ec5e5e30108a98f2ec0cb954af0efb
+    - mcp-paradex
+  credential_types:
+    - type: priv-key
+      env:
+        PARADEX_ACCOUNT_ADDRESS: "${detail.account}"
+        PARADEX_ACCOUNT_PUBLIC_KEY: "${detail.public_key}"
+        PARADEX_SIGNER_HEADER: "X-Dime-Sign-${label}"
+        PARADEX_SIGNER_SIGNATURE: "${placeholder}"
+    - type: jwt
+      env:
+        PARADEX_ACCOUNT_ADDRESS: "${detail.account}"
+        PARADEX_JWT_TOKEN: "${placeholder}"
+  environments:
+    - id: mainnet
+      env:
+        PARADEX_ENVIRONMENT: prod
+    - id: testnet
+      env:
+        PARADEX_ENVIRONMENT: testnet
+    - id: nightly
+      env:
+        PARADEX_ENVIRONMENT: nightly
+  tools:
+    - paradex_account_summary
+    - paradex_account_balance
+    - paradex_account_positions
+    - paradex_account_overview
+    - paradex_account_fills
+    - paradex_account_funding_payments
+    - paradex_account_transactions
+    - paradex_open_orders
+    - paradex_orders_history
+    - paradex_order_status
+    - paradex_create_order
+    - paradex_cancel_orders
+    - paradex_trade_preview
+    - paradex_markets
+    - paradex_market_summaries
+    - paradex_bbo
+    - paradex_orderbook
+    - paradex_klines
+    - paradex_funding_data
+    - paradex_trades
