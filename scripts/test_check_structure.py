@@ -748,13 +748,17 @@ class TestMcpServer(unittest.TestCase):
     def test_environments_need_a_credential_type(self):
         start = self.VALID.index("  credential_types:\n")
         end = self.VALID.index("  environments:\n")
-        self.refuses(self.VALID[start:end], "",
-                     "mcp_server.environments needs mcp_server.credential_types")
+        for replacement in ("", "  credential_types: []\n"):
+            with self.subTest(replacement=replacement):
+                self.refuses(self.VALID[start:end], replacement,
+                             "mcp_server.environments needs mcp_server.credential_types")
 
     def test_a_malformed_shape_is_refused(self):
         cases = [
             ("  command: uvx\n", "  command: '  '\n", "mcp_server.command is required"),
             ("  args: [--from, 'git+https://example.com/x@abc', x-server]\n", "  args: x\n",
+             "mcp_server.args must be a list of strings"),
+            ("  args: [--from, 'git+https://example.com/x@abc', x-server]\n", "  args: {a: b}\n",
              "mcp_server.args must be a list of strings"),
             ("  tools: [x_read, x_write]\n", "  tools: x_read\n", "mcp_server.tools is not a list"),
             ("x_write]", "'  ']", "mcp_server.tools[1] must be a non-empty tool name"),
