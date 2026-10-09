@@ -70,6 +70,9 @@ Market symbols look like `ETH-USD-PERP`. Take exact names from
 
 - Times are unix milliseconds. Run `date +%s%3N` for now before you build a
   window.
+- A tool that takes a window returns the first page and drops the cursor.
+  A full page may have more behind it: halve the window and read each half.
+  A fills page holds 100 rows.
 - Minimum notional and tick size come from `paradex__paradex_markets`. Check
   them before sizing an order.
 - `create_order` needs `trigger_price` as a number. Pass `0` when the order

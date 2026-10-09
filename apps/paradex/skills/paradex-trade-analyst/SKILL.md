@@ -44,8 +44,10 @@ Without it, search for the fill with
 single-fill tool.
 
 Start with the last 24 hours and step the window back a day at a time.
-Compare each row's `id` against the fill id as
-strings. Stop at the exact match, and stop after ten windows without one.
+The tool returns one page of at most 100 fills and no cursor. When a window
+returns 100 rows with no match, halve it and search each half, until every
+window returns fewer than 100. Compare each row's `id` against the fill id as
+strings. Stop at the exact match, and stop after ten days without one.
 
 Report and stop when no row matches. Never read a fill from the label, and
 never accept a row whose `id` differs from the one asked for.
