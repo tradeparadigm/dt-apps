@@ -601,5 +601,125 @@ class TestDefaultInstall(unittest.TestCase):
         self.assertIn("exclusive_credential_types", out)
 
 
+class TestMcpServer(unittest.TestCase):
+    """mcp_server, checked against the app's own credential types and environments.
+
+    The fixture's api-key injects its secret and so has no placeholder. The
+    token type added here replaces one, which is what ${placeholder} needs.
+    """
+
+    TOKEN = (
+        "  - id: token\n"
+        "    label: Token\n"
+        "    slug: token\n"
+        "    secret_label: Token\n"
+        "    detail_fields:\n"
+        "      - key: account\n"
+        "        label: Account\n"
+        "    delivery:\n"
+        "      mode: replace\n"
+        "    summary: Swaps the placeholder for the token.\n"
+    )
+    VALID = (
+        "mcp_server:\n"
+        "  command: uvx\n"
+        "  args: [--from, 'git+https://example.com/x@abc', x-server]\n"
+        "  tools: [x_read, x_write]\n"
+        "  credential_types:\n"
+        "    - type: token\n"
+        "      env:\n"
+        "        X_ACCOUNT: ${detail.account}\n"
+        "        X_TOKEN: ${placeholder}\n"
+        "        X_HEADER: X-Dime-Sign-${label}\n"
+        "    - type: api-key\n"
+        "      env:\n"
+        "        X_ACCOUNT: ${detail.account}\n"
+        "  environments:\n"
+        "    - id: mainnet\n"
+        "      env:\n"
+        "        X_ENV: prod\n"
+    )
+
+    def run_with(self, old="", new=""):
+        return check(append(self.TOKEN + self.VALID.replace(old, new)))
+
+    def refuses(self, old, new, because):
+        code, out = self.run_with(old, new)
+        self.assertNotEqual(code, 0, out)
+        self.assertIn(because, out)
+
+    def test_a_full_server_is_accepted(self):
+        code, out = self.run_with()
+        self.assertEqual(code, 0, out)
+
+    def test_a_bare_command_is_accepted(self):
+        code, out = check(append("mcp_server:\n  command: x-server\n"))
+        self.assertEqual(code, 0, out)
+
+    def test_command_is_required(self):
+        self.refuses("  command: uvx\n", "", "mcp_server.command is required")
+
+    def test_args_must_be_strings(self):
+        self.refuses("x-server]", "{a: b}]", "mcp_server.args must be a list of strings")
+
+    def test_an_unknown_key_is_refused(self):
+        self.refuses("  command: uvx\n", "  command: uvx\n  url: http://x\n",
+                     "mcp_server.url is not a field the consumer knows")
+
+    def test_an_unknown_nested_key_is_refused(self):
+        self.refuses("    - id: mainnet\n", "    - id: mainnet\n      host: x\n",
+                     "mcp_server.environments[0].host is not a field")
+
+    def test_a_tool_name_cannot_be_empty(self):
+        self.refuses("x_write]", "'']", "mcp_server.tools[1] must be a non-empty tool name")
+
+    def test_a_tool_is_listed_once(self):
+        self.refuses("x_write]", "x_read]", "mcp_server.tools[1] 'x_read' is listed twice")
+
+    def test_an_env_name_must_be_upper_case(self):
+        self.refuses("X_ENV:", "x_env:", "x_env is not an environment variable name")
+
+    def test_an_env_name_has_at_most_64_characters(self):
+        self.refuses("X_ENV:", "X" * 65 + ":", "is not an environment variable name")
+
+    def test_a_reserved_env_name_is_refused(self):
+        for name in ("PATH", "HOME", "UV_CONSTRAINT", "NODE_EXTRA_CA_CERTS"):
+            with self.subTest(name=name):
+                self.refuses("X_ENV:", f"{name}:", f"{name} is set by the sidecar")
+
+    def test_a_credential_type_must_be_the_apps(self):
+        self.refuses("type: api-key", "type: jwt", "credential_types[1].type 'jwt' is not one of")
+
+    def test_a_credential_type_is_listed_once(self):
+        self.refuses("type: api-key", "type: token", "credential_types.type[1] 'token' is listed twice")
+
+    def test_an_environment_must_be_the_apps(self):
+        self.refuses("id: mainnet", "id: testnet", "environments[0].id 'testnet' is not one of")
+
+    def test_an_environment_is_listed_once(self):
+        self.refuses("        X_ENV: prod\n",
+                     "        X_ENV: prod\n    - id: mainnet\n",
+                     "environments.id[1] 'mainnet' is listed twice")
+
+    def test_a_detail_must_be_one_the_type_declares(self):
+        self.refuses("X_ACCOUNT: ${detail.account}\n        X_TOKEN",
+                     "X_ACCOUNT: ${detail.public_key}\n        X_TOKEN",
+                     "names ${detail.public_key}, and 'token' has no such detail field")
+
+    def test_a_placeholder_needs_a_mode_that_has_one(self):
+        self.refuses("    - type: api-key\n      env:\n",
+                     "    - type: api-key\n      env:\n        X_KEY: ${placeholder}\n",
+                     "mode 'inject' has no placeholder")
+
+    def test_any_other_dollar_is_refused(self):
+        for value in ("$HOME", "${secret}", "${detail.account", "$${label}"):
+            with self.subTest(value=value):
+                self.refuses("X_TOKEN: ${placeholder}", f"X_TOKEN: '{value}'",
+                             "has a $ outside")
+
+    def test_an_environment_value_is_a_literal(self):
+        self.refuses("X_ENV: prod", "X_ENV: ${label}", "env.X_ENV is a literal")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

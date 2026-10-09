@@ -90,6 +90,17 @@ that made the mistake:
   attribute, and an icon is **one SVG path** rather than a file: a path is
   geometry, so it cannot execute, fetch, or escape the box it is drawn into.
   Half an icon is refused rather than defaulted;
+- an optional `mcp_server` names a `command`, its `args` and an optional
+  `tools` include list, which openclaw registers as the server named by the
+  app id. Its `credential_types` and `environments` lists name only this app's
+  ids, each once, and set env names matching `^[A-Z_][A-Z0-9_]{0,63}$` that the
+  sidecar does not reserve. A credential type's env values may use
+  `${placeholder}`, `${label}` and `${detail.<key>}` for a detail field that
+  type declares. `${placeholder}` needs a delivery mode that has one, so
+  `inject` refuses it. Environment env values are literals. The server is
+  pinned with the app version, so a change to `mcp_server` needs a `version:`
+  bump. DIME Terminal must know the key before an app here uses it, because
+  its decoder runs with `KnownFields` and refuses the whole app;
 - no two apps claim the same skill name. openclaw resolves a collision by
   precedence rather than erroring, so one of them would simply never load;
 - hosts are bare lowercase hostnames — no scheme, port, path or underscore —
