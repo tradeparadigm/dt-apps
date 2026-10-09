@@ -439,9 +439,15 @@ def run_sh_argv(rfq, code=4):
     with tempfile.TemporaryDirectory() as bin_dir:
         stub = Path(bin_dir) / "uv"
         out = Path(bin_dir) / "argv.txt"
+        # analyze.sh runs interest.py beside the render, so two calls can log at
+        # once: each takes a lock (mkdir is atomic, and flock is not on macOS)
+        # so one call's lines never land inside another's `---` record.
+        lock = shlex.quote(str(out) + ".lock")
         stub.write_text("#!/bin/sh\n"
+                        f"until mkdir {lock} 2>/dev/null; do sleep 0.01; done\n"
                         f"for a in \"$@\"; do printf '%s\\n' \"$a\"; done >> {shlex.quote(str(out))}\n"
                         f"echo --- >> {shlex.quote(str(out))}\n"
+                        f"rmdir {lock}\n"
                         f"exit {code}\n")
         stub.chmod(0o755)
         env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")

@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 import pathlib as _pl
@@ -128,6 +129,9 @@ trades = [
 ]
 rows = interest.history_rows(trades, "r_THIS", NOW)
 descs = [r["description"] for r in rows]
+ok(interest.history_rows(trades, "DRFQv2-r_THIS", NOW) == rows
+   and interest.history_rows(trades, "GRFQ-r_THIS", NOW) == rows,
+   "the tape's prefixed id excludes the same block as the bare one (core_id on both)")
 ok("r_THIS" not in json.dumps(rows) and len(rows) == 5, f"the analysed block, old and unreadable rows are left out [{descs}]")
 ok(rows[0]["date"] == "2026-09-22" and rows[0]["side"] == "BUY", f"an epoch-ms time becomes a date [{rows[0]}]")
 ok(descs[1] == "BTC bought BTC-25SEP26-105000-P", f"a row without a description is described by its legs [{descs[1]}]")
@@ -280,6 +284,17 @@ sent = Relay.asked[-1]
 ok(code == 0 and out == "*The taker is betting BTC rises and volatility rises.*"
    and set(sent["questions"]) == {"trade_price_bet", "trade_vol_bet"} and "trade_history" not in sent["state"],
    f"no history: only the bet is asked, and answered [{out}]")
+interest.paradigm_credentials = lambda: ("A", "S", "h")
+interest.fetch_trades = lambda creds, pages=3: [{"rfq_id": "r_N", "description": "Put 30 Oct 26 2100",
+                                                 "executed_at": "2026-10-01T00:00:00"}]  # no timezone
+code, out = run_main()
+ok(code == 0 and out.startswith("*The taker is betting") and "trade_history" not in Relay.asked[-1]["state"],
+   f"history that history_rows cannot read: the bet is still asked and shown [{out}]")
+def _boom(creds, pages=3):
+    raise ValueError("unexpected page shape")
+interest.fetch_trades = _boom
+code, out = run_main()
+ok(code == 0 and out.startswith("*The taker is betting"), f"a fetch that raises: the bet still is [{out}]")
 interest.paradigm_credentials = lambda: None
 code, out = run_main()
 ok(code == 0 and out.startswith("*The taker is betting") and "trade_history" not in Relay.asked[-1]["state"],
@@ -290,9 +305,10 @@ srv.shutdown()
 SH = skillpath.scripts("paradigm-block-analyst") / "analyze.sh"
 
 
-def analyze_with(render_out, render_exit, line):
+def analyze_with(render_out, render_exit, line, interest_s=0, grace=None):
     """analyze.sh with uv stubbed: collect writes a fill, the render prints
-    render_out and exits render_exit, interest.py prints line."""
+    render_out and exits render_exit, interest.py prints line after
+    interest_s seconds. Returns (exit code, stdout, seconds it took)."""
     with tempfile.TemporaryDirectory() as bin_dir:
         stub = Path(bin_dir) / "uv"
         stub.write_text(
@@ -301,23 +317,32 @@ def analyze_with(render_out, render_exit, line):
             "  *collect_analysis.py*)\n"
             "    while [ $# -gt 0 ]; do [ \"$1\" = --out-dir ] && d=\"$2\"; shift; done\n"
             "    echo 'DESCRIPTION' > \"$d/fill.csv\"; exit 0 ;;\n"
-            f"  *interest.py*) printf '%s' {shlex.quote(line)}; exit 0 ;;\n"
+            f"  *interest.py*) sleep {interest_s}; printf '%s' {shlex.quote(line)}; exit 0 ;;\n"
             f"  *analyze.py*) printf '%s\\n' {shlex.quote(render_out)}; exit {render_exit} ;;\n"
             "esac\nexit 9\n")
         stub.chmod(0o755)
         env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")
+        if grace is not None:
+            env["ANALYZE_INTEREST_GRACE"] = str(grace)
+        t0 = time.monotonic()
         r = subprocess.run(["bash", str(SH), "r_TEST"], capture_output=True, text=True, env=env)
-        return r.returncode, r.stdout
+        return r.returncode, r.stdout, time.monotonic() - t0
 
 
-code, out = analyze_with("**BTC block**\n| Greeks | x |", 0, "*Your kind of trade.*")
+code, out, _ = analyze_with("**BTC block**\n| Greeks | x |", 0, "*Your kind of trade.*")
 ok(code == 0 and out.rstrip().endswith("| Greeks | x |\n\n*Your kind of trade.*"),
    f"exit 0: the line closes the block [{out!r}]")
-code, out = analyze_with("**BTC block**\n\n## For the agent\n\ntask", 1, "*Your kind of trade.*")
+code, out, _ = analyze_with("**BTC block**\n\n## For the agent\n\ntask", 1, "*Your kind of trade.*")
 ok(code == 1 and out.index("*Your kind of trade.*") < out.index("## For the agent"),
    f"exit 1: the line stays with the block, above the agent's section [{out!r}]")
-code, out = analyze_with("**BTC block**", 0, "")
+code, out, _ = analyze_with("**BTC block**", 0, "")
 ok(code == 0 and out == "**BTC block**\n", f"no line: the block is unchanged [{out!r}]")
+code, out, took = analyze_with("**BTC block**", 0, "*Late.*", interest_s=6, grace=1)
+ok(code == 0 and out == "**BTC block**\n" and took < 4,
+   f"JEV slower than the render plus the grace: the block goes out without it [{took:.1f}s, {out!r}]")
+code, out, took = analyze_with("**BTC block**", 0, "*In time.*", interest_s=0.5, grace=3)
+ok(code == 0 and out.rstrip().endswith("*In time.*") and took < 3,
+   f"a line that lands inside the grace is kept, without waiting the grace out [{took:.1f}s]")
 
 print(f"\n{_p} passed, {_f} failed")
 sys.exit(1 if _f else 0)

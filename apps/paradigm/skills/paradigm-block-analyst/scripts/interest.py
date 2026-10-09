@@ -33,6 +33,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from fill_sources import core_id  # stdlib only, beside this script
+
 SIDECAR = os.environ.get("TERMINAL_SIDECAR_URL") or "http://127.0.0.1:8081"
 # The relay has its own port, bound to 127.0.0.1 only; the main port refuses it.
 JEV_URL = os.environ.get("TERMINAL_JEV_URL") or "http://127.0.0.1:8091/api/jev"
@@ -299,7 +301,9 @@ def history_rows(trades, exclude_rfq, now):
     out = []
     for t in trades:
         rfq = str(_first(t, "rfq_id") or "")
-        if exclude_rfq and rfq and rfq.removeprefix("r_") == exclude_rfq.removeprefix("r_"):
+        # The fill's id comes off the tape (DRFQv2-r_…), the trade's from the
+        # API (r_…): one block spelled two ways, so both go through core_id.
+        if exclude_rfq and rfq and core_id(rfq) == core_id(exclude_rfq):
             continue
         # A rejected trade never settled: nothing was bought or sold.
         if str(t.get("state") or "").upper() == "REJECTED":
@@ -462,7 +466,13 @@ def build_request(trade, rfq, price_bet, trades, now):
     questions = dict(BET_QUESTIONS)
     if price_bet:
         del questions["trade_price_bet"]
-    history = history_rows(trades, rfq, now)
+    # The history half must never cost the bet half, which needs none of it:
+    # a trade shape history_rows does not expect leaves only the bet asked.
+    try:
+        history = history_rows(trades, rfq, now)
+    except Exception as e:  # noqa: BLE001
+        debug(f"history unreadable, asking the bet alone: {e!r}")
+        history = []
     if history:
         state["trade_history"] = json.dumps(history, separators=(",", ":"))
         questions.update(HISTORY_QUESTIONS)
@@ -486,8 +496,12 @@ def main(argv=None):
         return 0
     now = dt.datetime.now(dt.timezone.utc)
     # The history half needs the user's Paradigm account; the bet does not.
-    creds = paradigm_credentials()
-    trades = fetch_trades(creds) if creds else []
+    try:
+        creds = paradigm_credentials()
+        trades = fetch_trades(creds) if creds else []
+    except Exception as e:  # noqa: BLE001 — same reason as in build_request
+        debug(f"Paradigm history unavailable, asking the bet alone: {e!r}")
+        creds, trades = None, []
     questions, state = build_request(trade, rfq, price_bet, trades, now)
     if creds and "trade_history" not in state:
         debug("no Paradigm history in the last 90 days")
