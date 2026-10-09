@@ -27,56 +27,6 @@ Your `AGENTS.md` already explains the placeholder mechanism in general — how
 how to name the `X-Dime-Sign-` header. This file assumes that and covers only
 what is specific to Bybit.
 
-## If `cex` is on your PATH
-
-Run `command -v cex` first. If it prints a path, use `cex` for anything it
-covers and skip the signing in the rest of this file. It finds your Bybit
-credential, takes the environment from the hosts the credential lists, and
-signs through the proxy.
-
-```sh
-cex balance
-cex positions
-cex orders --symbol BTCUSDT
-cex fills --symbol BTCUSDT --from <unix ms>
-cex income --from <unix ms>
-cex place --symbol BTCUSDT --side buy --type limit --amount 0.001 --price <price>
-cex cancel --id <orderId>
-```
-
-It covers linear perpetuals, USDT and USDC. Spot, options, amending an order and anything else in this file are REST only. `cex --help` lists every flag.
-
-Each run prints one JSON document, and `--help` prints the usage.
-
-- `"ok": true`, exit 0: `data` is the answer.
-- `"ok": false`, exit 1: the venue or the proxy refused, or nothing answered.
-  - `refused` lists each refused request with its status and body. Read them
-    against "When something fails" below; the causes are the same as for a REST call.
-  - `error` with `status` and `body`: one call failed outright. Read it the
-    same way.
-  - `errors`: what the client itself reported, sometimes with no `refused`
-    entry. `data` is whatever came back anyway.
-  - `could not load bybit markets` (`bybitdemo` on demo): the market list did not load. `refused`
-    names the request. A proxy 403 or the venue being down are the usual
-    causes.
-  - `no answer within 60s`: the venue or the proxy is slow or unreachable. Run
-    it once more with `--timeout 120`, then report it.
-- exit 2: the command was wrong, and nothing was changed.
-  - An unknown symbol. It suggests close matches.
-  - A missing or malformed flag.
-  - Several venue credentials. Pass `--cred CRED_<NAME>`. A `--cred` that names
-    no `sign-` credential, or one whose hosts `cex` does not know, is refused
-    the same way.
-  - No `sign-` credential it can use. None is enrolled, the one enrolled is a
-    read-only `cred-` token, or its `_META` has no `_hosts` because the
-    terminal predates them. Use REST.
-  - `no open order matches`: the order already filled or was cancelled, or the
-    id is wrong. `cex orders` shows what is open.
-
-For anything `cex` does not cover, or when it is not installed, use the REST
-instructions below. If `cex` fails in a way this list does not explain, say
-what you ran and what it printed, then use REST.
-
 ## Hosts
 
 | Environment | REST base |
