@@ -138,15 +138,15 @@ credential_types:
     # signature. The /* form is a plain prefix and covers the bare /v1/auth
     # too, so it is a strict superset of what was here.
     #
-    # POST /v1/orders EXACT. It carries the order signature in its JSON body,
-    # so without it a signing credential cannot place an order at all, which
-    # is most of the reason to hold one. Exact keeps POST to the collection.
+    # /v1/orders EXACT, and deliberately not /v1/orders/*. POST /v1/orders
+    # carries the order signature in its JSON body, so without it a signing
+    # credential cannot place an order at all — which is most of the reason to
+    # hold one. Exact rather than a prefix keeps it to the collection, so
+    # GET /v1/orders/<id> and DELETE /v1/orders/<id> stay unmatched and need
+    # nothing.
     #
-    # PUT /v1/orders/*: amending an order carries a signature in its body.
-    # GET and DELETE on /v1/orders/<id> stay unmatched and need nothing.
-    #
-    # A method on each, which is what makes listing open orders possible at all:
-    # GET /v1/orders matches no rule, is forwarded untouched, and
+    # POST on each, which is what makes listing open orders possible at all:
+    # the GET on that same path matches no rule, is forwarded untouched, and
     # needs neither the payload header nor the placeholder. A path-only
     # narrowing would have demanded a signature for a read that never wanted
     # one.
@@ -160,8 +160,6 @@ credential_types:
         methods: [POST]
       - path: /v1/orders
         methods: [POST]
-      - path: /v1/orders/*
-        methods: [PUT]
     # match_body as well as headers: the auth signature rides in a header and
     # an order's rides in the JSON body, and one credential serves both.
     delivery:
@@ -172,7 +170,7 @@ credential_types:
     summary: >-
       Sets: signing credential, STARK curve, (r,s) pair, substituted into any
       request header and the request body, on POST to /v1/auth/*,
-      /v1/onboarding and /v1/orders, and PUT to /v1/orders/*.
+      /v1/onboarding and /v1/orders.
 
 # Paradex's own MCP server, pinned to forks by commit until Paradex merges
 # signer support. The signing key comes first: it can trade.
