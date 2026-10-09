@@ -97,7 +97,8 @@ that made the mistake:
   sidecar does not reserve. A credential type's env values may use
   `${placeholder}`, `${label}` and `${detail.<key>}` for a detail field that
   type declares. `${placeholder}` needs a delivery mode that has one, so
-  `inject` refuses it. Environment env values are literals. The server is
+  `inject` refuses it. Environment env values are literals, and an
+  `environments` list needs a `credential_types` list. The server is
   pinned with the app version, so a change to `mcp_server` needs a `version:`
   bump. DIME Terminal must know the key before an app here uses it, because
   its decoder runs with `KnownFields` and refuses the whole app;
