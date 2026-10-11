@@ -57,7 +57,8 @@ def resp(score=None, conf=None, choice=None, p_open=None, price=None, vol=None, 
 
 # The playground runs that set the wording (v4): 2.87, 2.03, 1.04, 0.03.
 ok("Your kind of trade" in (interest.line_for(resp(2.87, 0.88)) or ""), "2.87 at 88% is their kind of trade")
-ok("outside your usual" in (interest.line_for(resp(2.03, 0.97)) or ""), "2.03 is their structure outside their range")
+ok(interest.line_for(resp(2.03, 0.97)) == "*You've traded this structure on this coin before, at different strikes or expiries.*",
+   "2.03 is their structure, at strikes or expiries unlike theirs")
 ok(interest.line_for(resp(1.04, 0.95)) is None, "1.04 (coin only) says nothing")
 ok(interest.line_for(resp(0.03, 0.95)) is None, "0.03 (another coin) says nothing")
 ok(interest.line_for(resp(2.9, 0.4)) is None, "an unsure score says nothing")
