@@ -56,7 +56,7 @@ def resp(score=None, conf=None, choice=None, p_open=None, price=None, vol=None, 
 
 
 # The playground runs that set the wording (v4): 2.87, 2.03, 1.04, 0.03.
-ok("Your kind of trade" in (interest.line_for(resp(2.87, 0.88)) or ""), "2.87 at 88% is their kind of trade")
+ok("at similar strikes and expiries" in (interest.line_for(resp(2.87, 0.88)) or ""), "2.87 at 88% is their kind of trade")
 ok(interest.line_for(resp(2.03, 0.97)) == "*You've traded this structure on this coin before, at different strikes or expiries.*",
    "2.03 is their structure, at strikes or expiries unlike theirs")
 ok(interest.line_for(resp(1.04, 0.95)) is None, "1.04 (coin only) says nothing")
@@ -65,10 +65,10 @@ ok(interest.line_for(resp(2.9, 0.4)) is None, "an unsure score says nothing")
 ok(interest.line_for(resp(2.9)) is None, "a score with no confidence says nothing")
 ok("hasn't closed it" in (interest.line_for(resp(2.9, 0.9, "still_open", 0.85)) or ""),
    "an open position outranks the kind of trade")
-ok("Your kind of trade" in (interest.line_for(resp(2.9, 0.9, "still_open", 0.6)) or ""),
+ok("at similar strikes and expiries" in (interest.line_for(resp(2.9, 0.9, "still_open", 0.6)) or ""),
    "an unsure open position falls back to the kind of trade")
 ok(interest.line_for(resp(choice="closed", p_open=0.05)) is None, "closed with no score says nothing")
-ok("Your kind" in (interest.line_for({"your_kind_of_trade": {"score": 3, "confidence": 0.9}}) or ""),
+ok("at similar strikes and expiries" in (interest.line_for({"your_kind_of_trade": {"score": 3, "confidence": 0.9}}) or ""),
    "answers at the top level are read too")
 
 # The taker's bet, which needs no history.
@@ -80,8 +80,8 @@ ok(interest.line_for(resp(price="up", vol="neither"), None) == "*The taker is be
    "no coin known: 'the price'")
 ok(interest.line_for(resp(price="up", vol="rises", p=0.5), "BTC") is None, "an unsure bet says nothing")
 ok(interest.line_for(resp(2.87, 0.88, price="up", vol="falls"), "BTC")
-   == "*The taker is betting BTC rises and volatility falls.* *Your kind of trade: you've traded this "
-      "structure on this coin at similar strikes and expiries.*", "the bet comes first, then the history")
+   == "*The taker is betting BTC rises and volatility falls.* *You've traded this structure on this "
+      "coin before, at similar strikes and expiries.*", "the bet comes first, then the history")
 
 # A vertical spread's direction is worked out, not asked (JEV split 50/50 on them).
 SPB = interest.spread_price_bet
@@ -103,7 +103,7 @@ REAL = {"model": "jev-1.13.0", "answers": {
     "still_holds_it": {"type": "choice", "choice": "closed", "confidence": 0.95,
                        "probabilities": {"still_open": 0.03, "closed": 0.95, "never": 0.02}}},
     "usage": {"input_tokens": 361, "output_tokens": 44}}
-ok("Your kind of trade" in (interest.line_for(REAL) or ""), "the real response shape is read")
+ok("at similar strikes and expiries" in (interest.line_for(REAL) or ""), "the real response shape is read")
 REAL["answers"]["still_holds_it"].update(choice="still_open", probabilities={"still_open": 0.9})
 ok("hasn't closed it" in (interest.line_for(REAL) or ""), "and its choice answer too")
 
@@ -246,7 +246,7 @@ def run_main(*extra):
 
 code, out = run_main()
 sent = Relay.asked[-1]
-ok(code == 0 and "Your kind of trade" in out, f"the relay's answer becomes the line [{out}]")
+ok(code == 0 and "at similar strikes and expiries" in out, f"the relay's answer becomes the line [{out}]")
 ok(set(sent["questions"]) == {"trade_price_bet", "trade_vol_bet", "your_kind_of_trade", "still_holds_it"}
    and sent["state"]["trade"]
    == "BTC 30 Oct 26 110000/130000 RR: the taker sold BTC-30OCT26-110000-P x250; bought BTC-30OCT26-130000-C x250",

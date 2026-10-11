@@ -445,7 +445,7 @@ def history_line(resp):
         return None
     level = round(score)
     if level >= 3:
-        return "*Your kind of trade: you've traded this structure on this coin at similar strikes and expiries.*"
+        return "*You've traded this structure on this coin before, at similar strikes and expiries.*"
     if level == 2:
         return "*You've traded this structure on this coin before, at different strikes or expiries.*"
     return None
