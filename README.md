@@ -100,8 +100,8 @@ that made the mistake:
   `inject` refuses it. Environment env values are literals, and an
   `environments` list needs a `credential_types` list. The sidecar's limits
   apply: a command of at most 512 bytes, at most 64 args and 256 tools of
-  4096 bytes each, env values of 4096 bytes, no NUL in any of them, and at
-  most 64 env names in one credential type's env plus one environment's. The
+  4096 bytes each, env values of 4096 bytes, no NUL in the command, args or
+  env values, and at most 64 env names in one credential type's env plus one environment's. The
   server is pinned with the app version, so a change to `mcp_server` needs a `version:`
   bump. DIME Terminal must know the key before an app here uses it, because
   its decoder runs with `KnownFields` and refuses the whole app;
