@@ -782,12 +782,14 @@ class TestMcpServer(unittest.TestCase):
     def names(n):
         return "".join(f"        X_{i}: v\n" for i in range(n))
 
+    # é is two bytes: the limits count bytes, as Go's len does.
     def test_a_server_at_every_size_limit_is_accepted(self):
         edits = [
-            ("  command: uvx\n", "  command: " + "x" * 512 + "\n"),
-            (self.ARGS, "  args: [" + ", ".join(["a" * 4096] * 64) + "]\n"),
+            ("  command: uvx\n", "  command: " + "é" * 256 + "\n"),
+            (self.ARGS, "  args: [" + ", ".join(["é" * 2048] * 64) + "]\n"),
             (self.TOOLS, "  tools: [" + ", ".join(f"t{i}" for i in range(255)) + ", " + "é" * 2048 + "]\n"),
-            ("X_ENV: prod", "X_ENV: " + "x" * 4096),
+            # X_0 is in both envs and counts once.
+            ("        X_ENV: prod\n", "        X_ENV: " + "é" * 2048 + "\n        X_0: v\n"),
             (self.CREDENTIAL_NAMES, self.CREDENTIAL_NAMES + self.names(60)),
         ]
         manifest = self.VALID
@@ -798,15 +800,15 @@ class TestMcpServer(unittest.TestCase):
 
     def test_a_server_past_a_size_limit_is_refused(self):
         cases = [
-            ("  command: uvx\n", "  command: " + "x" * 513 + "\n", "mcp_server.command is over 512 bytes"),
+            ("  command: uvx\n", "  command: " + "é" * 256 + "x\n", "mcp_server.command is over 512 bytes"),
             ("  command: uvx\n", '  command: "uv\\x00x"\n', "mcp_server.command is over 512 bytes or holds a NUL"),
             (self.ARGS, "  args: [" + ", ".join(["a"] * 65) + "]\n", "mcp_server.args has more than 64 entries"),
-            ("x-server]", "x" * 4097 + "]", "mcp_server.args[2] is over 4096 bytes"),
+            ("x-server]", "é" * 2048 + "x]", "mcp_server.args[2] is over 4096 bytes"),
             ("x-server]", '"x\\x00y"]', "mcp_server.args[2] is over 4096 bytes or holds a NUL"),
             (self.TOOLS, "  tools: [" + ", ".join(f"t{i}" for i in range(257)) + "]\n",
              "mcp_server.tools has more than 256 entries"),
             ("x_write]", "é" * 2049 + "]", "mcp_server.tools[1] is over 4096 bytes"),
-            ("X_ENV: prod", "X_ENV: " + "x" * 4097, "env.X_ENV is over 4096 bytes"),
+            ("X_ENV: prod", "X_ENV: " + "é" * 2048 + "x", "env.X_ENV is over 4096 bytes"),
             (self.CREDENTIAL_NAMES, self.CREDENTIAL_NAMES + self.names(61),
              "credential type 'token' binds more than 64 env entries"),
             (self.CREDENTIAL_NAMES + "    - type: api-key\n      env:\n        X_ACCOUNT: ${detail.account}\n"
@@ -817,6 +819,17 @@ class TestMcpServer(unittest.TestCase):
         for old, new, because in cases:
             with self.subTest(because=because):
                 self.refuses(old, new, because)
+
+    def test_every_environment_counts_toward_the_env_limit(self):
+        testnet = "  - id: testnet\n    label: Testnet\n    host: api.testnet.example.com\n"
+        # 64 names with mainnet, 65 with testnet.
+        server = self.VALID.replace(self.CREDENTIAL_NAMES, self.CREDENTIAL_NAMES + self.names(60)) + (
+            "    - id: testnet\n      env:\n        X_ENV: test\n        X_MORE: v\n"
+        )
+        code, out = check(lambda src: src.replace("    host: api.example.com\n", "    host: api.example.com\n" + testnet)
+                          + self.TOKEN + server)
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("credential type 'token' binds more than 64 env entries", out)
 
     def test_an_environment_value_is_a_literal(self):
         self.refuses("X_ENV: prod", "X_ENV: ${label}", "env.X_ENV is a literal")
