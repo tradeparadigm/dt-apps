@@ -72,8 +72,8 @@ What is checked, in each case because the consumer refuses the app without it:
   * Every directory under skills/ holds a SKILL.md whose frontmatter `name`
     equals the directory, with a non-empty description.
   * An optional mcp_server names only this app's credential types and
-    environments, sets no env name the sidecar reserves, and uses templates
-    only where a credential fills them.
+    environments, sets no env name the sidecar reserves, uses templates only
+    where a credential fills them, and stays inside the sidecar's size limits.
   * No two apps claim the same skill name. openclaw resolves a collision by
     precedence rather than erroring, so one app's skill would simply never
     load and nothing would say so. The consumer has a backstop — it keeps the
@@ -201,6 +201,12 @@ MCP_RESERVED_ENV = {
     "CURL_CA_BUNDLE", "AWS_CA_BUNDLE", "GIT_SSL_CAINFO", "UV_CACHE_DIR", "UV_CONSTRAINT",
 }
 MCP_TEMPLATE_RE = re.compile(r"\$\{(?:placeholder|label|detail\.([a-z0-9_]+))\}")
+# The sidecar refuses the whole apps PUT past these, so pkg/apps refuses first.
+MCP_MAX_ARGS = 64
+MCP_MAX_ENV = 64
+MCP_MAX_TOOLS = 256
+MCP_MAX_VALUE_BYTES = 4096
+MCP_MAX_COMMAND_BYTES = 512
 # Only inject has no placeholder: the secret goes out as itself.
 MODES_WITHOUT_PLACEHOLDER = {"inject"}
 
@@ -449,6 +455,9 @@ def check_mcp_env(man: str, where: str, env: object, failures: list[str]) -> dic
         if any(c in text for c in "\x00\n\r"):
             failures.append(f"{man}: {where}.{name} may not contain a NUL or a line break")
             continue
+        if len(text.encode()) > MCP_MAX_VALUE_BYTES:
+            failures.append(f"{man}: {where}.{name} is over {MCP_MAX_VALUE_BYTES} bytes")
+            continue
         pairs[name] = text
     return pairs
 
@@ -484,14 +493,25 @@ def check_mcp_server(man: str, doc: dict, failures: list[str]) -> None:
         failures.append(f"{man}: mcp_server is not a mapping")
         return
     check_known(man, "mcp_server", mcp, "mcp_server", failures)
-    if not (as_text(mcp.get("command")) or "").strip():
+    command = as_text(mcp.get("command")) or ""
+    if not command.strip():
         failures.append(f"{man}: mcp_server.command is required")
+    elif len(command.encode()) > MCP_MAX_COMMAND_BYTES or "\x00" in command:
+        failures.append(f"{man}: mcp_server.command is over {MCP_MAX_COMMAND_BYTES} bytes or holds a NUL")
 
     args = mcp.get("args")
-    if args is not None and (
-        not isinstance(args, list) or any(as_text(a) is None for a in args)
-    ):
-        failures.append(f"{man}: mcp_server.args must be a list of strings")
+    if args is not None:
+        if not isinstance(args, list) or any(as_text(a) is None for a in args):
+            failures.append(f"{man}: mcp_server.args must be a list of strings")
+        else:
+            if len(args) > MCP_MAX_ARGS:
+                failures.append(f"{man}: mcp_server.args has more than {MCP_MAX_ARGS} entries")
+            for i, a in enumerate(args):
+                text = as_text(a)
+                if len(text.encode()) > MCP_MAX_VALUE_BYTES or "\x00" in text:
+                    failures.append(
+                        f"{man}: mcp_server.args[{i}] is over {MCP_MAX_VALUE_BYTES} bytes or holds a NUL"
+                    )
 
     tools = mcp.get("tools")
     if tools is not None:
@@ -500,14 +520,20 @@ def check_mcp_server(man: str, doc: dict, failures: list[str]) -> None:
         elif not tools:
             failures.append(f"{man}: mcp_server.tools is empty: omit it to expose every tool")
         else:
+            if len(tools) > MCP_MAX_TOOLS:
+                failures.append(f"{man}: mcp_server.tools has more than {MCP_MAX_TOOLS} entries")
             for i, t in enumerate(tools):
-                if not (as_text(t) or "").strip():
+                name = as_text(t) or ""
+                if not name.strip():
                     failures.append(f"{man}: mcp_server.tools[{i}] must be a non-empty tool name")
+                elif len(name.encode()) > MCP_MAX_VALUE_BYTES:
+                    failures.append(f"{man}: mcp_server.tools[{i}] is over {MCP_MAX_VALUE_BYTES} bytes")
             check_unique(man, "mcp_server.tools", [as_text(t) for t in tools], failures)
 
     types = {c.get("id"): c for c in doc.get("credential_types") or [] if isinstance(c, dict)}
-    for ref, env in check_mcp_list(man, "mcp_server.credential_types", mcp.get("credential_types"),
-                                   "mcp_credential_type", "type", set(types), failures):
+    creds = check_mcp_list(man, "mcp_server.credential_types", mcp.get("credential_types"),
+                           "mcp_credential_type", "type", set(types), failures)
+    for ref, env in creds:
         ct = types.get(ref) or {}
         delivery = ct.get("delivery") if isinstance(ct.get("delivery"), dict) else {}
         details = {d.get("key") for d in ct.get("detail_fields") or [] if isinstance(d, dict)}
@@ -533,14 +559,20 @@ def check_mcp_server(man: str, doc: dict, failures: list[str]) -> None:
             "environment env is added only to a bound credential"
         )
     env_ids = {e.get("id") for e in doc.get("environments") or [] if isinstance(e, dict)}
-    for ref, env in check_mcp_list(man, "mcp_server.environments", mcp.get("environments"),
-                                   "mcp_environment", "id", env_ids, failures):
+    envs = check_mcp_list(man, "mcp_server.environments", mcp.get("environments"),
+                          "mcp_environment", "id", env_ids, failures)
+    for ref, env in envs:
         for name, value in env.items():
             if "$" in value:
                 failures.append(
                     f"{man}: mcp_server.environments[id={ref}].env.{name} is a literal; "
                     "templates belong in credential_types"
                 )
+
+    # A binding is one credential type's env plus at most one environment's.
+    for ref, cred_env in creds:
+        if any(len(cred_env.keys() | env.keys()) > MCP_MAX_ENV for env in [{}] + [e for _, e in envs]):
+            failures.append(f"{man}: mcp_server: credential type {ref!r} binds more than {MCP_MAX_ENV} env entries")
 
 
 def as_text(value: object) -> str | None:

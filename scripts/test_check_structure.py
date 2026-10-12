@@ -773,6 +773,51 @@ class TestMcpServer(unittest.TestCase):
             with self.subTest(because=because):
                 self.refuses(old, new, because)
 
+    ARGS = "  args: [--from, 'git+https://example.com/x@abc', x-server]\n"
+    TOOLS = "  tools: [x_read, x_write]\n"
+    # 3 names in the token env, plus mainnet's X_ENV.
+    CREDENTIAL_NAMES = "        X_HEADER: X-Dime-Sign-${label}\n"
+
+    @staticmethod
+    def names(n):
+        return "".join(f"        X_{i}: v\n" for i in range(n))
+
+    def test_a_server_at_every_size_limit_is_accepted(self):
+        edits = [
+            ("  command: uvx\n", "  command: " + "x" * 512 + "\n"),
+            (self.ARGS, "  args: [" + ", ".join(["a" * 4096] * 64) + "]\n"),
+            (self.TOOLS, "  tools: [" + ", ".join(f"t{i}" for i in range(255)) + ", " + "é" * 2048 + "]\n"),
+            ("X_ENV: prod", "X_ENV: " + "x" * 4096),
+            (self.CREDENTIAL_NAMES, self.CREDENTIAL_NAMES + self.names(60)),
+        ]
+        manifest = self.VALID
+        for old, new in edits:
+            manifest = manifest.replace(old, new)
+        code, out = check(append(self.TOKEN + manifest))
+        self.assertEqual(code, 0, out)
+
+    def test_a_server_past_a_size_limit_is_refused(self):
+        cases = [
+            ("  command: uvx\n", "  command: " + "x" * 513 + "\n", "mcp_server.command is over 512 bytes"),
+            ("  command: uvx\n", '  command: "uv\\x00x"\n', "mcp_server.command is over 512 bytes or holds a NUL"),
+            (self.ARGS, "  args: [" + ", ".join(["a"] * 65) + "]\n", "mcp_server.args has more than 64 entries"),
+            ("x-server]", "x" * 4097 + "]", "mcp_server.args[2] is over 4096 bytes"),
+            ("x-server]", '"x\\x00y"]', "mcp_server.args[2] is over 4096 bytes or holds a NUL"),
+            (self.TOOLS, "  tools: [" + ", ".join(f"t{i}" for i in range(257)) + "]\n",
+             "mcp_server.tools has more than 256 entries"),
+            ("x_write]", "é" * 2049 + "]", "mcp_server.tools[1] is over 4096 bytes"),
+            ("X_ENV: prod", "X_ENV: " + "x" * 4097, "env.X_ENV is over 4096 bytes"),
+            (self.CREDENTIAL_NAMES, self.CREDENTIAL_NAMES + self.names(61),
+             "credential type 'token' binds more than 64 env entries"),
+            (self.CREDENTIAL_NAMES + "    - type: api-key\n      env:\n        X_ACCOUNT: ${detail.account}\n"
+             "  environments:\n    - id: mainnet\n      env:\n        X_ENV: prod\n",
+             self.CREDENTIAL_NAMES + self.names(62),
+             "credential type 'token' binds more than 64 env entries"),
+        ]
+        for old, new, because in cases:
+            with self.subTest(because=because):
+                self.refuses(old, new, because)
+
     def test_an_environment_value_is_a_literal(self):
         self.refuses("X_ENV: prod", "X_ENV: ${label}", "env.X_ENV is a literal")
 
