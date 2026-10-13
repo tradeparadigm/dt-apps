@@ -2,7 +2,9 @@
 name: bybit-api
 description: >
   Trading and account access on Bybit's v5 unified API using an API secret held
-  by the DIME credential proxy. Covers the whole flow: building Bybit's signed
+  by the DIME credential proxy. Linear contracts go through the `bybit__*` MCP
+  tools, called by exact name. Everything else goes through the shipped signed
+  client. Covers the whole flow: building Bybit's signed
   string, reading instruments, tickers and orderbook, reading wallet balance and
   positions, placing, amending and cancelling orders, and what to do about
   private WebSocket streams. Use for ANY request to api.bybit.com,
@@ -26,6 +28,75 @@ Your `AGENTS.md` already explains the placeholder mechanism in general — how
 `CRED_<NAME>` and `CRED_<NAME>_META` work, what the `sign-` prefix means, and
 how to name the `X-Dime-Sign-` header. This file assumes that and covers only
 what is specific to Bybit.
+
+## Tools: linear contracts
+
+Balance, and positions, orders, fills and market data for linear contracts
+(USDT and USDC perpetuals and futures, Bybit's `linear` category), go through
+the `bybit` MCP server. The server signs for you. Call a tool with `tool_call`,
+passing its exact name below as `id` and its arguments as `args`. You do not
+need `tool_search` or `tool_describe`. Use the signed client further down only
+for spot, options, inverse, transfers and anything these tools do not cover.
+
+`?` marks an optional argument.
+
+### Account
+
+- `bybit__get_balance()`: total, free, used and unrealised PnL
+- `bybit__get_positions(symbols?)`: open positions
+- `bybit__get_fills(symbol?, orderId?, from?, to?, limit?)`: your executions
+- `bybit__get_closed_pnl(symbol, from?, to?, limit?)`: realised PnL of closed positions
+- `bybit__get_income(symbol?, incomeType?, startTime?, endTime?, limit?)`: funding, fees and realised PnL records
+
+### Orders
+
+- `bybit__get_open_orders(symbols?)`: resting and conditional orders
+- `bybit__get_order_history(symbol?, orderId?, from?, to?, limit?)`: past orders
+- `bybit__place_order(symbol, side, type, amount, price?, triggerPrice?, triggerType?, stopLoss?, takeProfit?, reduceOnly?, timeInForce?, clientOrderId?)`: returns the new order ids
+- `bybit__amend_order(orderId, price?, amount?)`: pass exactly one of `price` and `amount`
+- `bybit__cancel_orders(orderIds)`: cancel by id
+- `bybit__cancel_all_orders(symbol?)`: every open order, or every open order on one market
+- `bybit__set_leverage(symbol, leverage)`
+- `bybit__set_position_mode(hedged)`
+- `bybit__set_margin_type(isolated)`
+
+`side` is `buy` or `sell`. `type` is `limit`, `market`, `conditional`,
+`stop_market`, `take_profit_market` or `trailing_stop_market`. `timeInForce`
+is `GoodTillCancel`, `ImmediateOrCancel`, `FillOrKill` or `PostOnly`.
+`triggerType` is `mark_price`, `last_price` or `index_price`.
+
+### Market data
+
+- `bybit__get_markets(symbols?, search?)`: tick size, size step, minimum size and maximum leverage. With no argument it returns symbols only
+- `bybit__get_tickers(symbols?)`: last, mark, index, bid, ask, 24h volume, open interest and funding rate
+- `bybit__get_candles(symbol, interval, from?, to?, limit?)`: `interval` is one of `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `12h`, `1d`, `1w`
+
+### Facts
+
+- Symbols look like `BTCUSDT` or `BTCPERP`. Take exact names from `bybit__get_markets`.
+- `amount` is in the base coin: `0.001` on `BTCUSDT` is 0.001 BTC. The
+  minimum and the step are `limits.amount.min` and `precision.amount` from
+  `bybit__get_markets`, and `precision.price` is the tick size.
+- Times are unix milliseconds. Run `date +%s%3N` for now before you build a
+  window.
+- Post-only is `timeInForce: "PostOnly"`. Reduce-only is `reduceOnly: true`.
+- `bybit__cancel_all_orders()` with no symbol cancels every open order. Name
+  the market unless the user asked for all of it.
+
+### When there are no `bybit__` tools
+
+The server did not start for this account. Tell the user which of these
+applies, cheapest to check first:
+
+- The change has not reached the agent yet. Ask the user to reload, or retry
+  shortly.
+- No Bybit credential is enrolled.
+- The credential was enrolled with a custom host. Only a credential for one of
+  the app's environments (mainnet, testnet, demo) starts the server.
+- The credential is missing its API key.
+- Another MCP server is already named `bybit`.
+
+The signed client below still works in every one of these cases.
 
 ## Hosts
 
@@ -122,7 +193,7 @@ Read it when a call fails, not before.
 
 ### When this client is wrong
 
-Check `~/.openclaw/workspace/tools/bybit/errata-1.1.1.md` before your first
+Check `~/.openclaw/workspace/tools/bybit/errata-1.2.0.md` before your first
 call. An earlier chat writes it when this client turns out to be wrong against
 the live venue, and it says what to change. The version in the name is this
 app's version, so a file naming any other version is stale: delete it and
@@ -348,6 +419,9 @@ self-service, so `mmp-state` answering is not the same as MMP being on.
 
 ## Account state (signed)
 
+For linear contracts use the tools above. These calls are for every other
+category.
+
 ```
 GET /v5/account/wallet-balance?accountType=UNIFIED
 GET /v5/position/list?category=linear&settleCoin=USDT
@@ -366,6 +440,9 @@ recent Bybit account is. If that returns nothing, try `CONTRACT` (legacy
 derivatives) or `SPOT`.
 
 ## Placing an order
+
+For linear contracts use `bybit__place_order`. This section is for spot,
+options and inverse.
 
 ```
 POST /v5/order/create
