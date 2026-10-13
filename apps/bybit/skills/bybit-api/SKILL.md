@@ -33,9 +33,10 @@ what is specific to Bybit.
 
 Balance, and positions, orders, fills and market data for linear contracts
 (USDT and USDC perpetuals and futures, Bybit's `linear` category), go through
-the `bybit` MCP server. The server signs for you. Call a tool with `tool_call`,
-passing its exact name below as `id` and its arguments as `args`. You do not
-need `tool_search` or `tool_describe`. Use the signed client further down only
+the `bybit` MCP server. The server signs for you. For these, do not look for
+credentials, environment variables, the shipped client or errata. Call a tool
+with `tool_call`, passing its exact name below as `id` and its arguments as
+`args`. You do not need `tool_search` or `tool_describe`. Use the signed client further down only
 for spot, options, inverse, transfers and anything these tools do not cover.
 
 `?` marks an optional argument.
@@ -77,8 +78,9 @@ is `GoodTillCancel`, `ImmediateOrCancel`, `FillOrKill` or `PostOnly`.
 - `amount` is in the base coin: `0.001` on `BTCUSDT` is 0.001 BTC. The
   minimum and the step are `limits.amount.min` and `precision.amount` from
   `bybit__get_markets`, and `precision.price` is the tick size.
-- Times are unix milliseconds. Run `date +%s%3N` for now before you build a
-  window.
+- Time arguments are unix milliseconds. Run `date +%s%3N` for now before you
+  build a window. In results, `timestamp` on fills and candles is unix
+  seconds, and on income it is milliseconds.
 - Post-only is `timeInForce: "PostOnly"`. Reduce-only is `reduceOnly: true`.
 - `bybit__cancel_all_orders()` with no symbol cancels every open order. Name
   the market unless the user asked for all of it.
