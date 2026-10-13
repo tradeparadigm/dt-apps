@@ -835,5 +835,75 @@ class TestMcpServer(unittest.TestCase):
         self.refuses("X_ENV: prod", "X_ENV: ${label}", "env.X_ENV is a literal")
 
 
+class TestMcpServerBindAll(unittest.TestCase):
+    """bind: all, which binds every listed credential type at once.
+
+    The fixture is exclusive, and an exclusive app can never hold two types in
+    one environment, so these cases make it non-exclusive first.
+    """
+
+    # all sets both types' env at once, so api-key's X_ACCOUNT gets a new name.
+    SERVER = TestMcpServer.VALID.replace(
+        "  command: uvx\n", "  command: uvx\n  bind: all\n"
+    ).replace(
+        "    - type: api-key\n      env:\n        X_ACCOUNT:",
+        "    - type: api-key\n      env:\n        X_KEY_ACCOUNT:",
+    )
+    KEY_ENV = "        X_KEY_ACCOUNT: ${detail.account}\n"
+
+    def run_with(self, old="", new="", exclusive="false"):
+        server = self.SERVER.replace(old, new)
+        return check(lambda src: src.replace("exclusive_credential_types: true",
+                                             f"exclusive_credential_types: {exclusive}")
+                     + TestMcpServer.TOKEN + server)
+
+    def refuses(self, because, old="", new="", exclusive="false"):
+        code, out = self.run_with(old, new, exclusive)
+        self.assertNotEqual(code, 0, out)
+        self.assertIn(because, out)
+
+    def test_bind_all_is_accepted(self):
+        code, out = self.run_with()
+        self.assertEqual(code, 0, out)
+
+    def test_first_and_an_empty_bind_are_accepted(self):
+        for value in ("first", "''", ""):
+            with self.subTest(value=value):
+                code, out = self.run_with("  bind: all\n", f"  bind: {value}\n")
+                self.assertEqual(code, 0, out)
+
+    def test_any_other_bind_is_refused(self):
+        for value in ("every", "All", "true", "[all]"):
+            with self.subTest(value=value):
+                self.refuses("mcp_server.bind", "  bind: all\n", f"  bind: {value}\n")
+
+    def test_bind_all_needs_two_credential_types(self):
+        self.refuses("mcp_server.bind all needs at least two credential_types",
+                     "    - type: api-key\n      env:\n" + self.KEY_ENV, "")
+
+    def test_bind_all_is_refused_in_an_exclusive_app(self):
+        self.refuses("mcp_server.bind all needs exclusive_credential_types false", exclusive="true")
+
+    def test_two_types_cannot_set_the_same_name(self):
+        self.refuses("credential_types[type=api-key].env.X_ACCOUNT is also set by 'token'",
+                     "X_KEY_ACCOUNT:", "X_ACCOUNT:")
+
+    def test_the_env_limit_counts_every_type(self):
+        # token sets 3 names and mainnet 1, so 60 on api-key makes 64 in all.
+        at_limit = self.KEY_ENV + TestMcpServer.names(59)
+        code, out = self.run_with(self.KEY_ENV, at_limit)
+        self.assertEqual(code, 0, out)
+        over = self.KEY_ENV + TestMcpServer.names(60)
+        self.refuses("bind all binds more than 64 env entries", self.KEY_ENV, over)
+
+    def test_first_counts_one_type_at_a_time(self):
+        over = self.KEY_ENV + TestMcpServer.names(60)
+        code, out = check(lambda src: src.replace("exclusive_credential_types: true",
+                                                  "exclusive_credential_types: false")
+                          + TestMcpServer.TOKEN
+                          + self.SERVER.replace("  bind: all\n", "  bind: first\n").replace(self.KEY_ENV, over))
+        self.assertEqual(code, 0, out)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
