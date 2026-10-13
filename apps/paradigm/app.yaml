@@ -69,9 +69,8 @@ credential_types:
     slug: access
     secret_label: Access key
     # NO DETAIL FIELDS. The signature identifies the desk, so a single-desk key
-    # needs nothing alongside it. A multi-desk key selects with a
-    # Paradigm-Account header, which the agent writes itself, so it needs no
-    # enrolment field either.
+    # needs nothing alongside it. A multi-desk key gets its default desk: the
+    # MCP server sends no Paradigm-Account header.
     detail_fields: []
     # NARROWED TO THE AUTHENTICATED SURFACE. Everything the skill calls is
     # under /v2/drfq, all of it authenticated, and nothing public lives there.
