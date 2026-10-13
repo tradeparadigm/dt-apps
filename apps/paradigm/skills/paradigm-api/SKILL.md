@@ -57,7 +57,7 @@ shown after the arrow.
 
 ### Trades and pricing
 
-- `paradigm__paradigm_drfqv2_trades(trade_id?, mode?, state?, venue?, strategies?, product_codes?, cursor?, page_size?)` → `/trades/`, or `/trade_tape/` with `mode: "tape"`: your trades, one trade, or the public tape
+- `paradigm__paradigm_drfqv2_trades(trade_id?, mode?, state?, venue?, strategies?, product_codes?, cursor?, page_size?)` → `/trades/`, or `/trade_tape/` with `mode: "tape"`: your trades, one trade, or the public tape. `state` filters your trades only and `strategies` filters the tape only. The tool drops the other one without an error
 - `paradigm__paradigm_drfqv2_price_legs(legs, bid_price?, ask_price?, accept_estimated_prices?, algorithm_version?)` → `POST /pricing/`: split a structure price across its legs
 - `paradigm__paradigm_drfqv2_mmp(action?)` → `/mmp/status/`: `action` `status` (the default) reads the circuit-breaker, `reset` re-arms it
 
@@ -66,7 +66,8 @@ shown after the arrow.
 - A leg on `create_rfq` is `{instrument_id, ratio, side, price?}`.
 - A leg on `post_order` is `{instrument_id, price}`.
 - A leg on `price_legs` is `{instrument_id, ratio, side}`.
-- `instrument_id` is an integer. `ratio`, `price` and `quantity` are decimal
+- `instrument_id` is an integer in a leg and a string in
+  `paradigm_drfqv2_instruments(instrument_id)`. `ratio`, `price` and `quantity` are decimal
   strings.
 - `side` is `BUY` or `SELL`. `type` is `LIMIT` (the default) or `HIDDEN`.
 - `time_in_force` is `GOOD_TILL_CANCELED` (the default, a maker quote) or
