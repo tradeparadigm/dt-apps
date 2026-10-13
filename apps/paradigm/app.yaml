@@ -121,7 +121,7 @@ mcp_server:
   command: uvx
   args:
     - --from
-    - git+https://github.com/samparadigm/mcp-paradigm-py@c5d72b54c411019b60524957c3be864b4c09cfa0
+    - git+https://github.com/samparadigm/mcp-paradigm-py@d4562e051ab11c8acc709c662367e8818821893b
     - mcp-paradigm
   bind: all
   credential_types:
