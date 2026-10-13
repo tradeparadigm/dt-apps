@@ -93,7 +93,9 @@ for f in EVALS:
     body = f.read_text()
     name = f.parent.parent.name
     # paradigm_trade_tape and the like are S3 tables, which no tool is named for.
-    named = set(re.findall(r"paradigm_(?!trade|data|executions|rfq_tape)[a-z0-9_]+", body))
+    # The agent calls a tool as paradigm__<tool>, so the server prefix is skipped.
+    named = set(re.findall(
+        r"(?<![a-z0-9_])(?:paradigm__)?(paradigm_(?!trade|data|executions|rfq_tape)[a-z0-9_]+)", body))
     ok(named <= TOOLS, f"{name}: names only tools the app lists {sorted(named - TOOLS)[:3]}")
     for pat, what in STALE:
         hits = re.findall(pat, body, re.I)
