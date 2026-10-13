@@ -17,7 +17,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from check_structure import MAX_SKILLS  # noqa: E402
+from check_structure import MAX_SKILLS, MCP_RESERVED_ENV  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURE = ROOT / "scripts" / "testdata" / "apps"
@@ -599,6 +599,240 @@ class TestDefaultInstall(unittest.TestCase):
         )
         self.assertNotEqual(code, 0, out)
         self.assertIn("exclusive_credential_types", out)
+
+
+class TestMcpServer(unittest.TestCase):
+    """mcp_server, checked against the app's own credential types and environments.
+
+    The fixture's api-key injects its secret and so has no placeholder. The
+    token type added here replaces one, which is what ${placeholder} needs,
+    and declares public_key, which api-key does not.
+    """
+
+    TOKEN = (
+        "  - id: token\n"
+        "    label: Token\n"
+        "    slug: token\n"
+        "    secret_label: Token\n"
+        "    detail_fields:\n"
+        "      - key: account\n"
+        "        label: Account\n"
+        "      - key: public_key\n"
+        "        label: Public key\n"
+        "    delivery:\n"
+        "      mode: replace\n"
+        "    summary: Swaps the placeholder for the token.\n"
+    )
+    VALID = (
+        "mcp_server:\n"
+        "  command: uvx\n"
+        "  args: [--from, 'git+https://example.com/x@abc', x-server]\n"
+        "  tools: [x_read, x_write]\n"
+        "  credential_types:\n"
+        "    - type: token\n"
+        "      env:\n"
+        "        X_ACCOUNT: ${detail.account}\n"
+        "        X_TOKEN: ${placeholder}\n"
+        "        X_HEADER: X-Dime-Sign-${label}\n"
+        "    - type: api-key\n"
+        "      env:\n"
+        "        X_ACCOUNT: ${detail.account}\n"
+        "  environments:\n"
+        "    - id: mainnet\n"
+        "      env:\n"
+        "        X_ENV: prod\n"
+    )
+
+    def run_with(self, old="", new=""):
+        return check(append(self.TOKEN + self.VALID.replace(old, new)))
+
+    def refuses(self, old, new, because):
+        code, out = self.run_with(old, new)
+        self.assertNotEqual(code, 0, out)
+        self.assertIn(because, out)
+
+    def test_a_full_server_is_accepted(self):
+        code, out = self.run_with()
+        self.assertEqual(code, 0, out)
+
+    def test_a_bare_command_is_accepted(self):
+        code, out = check(append("mcp_server:\n  command: x-server\n"))
+        self.assertEqual(code, 0, out)
+
+    def test_command_is_required(self):
+        self.refuses("  command: uvx\n", "", "mcp_server.command is required")
+
+    def test_args_must_be_strings(self):
+        self.refuses("x-server]", "{a: b}]", "mcp_server.args must be a list of strings")
+
+    def test_an_unknown_key_is_refused(self):
+        self.refuses("  command: uvx\n", "  command: uvx\n  url: http://x\n",
+                     "mcp_server.url is not a field the consumer knows")
+
+    def test_an_unknown_nested_key_is_refused(self):
+        self.refuses("    - id: mainnet\n", "    - id: mainnet\n      host: x\n",
+                     "mcp_server.environments[0].host is not a field")
+
+    def test_mcp_server_must_be_a_mapping(self):
+        code, out = check(append("mcp_server: 5\n"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("mcp_server is not a mapping", out)
+
+    def test_an_unknown_key_in_a_credential_type_is_refused(self):
+        self.refuses("    - type: api-key\n", "    - type: api-key\n      slug: key\n",
+                     "mcp_server.credential_types[1].slug is not a field")
+
+    def test_an_empty_tool_list_is_refused(self):
+        self.refuses("  tools: [x_read, x_write]\n", "  tools: []\n",
+                     "mcp_server.tools is empty: omit it")
+
+    def test_a_value_cannot_hold_a_nul_or_a_line_break(self):
+        for value in ('"a\\x00b"', '"a\\nb"', '"a\\rb"'):
+            for old in ("X_ENV: prod", "X_HEADER: X-Dime-Sign-${label}"):
+                with self.subTest(value=value, where=old):
+                    self.refuses(old, old.split(":")[0] + ": " + value,
+                                 "may not contain a NUL or a line break")
+
+    def test_an_env_name_with_a_trailing_newline_is_refused(self):
+        self.refuses("X_ENV: prod", '"X_ENV\\n": prod', "is not an environment variable name")
+
+    def test_a_tool_name_cannot_be_empty(self):
+        self.refuses("x_write]", "'']", "mcp_server.tools[1] must be a non-empty tool name")
+
+    def test_a_tool_is_listed_once(self):
+        self.refuses("x_write]", "x_read]", "mcp_server.tools[1] 'x_read' is listed twice")
+
+    def test_an_env_name_must_be_upper_case(self):
+        for name in ("x_env", "xENV", "X-ENV", "1ENV"):
+            with self.subTest(name=name):
+                self.refuses("X_ENV:", f"{name}:", f"{name} is not an environment variable name")
+
+    def test_an_env_name_has_at_most_64_characters(self):
+        self.refuses("X_ENV:", "X" * 65 + ":", "is not an environment variable name")
+
+    def test_a_reserved_env_name_is_refused(self):
+        for name in sorted(MCP_RESERVED_ENV):
+            with self.subTest(name=name):
+                self.refuses("X_ENV:", f"{name}:", f"{name} is set by the sidecar")
+
+    def test_a_credential_type_must_be_the_apps(self):
+        self.refuses("type: api-key", "type: jwt", "credential_types[1].type 'jwt' is not one of")
+
+    def test_a_credential_type_is_listed_once(self):
+        self.refuses("type: api-key", "type: token", "credential_types.type[1] 'token' is listed twice")
+
+    def test_an_environment_must_be_the_apps(self):
+        self.refuses("id: mainnet", "id: testnet", "environments[0].id 'testnet' is not one of")
+
+    def test_an_environment_is_listed_once(self):
+        self.refuses("        X_ENV: prod\n",
+                     "        X_ENV: prod\n    - id: mainnet\n",
+                     "environments.id[1] 'mainnet' is listed twice")
+
+    def test_a_detail_must_be_one_the_type_declares(self):
+        self.refuses("X_ACCOUNT: ${detail.account}\n  environments",
+                     "X_ACCOUNT: ${detail.public_key}\n  environments",
+                     "names ${detail.public_key}, and 'api-key' has no such detail field")
+
+    def test_a_placeholder_needs_a_mode_that_has_one(self):
+        self.refuses("    - type: api-key\n      env:\n",
+                     "    - type: api-key\n      env:\n        X_KEY: ${placeholder}\n",
+                     "mode 'inject' has no placeholder")
+
+    def test_any_other_dollar_is_refused(self):
+        for value in ("$HOME", "${secret}", "${detail.account", "$${label}"):
+            with self.subTest(value=value):
+                self.refuses("X_TOKEN: ${placeholder}", f"X_TOKEN: '{value}'",
+                             "has a $ outside")
+
+    def test_environments_need_a_credential_type(self):
+        start = self.VALID.index("  credential_types:\n")
+        end = self.VALID.index("  environments:\n")
+        for replacement in ("", "  credential_types: []\n"):
+            with self.subTest(replacement=replacement):
+                self.refuses(self.VALID[start:end], replacement,
+                             "mcp_server.environments needs mcp_server.credential_types")
+
+    def test_a_malformed_shape_is_refused(self):
+        cases = [
+            ("  command: uvx\n", "  command: '  '\n", "mcp_server.command is required"),
+            ("  args: [--from, 'git+https://example.com/x@abc', x-server]\n", "  args: x\n",
+             "mcp_server.args must be a list of strings"),
+            ("  args: [--from, 'git+https://example.com/x@abc', x-server]\n", "  args: {a: b}\n",
+             "mcp_server.args must be a list of strings"),
+            ("  tools: [x_read, x_write]\n", "  tools: x_read\n", "mcp_server.tools is not a list"),
+            ("x_write]", "'  ']", "mcp_server.tools[1] must be a non-empty tool name"),
+            ("        X_ENV: prod\n", "        - X_ENV\n", "environments[0].env is not a mapping"),
+            ("  environments:\n    - id: mainnet\n      env:\n        X_ENV: prod\n",
+             "  environments: mainnet\n", "mcp_server.environments is not a list"),
+            ("    - id: mainnet\n      env:\n        X_ENV: prod\n", "    - mainnet\n",
+             "mcp_server.environments[0] is not a mapping"),
+            ("X_ENV: prod", "X_ENV: [prod]", "env.X_ENV must be a string"),
+        ]
+        for old, new, because in cases:
+            with self.subTest(because=because):
+                self.refuses(old, new, because)
+
+    ARGS = "  args: [--from, 'git+https://example.com/x@abc', x-server]\n"
+    TOOLS = "  tools: [x_read, x_write]\n"
+    # 3 names in the token env, plus mainnet's X_ENV.
+    CREDENTIAL_NAMES = "        X_HEADER: X-Dime-Sign-${label}\n"
+
+    @staticmethod
+    def names(n):
+        return "".join(f"        X_{i}: v\n" for i in range(n))
+
+    # é is two bytes: the limits count bytes, as Go's len does.
+    def test_a_server_at_every_size_limit_is_accepted(self):
+        edits = [
+            ("  command: uvx\n", "  command: " + "é" * 256 + "\n"),
+            (self.ARGS, "  args: [" + ", ".join(["é" * 2048] * 64) + "]\n"),
+            (self.TOOLS, "  tools: [" + ", ".join(f"t{i}" for i in range(255)) + ", " + "é" * 2048 + "]\n"),
+            # X_0 is in both envs and counts once.
+            ("        X_ENV: prod\n", "        X_ENV: " + "é" * 2048 + "\n        X_0: v\n"),
+            (self.CREDENTIAL_NAMES, self.CREDENTIAL_NAMES + self.names(60)),
+        ]
+        manifest = self.VALID
+        for old, new in edits:
+            manifest = manifest.replace(old, new)
+        code, out = check(append(self.TOKEN + manifest))
+        self.assertEqual(code, 0, out)
+
+    def test_a_server_past_a_size_limit_is_refused(self):
+        cases = [
+            ("  command: uvx\n", "  command: " + "é" * 256 + "x\n", "mcp_server.command is over 512 bytes"),
+            ("  command: uvx\n", '  command: "uv\\x00x"\n', "mcp_server.command is over 512 bytes or holds a NUL"),
+            (self.ARGS, "  args: [" + ", ".join(["a"] * 65) + "]\n", "mcp_server.args has more than 64 entries"),
+            ("x-server]", "é" * 2048 + "x]", "mcp_server.args[2] is over 4096 bytes"),
+            ("x-server]", '"x\\x00y"]', "mcp_server.args[2] is over 4096 bytes or holds a NUL"),
+            (self.TOOLS, "  tools: [" + ", ".join(f"t{i}" for i in range(257)) + "]\n",
+             "mcp_server.tools has more than 256 entries"),
+            ("x_write]", "é" * 2049 + "]", "mcp_server.tools[1] is over 4096 bytes"),
+            ("X_ENV: prod", "X_ENV: " + "é" * 2048 + "x", "env.X_ENV is over 4096 bytes"),
+            (self.CREDENTIAL_NAMES, self.CREDENTIAL_NAMES + self.names(61),
+             "credential type 'token' binds more than 64 env entries"),
+            (self.CREDENTIAL_NAMES + "    - type: api-key\n      env:\n        X_ACCOUNT: ${detail.account}\n"
+             "  environments:\n    - id: mainnet\n      env:\n        X_ENV: prod\n",
+             self.CREDENTIAL_NAMES + self.names(62),
+             "credential type 'token' binds more than 64 env entries"),
+        ]
+        for old, new, because in cases:
+            with self.subTest(because=because):
+                self.refuses(old, new, because)
+
+    def test_every_environment_counts_toward_the_env_limit(self):
+        testnet = "  - id: testnet\n    label: Testnet\n    host: api.testnet.example.com\n"
+        # 64 names with mainnet, 65 with testnet.
+        server = self.VALID.replace(self.CREDENTIAL_NAMES, self.CREDENTIAL_NAMES + self.names(60)) + (
+            "    - id: testnet\n      env:\n        X_ENV: test\n        X_MORE: v\n"
+        )
+        code, out = check(lambda src: src.replace("    host: api.example.com\n", "    host: api.example.com\n" + testnet)
+                          + self.TOKEN + server)
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("credential type 'token' binds more than 64 env entries", out)
+
+    def test_an_environment_value_is_a_literal(self):
+        self.refuses("X_ENV: prod", "X_ENV: ${label}", "env.X_ENV is a literal")
 
 
 if __name__ == "__main__":
