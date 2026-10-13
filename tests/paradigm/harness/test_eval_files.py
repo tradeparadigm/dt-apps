@@ -71,44 +71,33 @@ for f in EVALS:
     else:
         ok(True, f"{skill}: every case carries {sorted(case)}")
 
-# The RFQ skill moved off an MCP server onto REST. An eval still grading the
-# old world marks the correct behaviour as a failure. Matched as patterns, not
-# as fixed strings, so a respelling does not slip through.
+# The RFQ skill calls Paradigm through the app's MCP tools. An eval that names
+# a tool the app does not list, or a REST call the agent no longer makes,
+# grades behaviour the agent cannot have.
+MANIFEST = (ROOT.parent.parent / "apps" / "paradigm" / "app.yaml").read_text()
+TOOLS = set(re.findall(r"^\s+- (paradigm_[a-z0-9_]+)$", MANIFEST, re.M))
+ok(len(TOOLS) > 0, f"read {len(TOOLS)} tool names from apps/paradigm/app.yaml")
+
 STALE = [
-    (r"paradigm_(?!trade|data|executions|rfq_tape)[a-z_]+", "an MCP tool name"),
     # The same names shorn of their prefix. A rename pass that rewrote
-    # paradigm_drfqv2_create_rfq to create_rfq left one of these behind, and
-    # the prefixed pattern above cannot see it.
+    # paradigm_drfqv2_create_rfq to create_rfq left one of these behind.
     (r"\b(create_rfq|post_order|price_legs|rfq_snapshot|kill_switch|desk_overview)\b",
      "a tool name with its prefix stripped"),
+    (r"\b(?:GET|POST|PUT|PATCH|DELETE) /v2/drfq", "a REST call the agent makes itself"),
     (r"\bhas_more\b", "a response key the endpoint does not return"),
     (r"prime[- ]venue[- ]enabled", "a counterparty flag that does not exist"),
     (r"empty\s*/?\s*(omitted\s*)?broadcast", "a broadcast the service refuses"),
-    (r"mcp[- ]paradigm|\.mcpb|MCP server config", "MCP setup"),
 ]
-# One assertion names MCP on purpose, to require that the answer does NOT
-# describe it. Cut exactly that string before scanning, rather than letting its
-# presence excuse the whole file: a file-wide allowance means an install guide
-# pasted anywhere else in it passes.
-INTENTIONAL = (
-    "Response does NOT describe an MCP server, a .mcpb bundle, or PARADIGM_* "
-    "environment variables"
-)
 
-_cut = 0
 for f in EVALS:
     body = f.read_text()
-    scanned = body.replace(INTENTIONAL, "")
-    if INTENTIONAL in body:
-        _cut += 1
+    name = f.parent.parent.name
+    # paradigm_trade_tape and the like are S3 tables, which no tool is named for.
+    named = set(re.findall(r"paradigm_(?!trade|data|executions|rfq_tape)[a-z0-9_]+", body))
+    ok(named <= TOOLS, f"{name}: names only tools the app lists {sorted(named - TOOLS)[:3]}")
     for pat, what in STALE:
-        hits = re.findall(pat, scanned, re.I)
-        ok(not hits, f"{f.parent.parent.name}: no {what} {sorted(set(hits))[:3] if hits else ''}")
-
-# The cut above is only safe while that exact string is still what an eval
-# file carries. Reword the assertion and the cut stops matching, so every MCP
-# mention fails instead of the intended one passing.
-ok(_cut > 0, f"the intentional MCP assertion still matches an eval file ({_cut})")
+        hits = re.findall(pat, body, re.I)
+        ok(not hits, f"{name}: no {what} {sorted(set(hits))[:3] if hits else ''}")
 
 print(f"\n{_p} passed, {_f} failed")
 sys.exit(1 if _f else 0)
