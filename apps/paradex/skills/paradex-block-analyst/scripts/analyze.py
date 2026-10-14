@@ -579,8 +579,8 @@ def render(r) -> tuple[str, int]:
     missing = [l for l in opt if not l.get("tkr")]
     rows = []
     if missing:
-        rows.append(("Greeks", "net unavailable — no live data for "
-                     + ", ".join(_leg_lbl(l, multi_exp) for l in missing)))
+        rows.append(("Greeks", "net unavailable: "
+                     + ", ".join(f"{_leg_lbl(l, multi_exp)} {gap(l)}" for l in missing)))
     else:
         rows.append(("Greeks", _greek_parts(ng, a)))
     ivs = " / ".join(f"{_leg_lbl(l, multi_exp)} " + (f"{l['iv']:g}v" if l.get("iv") is not None else gap(l))

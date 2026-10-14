@@ -169,7 +169,7 @@ t.ok("benchmarked on Deribit" in text and "(Deribit)" in text, "says where it wa
 
 code, text, r = analyse(bl, unlisted={"BTC-16OCT26-80000-P"})
 t.ok("Deribit lists no 80kP" in text and "Rerun" not in text, "an unlisted leg is not a retry")
-t.ok("net unavailable" in text, "no net greeks with a leg missing")
+t.ok("net unavailable: 80kP no data" in text, "no net greeks with a leg missing")
 
 # what the venues answer never closes the warnings comment
 az.WARN.clear()
@@ -195,6 +195,9 @@ t.ok("_Expired after the trade, with no live quote or greeks: 2200P, 2300P._" in
      and "No live data" not in text and "Paradex lists no" not in text,
      "an expired leg says it expired, never that its data is missing")
 t.ok("live IV 2200P expired" not in text, "an expired leg has no IV to call live")
+t.ok("| Greeks | net unavailable: 2200P expired, 2300P expired |" in text
+     and "2200P expired / 2300P expired" in text and "| Live | 2200P expired · 2300P expired |" in text,
+     "each row names an expired leg as expired")
 t.ok(r["marks_at_trade"] and "mark at trade" in text, "and is still compared at the trade")
 
 # an expired leg with no mark candle has no mark at all, and says so
