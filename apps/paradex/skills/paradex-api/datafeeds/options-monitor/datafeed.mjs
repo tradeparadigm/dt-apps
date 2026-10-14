@@ -16,6 +16,7 @@
 //   OPTIONS_MONITOR_ONCE=1               one read over HTTP, post, exit; no socket
 //   OPTIONS_MONITOR_BACKFILL_MINUTES=N   also post what printed in the last N minutes
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -44,22 +45,39 @@ const MAX_PAGES = 10;
 // socket open meanwhile, so only a long silence reconnects. The HTTP reads
 // cover the gap whatever the socket does.
 const IDLE_MS = 30 * 60_000;
+// After a restart (an agent update, a pause and resume) it posts what printed
+// while it was stopped, from the newest package it had seen, but never from
+// further back than this: a data feed off for a day does not dump the day.
+const RESUME_CAP_MS = 60 * 60_000;
+const STATE_KEYS = 1000;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const log = (text) => process.stderr.write(`[options-monitor] ${text}\n`);
 const cfg = { ...DEFAULTS, ...readConfig(path.join(here, "config.json")) };
 const ONCE = process.env.OPTIONS_MONITOR_ONCE === "1";
 const BACKFILL_MS = Math.max(0, Number(process.env.OPTIONS_MONITOR_BACKFILL_MINUTES ?? 0) || 0) * 60_000;
-// Nothing that printed before this posts: what was on the tape when the data
-// feed started is history.
-const FLOOR = Date.now() - BACKFILL_MS;
+// Where it got to, so a restart carries on from there. A test run (a dry run
+// or a single read) neither reads nor writes it.
+const STATE_FILE = path.join(here, ".state.json");
+const KEEP_STATE = !ONCE && process.env.FEED_DRY_RUN !== "1";
+const saved = KEEP_STATE ? readState() : null;
+// Nothing that printed before this posts. On a first start that is the
+// start: what was on the tape is history.
+const FLOOR =
+  saved && BACKFILL_MS === 0
+    ? Math.max(saved.newest - LOOKBACK_MS, Date.now() - RESUME_CAP_MS)
+    : Date.now() - BACKFILL_MS;
 
-const skills = process.env.OPENCLAW_SKILLS_DIR || path.join(process.env.HOME ?? "", ".openclaw", "skills");
-const { openDataFeed } = await import(pathToFileURL(path.join(skills, "notification-feed", "scripts", "feed.mjs")).href);
+// Image skills are always in openclaw's own folder (setup's
+// MANAGED_SKILLS_DIR), whatever the chart sets OPENCLAW_SKILLS_DIR to.
+const helper = path.join(os.homedir(), ".openclaw", "skills", "notification-feed", "scripts", "feed.mjs");
+const { openDataFeed } = await import(pathToFileURL(helper).href);
 const out = await openDataFeed(cfg.name);
 
 const seen = createSeen();
-let newest = FLOOR;
+for (const key of saved?.keys ?? []) seen.keys.add(key);
+let newest = Math.max(FLOOR, saved?.newest ?? 0);
+let dirty = false;
 let readFailing = false;
 
 function readConfig(file) {
@@ -71,16 +89,40 @@ function readConfig(file) {
   }
 }
 
+function readState() {
+  try {
+    const s = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+    if (!Number.isFinite(s?.newest) || !Array.isArray(s?.keys)) return null;
+    return { newest: s.newest, keys: s.keys.filter((k) => typeof k === "string") };
+  } catch {
+    return null; // none yet, or unreadable: start as a first start does
+  }
+}
+
+/** Write where it got to, after anything new: a few hundred times a day. */
+function saveState() {
+  if (!KEEP_STATE || !dirty) return;
+  dirty = false;
+  const tmp = `${STATE_FILE}.tmp`;
+  try {
+    fs.writeFileSync(tmp, JSON.stringify({ newest, keys: [...seen.keys].slice(-STATE_KEYS) }));
+    fs.renameSync(tmp, STATE_FILE);
+  } catch (err) {
+    log(`cannot save where it got to: ${err.message}`);
+  }
+}
+
 /** Post one package if it is new, complete, recent enough and passes the filters. */
 function offer(p) {
   if (!p || typeof p !== "object") return;
   const at = Number(p.traded_at);
   if (Number.isFinite(at) && at < FLOOR) {
     // Marked, so a later revision of it does not post either.
-    takeNew(seen, p);
+    dirty = takeNew(seen, p) || dirty;
     return;
   }
   if (!takeNew(seen, p)) return;
+  dirty = true;
   if (Number.isFinite(at)) newest = Math.max(newest, at);
   let d;
   try {
@@ -102,6 +144,7 @@ async function readTape() {
 async function catchUp() {
   try {
     for (const p of await readTape()) offer(p);
+    saveState();
     if (readFailing) log("reading the tape again");
     readFailing = false;
   } catch (err) {
@@ -120,6 +163,7 @@ if (ONCE) {
     (event) => {
       if (event.channel !== CHANNEL) return;
       for (const p of Array.isArray(event.data) ? event.data : [event.data]) offer(p);
+      saveState();
     },
     // Whatever printed while it was not connected.
     { url: cfg.ws, idleMs: IDLE_MS, onOpen: catchUp, log },

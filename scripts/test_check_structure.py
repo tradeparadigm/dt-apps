@@ -922,6 +922,26 @@ class TestDatafeedSuggestions(unittest.TestCase):
         self.assertIn("frontmatter has no title", out)
         self.assertIn("frontmatter has no description", out)
 
+    def test_a_value_the_terminal_reads_differently_is_refused(self):
+        for line, shown in (
+            ("title: Live ticks   # up to 80 characters", "Live ticks   # up to 80 characters"),
+            ('description: "Funding \\"spikes\\" across perps"', 'Funding \\"spikes\\" across perps'),
+            ("needs: 'Nothing: it''s public data.'", "Nothing: it''s public data."),
+        ):
+            key = line.split(":", 1)[0]
+            md = "---\nname: ticks\n" + "\n".join(
+                l for l in ("title: Live ticks", "description: Ticks as they print.") if not l.startswith(key)
+            ) + f"\n{line}\n---\n"
+            code, out = self.with_suggestion(md)
+            self.assertNotEqual(code, 0, out)
+            self.assertIn(f"{key}: the terminal reads this as {shown!r}", out)
+
+    def test_quotes_the_terminal_strips_too_are_fine(self):
+        code, out = self.with_suggestion(
+            "---\nname: ticks\ntitle: \"Ticks: live\"\ndescription: 'Every tick, as it prints.'\n---\n"
+        )
+        self.assertEqual(code, 0, out)
+
     def test_a_block_scalar_is_refused(self):
         code, out = self.with_suggestion(
             "---\nname: ticks\ntitle: Live ticks\ndescription: >\n  Folded text.\n---\n"

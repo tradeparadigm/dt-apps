@@ -115,7 +115,9 @@ The client logs to stderr with `[paradex]` in front. Cheapest cause first:
 |---|---|
 | `connected` and then no events | The market symbol is misspelt or not listed: Paradex accepts any market name and sends nothing, so compare it with `perpSummaries()`; the market is quiet (a `trades` channel can be silent for minutes). `bbo.BTC-USD-PERP` updates every second or so, to check the connection |
 | `<channel> refused: invalid subscribe request` | The channel name is malformed (an order book needs `.snapshot@15@100ms`); the channel is a private one (`orders`, `fills`, `positions`, `account`), which needs an authenticated connection this client does not make |
-| `reconnecting` over and over | The pod cannot reach `ws.api.prod.paradex.trade`; Paradex stopped serving schema version 2 (its answer at connect is HTTP 400): the app needs an update, so tell the user |
+| `reconnecting`, again and again | The socket does not open. After 10 minutes of it the client says which cause (next row) and exits 1, so the data feed shows as restarting, and as failed after five quick exits, rather than running and posting nothing |
+| `no connection for 10 minutes: Paradex refused the URL (HTTP 400) ...` | Paradex stopped serving the schema version this copy of the client names (`SBE_SCHEMA` in `paradex.mjs`): the Paradex app needs an update, and each data feed built on the old copy needs rebuilding from the new one, so tell the user. The `connected (paradex <version> client)` line in a test run shows which copy a data feed has |
+| `no connection for 10 minutes: cannot reach ...` | The pod cannot reach `ws.api.prod.paradex.trade`: its network, or Paradex down |
 | `undecodable frame skipped` | Paradex sent a frame `paradex_1_0.xml` does not describe: the app needs an update, so tell the user |
 | A REST read throws `HTTP 429` | Too many REST reads; read on the stream instead |
 

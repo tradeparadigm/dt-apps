@@ -326,6 +326,56 @@ check("restPages follows the cursor, which alone names a later page",
       rr.get("pages") == [1, 2, 3] and ("/v1/pages", {"cursor": ["c2"]}) in rest_requests)
 check("a refused read names its path and status", rr.get("error") == "/busy: HTTP 429")
 
+
+# ---- When no connection opens ----
+
+class Refuser(http.server.BaseHTTPRequestHandler):
+    """Answers every request 400, the upgrade included: Paradex on a schema version it no longer serves."""
+
+    def do_GET(self):
+        self.send_response(400)
+        self.send_header("content-length", "0")
+        self.end_headers()
+
+    def log_message(self, *args):
+        pass
+
+
+refuser = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Refuser)
+threading.Thread(target=refuser.serve_forever, daemon=True).start()
+closed = socket.socket()
+closed.bind(("127.0.0.1", 0))
+closed_port = closed.getsockname()[1]
+closed.close()  # nothing listens here now
+
+GIVE_UP = r"""
+import { stream } from __PARADEX__;
+const run = (url) => new Promise((resolve) => {
+  const logs = [];
+  stream(["bbo.BTC-USD-PERP"], () => {}, {
+    url, giveUpMs: 1500, log: (t) => logs.push(t), onGiveUp: () => resolve(logs),
+  });
+});
+const [refused, unreachable] = await Promise.all([run(process.argv[1]), run(process.argv[2])]);
+console.log(JSON.stringify({ refused, unreachable }));
+process.exit(0);
+""".replace("__PARADEX__", json.dumps((LIB / "paradex.mjs").as_uri()))
+proc = subprocess.run(["node", "--input-type=module", "-e", GIVE_UP, f"ws://127.0.0.1:{refuser.server_address[1]}/v1",
+                       f"ws://127.0.0.1:{closed_port}/v1"], capture_output=True, text=True, timeout=60)
+refuser.shutdown()
+g = json.loads(proc.stdout or "{}")
+refused, unreachable = g.get("refused", []), g.get("unreachable", [])
+check("a socket that never opens is given up on, with the reason, and the data feed exits",
+      any("no connection for 2s: Paradex refused the URL (HTTP 400)" in l and "SBE schema 1:2" in l for l in refused)
+      and any("exiting so the data feed shows as failing" in l for l in refused))
+check("tried again before giving up", sum("reconnecting" in l for l in refused) >= 1)
+check("an unreachable host is told apart from a refusal",
+      any(f"cannot reach 127.0.0.1:{closed_port}" in l for l in unreachable))
+
+app_version = re.search(r"^version:\s*(\S+)", (LIB.parents[3] / "app.yaml").read_text(), re.M).group(1)
+client_version = re.search(r'CLIENT_VERSION = "paradex ([^"]+)"', (LIB / "paradex.mjs").read_text()).group(1)
+check("the client names the app version it ships in, so a copy's age shows", client_version == app_version)
+
 for name in failed:
     print(f"FAIL {name}")
 print(f"{passed} passed, {len(failed)} failed")

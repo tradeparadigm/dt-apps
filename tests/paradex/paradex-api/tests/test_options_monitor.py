@@ -312,8 +312,10 @@ class Socket:
 
 
 def datafeed_env(d, extra):
+    # The helper is found in openclaw's own skills folder under HOME, as setup
+    # installs it, never through OPENCLAW_SKILLS_DIR, which the chart can move.
     env = {"PATH": "/usr/bin:/bin:" + str(pathlib.Path(shutil.which("node")).parent),
-           "OPENCLAW_SKILLS_DIR": str(pathlib.Path(d) / "skills")}
+           "HOME": str(d), "OPENCLAW_SKILLS_DIR": str(pathlib.Path(d) / "moved-skills")}
     env.update(extra)
     return env
 
@@ -326,7 +328,7 @@ def install(d, config):
     for f in ("paradex.mjs", "sbe.mjs", "paradex_1_0.xml"):
         shutil.copy(DIR.parent / "lib" / f, work / f)
     (work / "config.json").write_text(json.dumps({"name": "options-monitor", **config}))
-    helper = pathlib.Path(d) / "skills/notification-feed/scripts/feed.mjs"
+    helper = pathlib.Path(d) / ".openclaw/skills/notification-feed/scripts/feed.mjs"
     helper.parent.mkdir(parents=True)
     helper.write_text(STUB_HELPER)
     return work
@@ -338,8 +340,10 @@ def run_once(config, backfill_minutes):
         env = datafeed_env(d, {"OPTIONS_MONITOR_ONCE": "1"})
         if backfill_minutes is not None:
             env["OPTIONS_MONITOR_BACKFILL_MINUTES"] = str(backfill_minutes)
-        return subprocess.run(["node", "datafeed.mjs"], cwd=work, env=env, capture_output=True, text=True,
+        proc = subprocess.run(["node", "datafeed.mjs"], cwd=work, env=env, capture_output=True, text=True,
                               timeout=60)
+        proc.left_state = (work / ".state.json").exists()
+        return proc
 
 
 def posts_of(stdout):
@@ -361,6 +365,7 @@ config = {"api": tape.url, "ws": "ws://127.0.0.1:9/never"}
 proc = run_once(config, backfill_minutes=60)
 posts = posts_of(proc.stdout)
 check("one run exits cleanly", proc.returncode == 0)
+check("a test run leaves no state for the real data feed to resume from", proc.left_state is False)
 check("it opens the data feed by its configured name", "OPEN options-monitor" in proc.stdout)
 check("each package posts once, oldest first, and only from the backfill window",
       [l.split(" · ")[0] + " " + l.split(" · ")[1] for l in posts]
@@ -398,23 +403,30 @@ sock = Socket([
 ])
 both = Tape([[live, early]])
 
-with tempfile.TemporaryDirectory() as d:
-    work = install(d, {"api": both.url, "ws": sock.url})
-    child = subprocess.Popen(["node", "datafeed.mjs"], cwd=work, env=datafeed_env(d, {}),
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    lines = []
-    reader = threading.Thread(target=lambda: lines.extend(child.stdout), daemon=True)
-    reader.start()
-    deadline = time.time() + 15
-    while time.time() < deadline and not (sock.subscribe and both.requests and posts_of("\n".join(lines))):
-        time.sleep(0.1)
-    time.sleep(1)  # anything that would post twice has had its chance
-    child.terminate()
-    child.wait(timeout=10)
-    reader.join(timeout=5)
-    err = child.stderr.read()
+def run_live(config, sock, tape, state=None):
+    """The data feed as registered: no test switch. Answers (posts, stderr, the state it left)."""
+    with tempfile.TemporaryDirectory() as d:
+        work = install(d, config)
+        if state is not None:
+            (work / ".state.json").write_text(json.dumps(state))
+        child = subprocess.Popen(["node", "datafeed.mjs"], cwd=work, env=datafeed_env(d, {}),
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        lines = []
+        reader = threading.Thread(target=lambda: lines.extend(child.stdout), daemon=True)
+        reader.start()
+        deadline = time.time() + 15
+        while time.time() < deadline and not (sock.subscribe and tape.requests and posts_of("\n".join(lines))):
+            time.sleep(0.1)
+        time.sleep(1)  # anything that would post twice has had its chance
+        child.terminate()
+        child.wait(timeout=10)
+        reader.join(timeout=5)
+        saved = work / ".state.json"
+        left = json.loads(saved.read_text()) if saved.exists() else None
+        return posts_of("".join(lines)), child.stderr.read(), left
 
-posts = posts_of("".join(lines))
+
+posts, err, left = run_live({"api": both.url, "ws": sock.url}, sock, both)
 check("it connects through the Paradex client, naming the schema version",
       sock.request_line == "GET /v1?sbeSchemaId=1&sbeSchemaVersion=2 HTTP/1.1")
 check("it subscribes to the whole tape",
@@ -425,6 +437,35 @@ check("a package from the socket posts once, whichever read sees it first",
 check("another channel, a stray frame and what predates the start do not post",
       not any("call ·" in l for l in posts))
 check("it logs that it connected, and nothing per package", "connected" in err and "risk reversal" not in err)
+check("a running data feed keeps where it got to",
+      left is not None and "OKX:live" in left["keys"] and left["newest"] == live["traded_at"])
+
+
+# ---- A restart picks up the gap, from where it got to ----
+
+seen_before = pkg("before", SHAPES["put"], venue="DRV", traded_at=now - 25 * MIN)
+in_gap = pkg("gap", SHAPES["call spread"], venue="PRDX", notional="167000", traded_at=now - 10 * MIN)
+too_old = pkg("old", SHAPES["call"], traded_at=now - 3 * 60 * MIN)
+quiet = Socket([])
+gap_tape = Tape([[in_gap, seen_before, too_old]])
+posts, err, left = run_live({"api": gap_tape.url, "ws": quiet.url}, quiet, gap_tape,
+                            state={"newest": now - 20 * MIN, "keys": ["DRV:before"]})
+check("after a restart, what printed while it was stopped posts, and nothing it had posted",
+      [l.split(" · ")[0] for l in posts] == ["Paradex"])
+start = int(gap_tape.requests[0][1]["start_time"][0]) if gap_tape.requests else 0
+check("it reads from half an hour before where it got to",
+      now - 51 * MIN < start < now - 49 * MIN)
+check("nothing from before that half hour posts", not any("call ·" in l for l in posts))
+check("and it saves where it has got to now",
+      left is not None and left["newest"] == in_gap["traded_at"] and "PRDX:gap" in left["keys"])
+
+two_hours = pkg("2h", SHAPES["call"], traded_at=now - 2 * 60 * MIN)
+recent = pkg("recent", SHAPES["straddle"], venue="OKX", traded_at=now - 30 * MIN)
+quiet = Socket([])
+day_tape = Tape([[recent, two_hours]])
+posts, _, _ = run_live({"api": day_tape.url, "ws": quiet.url}, quiet, day_tape,
+                       state={"newest": now - 5 * 60 * MIN, "keys": []})
+check("a data feed stopped for hours resumes only the last hour", [l.split(" · ")[0] for l in posts] == ["OKX"])
 
 for name in failed:
     print(f"FAIL {name}")

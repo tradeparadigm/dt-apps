@@ -17,6 +17,13 @@ export const REST_URL = "https://api.prod.paradex.trade/v1";
 // The schema version paradex_1_0.xml describes. Paradex refuses a connection
 // that does not name one, and keeps serving old versions when it adds one.
 export const SBE_SCHEMA = { id: 1, version: 2 };
+// The app version this client shipped in. A data feed keeps the copy it was
+// built with, so the connect line says how old that copy is.
+export const CLIENT_VERSION = "paradex 1.3.0";
+// How long stream() keeps trying when no connection opens at all. Then it
+// says why and exits 1, so openclaw shows the data feed restarting (and
+// failed after five quick exits) rather than running and posting nothing.
+export const GIVE_UP_MS = 10 * 60_000;
 
 // What each binary message is, by the channel it answers.
 const CHANNEL_OF = {
@@ -59,10 +66,16 @@ const CLOSE_GRACE_MS = 10_000;
  *
  * Options: `idleMs` (reconnect after this long with no frame; 0 never;
  * default 5 minutes), `onOpen()` (called on each connect, after subscribing:
- * read what you missed over REST there), `log`, `url`.
+ * read what you missed over REST there), `log`, `url`, `giveUpMs` and
+ * `onGiveUp` (after `giveUpMs` with no connection opening, it logs why and
+ * calls `onGiveUp`, which exits 1 by default).
  * Answers `{subscribe(channel), unsubscribe(channel), close()}`.
  */
-export function stream(channels, onEvent, { idleMs = 5 * 60_000, onOpen, log = defaultLog, url = WS_URL } = {}) {
+export function stream(
+  channels,
+  onEvent,
+  { idleMs = 5 * 60_000, onOpen, log = defaultLog, url = WS_URL, giveUpMs = GIVE_UP_MS, onGiveUp = () => process.exit(1) } = {},
+) {
   loadSchema();
   const wanted = new Set(channels);
   const sep = url.includes("?") ? "&" : "?";
@@ -70,6 +83,7 @@ export function stream(channels, onEvent, { idleMs = 5 * 60_000, onOpen, log = d
   let ws = null;
   let closed = false;
   let nextId = 1;
+  let failingSince = null; // the first attempt that did not open, since the last that did
   const pending = new Map(); // request id -> channel, to name a refusal
 
   const send = (method, channel) => {
@@ -95,6 +109,18 @@ export function stream(channels, onEvent, { idleMs = 5 * 60_000, onOpen, log = d
       clearTimeout(idleTimer);
       sock.close();
       if (closed) return;
+      if (openedAt === 0) {
+        failingSince ??= Date.now();
+        if (Date.now() - failingSince >= giveUpMs) {
+          closed = true;
+          void diagnose(full).then((why) => {
+            const span = giveUpMs >= 60_000 ? `${Math.round(giveUpMs / 60_000)} minutes` : `${Math.round(giveUpMs / 1000)}s`;
+            log(`no connection for ${span}: ${why}; exiting so the data feed shows as failing`);
+            onGiveUp();
+          });
+          return;
+        }
+      }
       const wait = openedAt > 0 && Date.now() - openedAt >= STABLE_MS ? 1_000 : backoffMs;
       log(`${reason}; reconnecting in ${wait / 1000}s`);
       setTimeout(() => connect(Math.min(wait * 2, 60_000)), wait);
@@ -111,7 +137,8 @@ export function stream(channels, onEvent, { idleMs = 5 * 60_000, onOpen, log = d
 
     sock.addEventListener("open", () => {
       openedAt = Date.now();
-      log(`connected, ${wanted.size} channel${wanted.size === 1 ? "" : "s"}`);
+      failingSince = null;
+      log(`connected (${CLIENT_VERSION} client), ${wanted.size} channel${wanted.size === 1 ? "" : "s"}`);
       touch();
       for (const ch of wanted) send("subscribe", ch);
       if (onOpen) Promise.resolve().then(onOpen).catch((err) => log(`onOpen failed: ${err.message}`));
@@ -147,6 +174,24 @@ export function stream(channels, onEvent, { idleMs = 5 * 60_000, onOpen, log = d
       ws?.close();
     },
   };
+}
+
+/**
+ * Why the socket does not open, which its own error never says: one plain
+ * request to the same URL. Paradex answers 426 to a URL it would upgrade and
+ * 400 to a schema version it no longer serves.
+ */
+async function diagnose(wsUrl) {
+  const httpUrl = wsUrl.replace(/^ws/, "http");
+  try {
+    const res = await fetch(httpUrl, { signal: AbortSignal.timeout(15_000) });
+    if (res.status === 400) {
+      return `Paradex refused the URL (HTTP 400): it no longer serves SBE schema ${SBE_SCHEMA.id}:${SBE_SCHEMA.version}, so this client needs the Paradex app's update`;
+    }
+    return `Paradex answered a plain request (HTTP ${res.status}), so it is reachable and the socket failed for another reason`;
+  } catch (err) {
+    return `cannot reach ${new URL(httpUrl).host}: ${err.cause?.message ?? err.message}`;
+  }
 }
 
 function fromBinary(data) {

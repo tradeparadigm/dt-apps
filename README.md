@@ -61,12 +61,18 @@ agent lists (`feeds.mjs suggestions`):
 
 ```markdown
 ---
-name: options-monitor            # the directory; lowercase, digits, hyphens, 1-40
-title: Global Options Monitor    # up to 80 characters
+name: options-monitor
+title: Global Options Monitor
 description: Options block trades across five venues, one line per package.
-needs: Nothing: public data.     # optional, plain words: what to enrol first
+needs: Nothing. It reads public data.
 ---
 ```
+
+`name` is the directory's (lowercase letters, digits and hyphens, 1-40),
+`title` is up to 80 characters, and `needs`, optional, says in plain words
+what to enrol first. The terminal reads each value as written, less one pair
+of outer quotes, so the check refuses what YAML would read differently: a
+trailing `# comment`, an escaped quote.
 
 Its body is written to the agent: how to adapt the template, how to register
 the result with `feeds.mjs add`. A suggestion with nothing to adapt can say to

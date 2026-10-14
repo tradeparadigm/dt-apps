@@ -114,6 +114,10 @@ asked rather than to this file.
   removed. A later revision of one already posted is not posted again.
 - It reads the tape over HTTP on every connect and every `pollMinutes`
   (default 5), half an hour behind the newest package, so one the socket
-  missed still posts. What was on the tape when it started never posts.
+  missed still posts. On its first start, what was already on the tape never
+  posts. After a restart (an agent update, a pause and resume) it posts what
+  printed while it was stopped, up to an hour back, from where it got to,
+  which it keeps in `.state.json` beside it. A test run (`FEED_DRY_RUN` or
+  `OPTIONS_MONITOR_ONCE`) neither reads nor writes that file.
 - The strategy name (spread, iron condor, butterfly...) is worked out from the
   option legs in `monitor.mjs`; anything it does not recognise is "custom".

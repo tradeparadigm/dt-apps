@@ -837,6 +837,17 @@ def check_datafeed_frontmatter(md: Path, name: str, failures: list[str]) -> None
         if not isinstance(value, str):
             failures.append(f"{md}: {key} must be text; quote it")
             continue
+        # The terminal's reader (frontmatter() in the notification-feed skill)
+        # takes the raw value less one pair of matching outer quotes. YAML also
+        # drops a trailing # comment and undoes escapes, so a value the two read
+        # differently would pass here and show wrong on every agent.
+        shown = raw[1:-1] if len(raw) >= 2 and raw[0] in "\"'" and raw[-1] == raw[0] else raw
+        if shown != value:
+            failures.append(
+                f"{md}: {key}: the terminal reads this as {shown!r}, not {value!r}; "
+                "drop the comment, or the escapes"
+            )
+            continue
         if len(value) > DATAFEED_FIELDS[key]:
             failures.append(f"{md}: {key} is {len(value)} characters, limit {DATAFEED_FIELDS[key]}")
         got[key] = value
