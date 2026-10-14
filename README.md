@@ -59,14 +59,9 @@ needs: Nothing: public data.     # optional, plain words: what to enrol first
 ---
 ```
 
-Its body is written to the agent: the settings and their defaults, how to
-adapt the template, how to register the result with `feeds.mjs add`. Give
-every setting a default the agent applies unasked, and have it tell the user
-what it chose once the feed runs. List a question only for something no
-default can decide, such as which markets when the user named none. The user
-can have any of it changed later, so a question costs them more than a
-default does. A suggestion with nothing to adapt can say to install it as it
-is. Whatever the agent registers is
+Its body is written to the agent: how to adapt the template, how to register
+the result with `feeds.mjs add`. A suggestion with nothing to adapt can say to
+install it as it is. Whatever the agent registers is
 an ordinary data feed the user owns and can have changed in any way; nothing
 ties it back to the app.
 

@@ -26,26 +26,7 @@ package Paradigm brokered. It uses no credential.
 `<this folder>` is the one holding this file. Write both out as absolute
 paths.
 
-## 1. Settle the settings without asking
-
-Take them from the user's message, and use the default for anything it does
-not mention. These are what the Option Monitor page itself shows, so a user
-who named nothing gets that page as a feed.
-
-- **Venues:** all five, unless they name some ("Deribit blocks").
-- **Underlyings:** all of them, unless they name some ("BTC and ETH").
-- **Size:** every block, a few hundred a day. A minimum applies only when
-  they ask for one. If they give no number ("only the big ones"), use $250K
-  notional and say so.
-- **Perp hedge legs:** shown.
-- **Where it posts:** a feed of its own if the chat opened from New Feed.
-  Otherwise Notifications, unless they name a feed.
-
-The one thing worth a question: they name a venue the tape does not carry
-(Binance, say). Tell them which five it covers, and ask whether to go ahead
-with those.
-
-## 2. Install
+## 1. Install
 
 Copy `monitor.mjs` and `datafeed.mjs` from `<this folder>` into
 `~/.openclaw/workspace/datafeeds/options-monitor/`. Use another name there if
@@ -59,7 +40,7 @@ only what differs from the defaults at the top of `datafeed.mjs`, for example:
 `name` must be the name you register it under. Venues are names or codes
 (`PRDX`, `DRV`, `DBT`, `BLSH`, `OKX`).
 
-## 3. Test
+## 2. Test
 
 Blocks can be minutes apart, so look back three hours instead of waiting:
 
@@ -93,7 +74,7 @@ It should log `connected` and nothing else unless a block prints meanwhile.
 `reconnecting` repeated means the socket is refused: the HTTP reads still post
 every five minutes, so say so to the user rather than stopping there.
 
-## 4. Register
+## 3. Register
 
 ```sh
 node <notification-feed>/scripts/feeds.mjs add options-monitor \
@@ -103,9 +84,8 @@ node <notification-feed>/scripts/feeds.mjs add options-monitor \
   -- node ~/.openclaw/workspace/datafeeds/options-monitor/datafeed.mjs
 ```
 
-Check that `feeds.mjs list` shows it `running`. Then tell the user where it
-posts and the settings you chose (venues, underlyings, any minimum), and that
-they can ask you to change any of it.
+Check that `feeds.mjs list` shows it `running`, then tell the user where it
+posts, what it filters, and that they can ask you to change any of it.
 
 ## If something here does not fit
 
