@@ -37,8 +37,8 @@ description: |
   stored as ordinary metadata, and the **API secret**, which is sealed and
   never reaches your agent. The credential proxy signs every private request.
 
-  Spot, inverse contracts, transfers and private WebSocket streams are not
-  covered yet.
+  Spot, options, inverse contracts, transfers and private WebSocket streams
+  are not covered yet.
 
 developer: Bybit
 developer_url: https://www.bybit.com
