@@ -1,111 +1,64 @@
-// The options monitor's logic, with no I/O: assemble Paradex block-trade
-// prints into packages and describe each in one line. datafeed.mjs fetches
-// and posts.
+// The options monitor's logic, with no I/O: which packages to post, and each
+// as one line. datafeed.mjs connects and posts.
 //
-// WHERE THE DATA COMES FROM. Paradex's Option Monitor (its Block Trades tab)
-// lists every user's filled RFQ packages. The public `GET /v1/trades` serves
-// the same prints with `trade_type=BLOCK_TRADE`: one print per leg, every leg
-// of a package carrying the same `block_id`, ordered by fill id, so a package
-// can straddle a page or a poll. The public WebSocket sends one message per
-// leg in its binary encoding without `block_id`, so it cannot assemble a
-// package on its own. Prints carry no IV, premium or notional; those come
-// from `/v1/markets` (what each leg is) and `/v1/markets/summary` (mark IV,
-// underlying price).
+// WHERE THE DATA COMES FROM. Paradex's Global Option Monitor
+// (app.paradex.trade/option-monitor) reads its own options tape: block
+// trades on option markets across Paradex, Derive, Deribit, Bullish and OKX,
+// each one a whole package with its legs. The page reads it from two places,
+// and so does this:
+//   GET  https://api.prod.paradex.trade/v1/options-tape?start_time=<ms>&page_size=1000
+//   WSS  wss://ws-public.api.prod.paradex.trade/v1, channel options_tape.ALL
+// Both are public. Neither is in Paradex's published API reference: the shapes
+// below are what they answered on 2026-10-14.
+//
+// A package: {venue, block_id, route, traded_at, underlying, quantity,
+// index_price, notional_usd, complete, revision, removed, venue_strategy,
+// legs: [{instrument, kind, option_type, expiry, strike, side, size, price,
+// price_usd, ...}]}. A leg's `kind` is OPTION or PERP (a delta hedge).
 
-export const OPTION_KINDS = new Set(["OPTION", "PERP_OPTION"]);
-const MAX_OPTION_LEGS_SHOWN = 4;
+export const VENUES = {
+  PRDX: "Paradex",
+  DRV: "Derive",
+  DBT: "Deribit",
+  BLSH: "Bullish",
+  OKX: "OKX",
+  PARADIGM: "Paradigm",
+};
+const MAX_LEGS_SHOWN = 4;
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
-/** Whether a market (a `/v1/markets` row) is an option. */
-export function isOption(meta) {
-  return meta != null && (OPTION_KINDS.has(meta.asset_kind) || meta.option_type === "CALL" || meta.option_type === "PUT");
-}
+export const packageKey = (p) => `${p.venue}:${p.block_id}`;
 
 /**
- * Packages being assembled, by block_id, and what was already seen. Both sets
- * keep only the newest `remember` entries.
+ * The packages already posted, keeping only the newest `remember`. A package
+ * posts once: a later revision of one already posted (a venue's correction)
+ * and one marked removed are not posted again.
  */
-export function createBook({ remember = 5000 } = {}) {
-  return { open: new Map(), seenTrades: new Set(), doneBlocks: new Set(), remember };
+export function createSeen(remember = 5000) {
+  return { keys: new Set(), remember };
 }
 
-function keep(set, value, limit) {
-  set.add(value);
-  if (set.size > limit) set.delete(set.values().next().value);
-}
-
-/**
- * Add prints from one poll (`pollNo`). A print without a block_id, one seen
- * before (the polls overlap), or one of a package already posted is skipped.
- * Answers how many were new.
- */
-export function addTrades(book, trades, pollNo) {
-  let added = 0;
-  for (const t of trades) {
-    if (!t || typeof t.id !== "string" || typeof t.block_id !== "string" || t.block_id === "") continue;
-    if (book.seenTrades.has(t.id) || book.doneBlocks.has(t.block_id)) continue;
-    keep(book.seenTrades, t.id, book.remember);
-    let pkg = book.open.get(t.block_id);
-    if (!pkg) {
-      pkg = { blockId: t.block_id, legs: [], firstAt: Number(t.created_at) || 0, lastPoll: pollNo };
-      book.open.set(t.block_id, pkg);
-    }
-    pkg.legs.push(t);
-    pkg.lastPoll = pollNo;
-    added++;
-  }
-  return added;
-}
-
-/**
- * The packages a whole poll (`pollNo`) went by without extending: their legs
- * are all in. They leave the book, oldest first. `Infinity` takes every one.
- */
-export function takeSettled(book, pollNo) {
-  const out = [];
-  for (const [id, pkg] of book.open) {
-    if (pkg.lastPoll >= pollNo) continue;
-    book.open.delete(id);
-    keep(book.doneBlocks, id, book.remember);
-    out.push(pkg);
-  }
-  return out.sort((a, b) => a.firstAt - b.firstAt);
-}
-
-/** Drop what is open without posting it: what the first poll finds already there. */
-export function markDone(book) {
-  for (const id of book.open.keys()) keep(book.doneBlocks, id, book.remember);
-  book.open.clear();
+/** Whether to post `p`, marking it posted when so. Incomplete ones wait for the revision that completes them. */
+export function takeNew(seen, p) {
+  if (!p || typeof p.block_id !== "string" || typeof p.venue !== "string") return false;
+  if (p.complete !== true || p.removed === true) return false;
+  if (!Array.isArray(p.legs) || p.legs.length === 0) return false;
+  const key = packageKey(p);
+  if (seen.keys.has(key)) return false;
+  seen.keys.add(key);
+  if (seen.keys.size > seen.remember) seen.keys.delete(seen.keys.values().next().value);
+  return true;
 }
 
 function num(value) {
+  if (value == null || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
 
-/** Legs of one market and side, merged (a package may fill one leg in pieces). */
-function mergeLegs(legs) {
-  const by = new Map();
-  for (const t of legs) {
-    const size = num(t.size);
-    const price = num(t.price);
-    if (size == null || price == null) continue;
-    const key = `${t.market}\u0000${t.side}`;
-    const m = by.get(key) ?? { market: t.market, side: t.side, size: 0, value: 0 };
-    m.size += size;
-    m.value += size * price;
-    by.set(key, m);
-  }
-  return [...by.values()].map((m) => ({ ...m, price: m.size > 0 ? m.value / m.size : 0 }));
-}
-
-function signed(side, text) {
-  return `${side === "SELL" ? "-" : "+"}${text}`;
-}
-
 /** 25, 0.5, 1.25: no trailing zeros, at most 4 decimals. */
 export function fmtSize(n) {
-  return String(Number(n.toFixed(4)));
+  return String(Number(Number(n).toFixed(4)));
 }
 
 /** $950, $19.4K, $2.4M, $1.1B. */
@@ -127,85 +80,101 @@ export function fmtExpiry(ms) {
   return `${String(d.getUTCDate()).padStart(2, "0")}${MONTHS[d.getUTCMonth()]}${String(d.getUTCFullYear()).slice(2)}`;
 }
 
-/**
- * An IV as a percentage. Paradex's summary documents `mark_iv` without a unit;
- * a value at most 5 is read as a fraction (0.54 is 54%), anything larger as a
- * percentage already. No volatility a monitor shows is 500%.
- */
-export function ivPct(value) {
-  const n = num(value);
-  if (n == null || n <= 0) return null;
-  return n <= 5 ? n * 100 : n;
-}
-
-function optionLabel(meta, market) {
-  const strike = num(meta.strike_price);
-  const cp = meta.option_type === "PUT" ? "P" : meta.option_type === "CALL" ? "C" : "";
-  if (strike == null || cp === "") return market;
-  return `${fmtExpiry(meta.expiry_at)} ${String(strike)}${cp}`;
-}
-
-function hedgeLabel(meta, market) {
-  return meta?.asset_kind === "PERP" ? "PERP" : market;
-}
+const isOption = (l) => l.kind === "OPTION" && (l.option_type === "CALL" || l.option_type === "PUT");
+const sign = (l) => (l.side === "SELL" ? -1 : 1);
 
 /**
- * One package as a line, with what the filters read: `{line, base, premium,
- * notional}`, or null when no leg is an option (a package of perps only).
- *
- * + and - are the TAKER's side, as Paradex reports every print: for a block,
- * the side that took the quote. Premium is what the taker pays (positive) or
- * receives (negative) across the option legs; notional is their size at the
- * underlying's price.
+ * A name for the package's shape, read from its option legs: call, put, call
+ * or put spread, straddle, strangle, risk reversal, calendar, diagonal,
+ * butterfly, condor, iron condor, iron butterfly, else custom. A perp leg adds
+ * "+ hedge". The page names the same shapes (CSpd, ICondor, ...); the venue's
+ * own label (`venue_strategy`) is too uneven across venues to show.
  */
-export function describe(pkg, markets, summaries, { showHedge = true } = {}) {
-  const legs = mergeLegs(pkg.legs).map((l) => ({ ...l, meta: markets.get(l.market) ?? null }));
-  const options = legs.filter((l) => isOption(l.meta));
-  if (options.length === 0) return null;
-  options.sort(
-    (a, b) =>
-      (num(a.meta.expiry_at) ?? 0) - (num(b.meta.expiry_at) ?? 0) ||
-      (num(a.meta.strike_price) ?? 0) - (num(b.meta.strike_price) ?? 0) ||
-      a.market.localeCompare(b.market),
-  );
-  const base = options[0].meta.base_currency || options[0].market.split("-")[0];
+export function strategyName(legs) {
+  const opts = legs.filter(isOption);
+  const hedge = legs.some((l) => l.kind === "PERP") ? " + hedge" : "";
+  const name = shape(opts);
+  return `${name}${hedge}`;
+}
 
-  let premium = 0;
-  let notional = 0;
-  let notionalKnown = true;
-  let ivWeight = 0;
-  let ivSum = 0;
-  for (const l of options) {
-    premium += (l.side === "SELL" ? -1 : 1) * l.value;
-    const s = summaries.get(l.market);
-    const under = num(s?.underlying_price);
-    if (under == null) notionalKnown = false;
-    else notional += l.size * under;
-    const iv = ivPct(s?.mark_iv);
-    if (iv != null) {
-      ivSum += iv * l.size;
-      ivWeight += l.size;
+function shape(o) {
+  const n = o.length;
+  if (n === 0) return "custom";
+  const calls = o.filter((l) => l.option_type === "CALL").length;
+  const puts = n - calls;
+  const expiries = new Set(o.map((l) => l.expiry)).size;
+  const strikes = new Set(o.map((l) => l.strike)).size;
+  const sizes = new Set(o.map((l) => num(l.size))).size;
+  const sides = new Set(o.map((l) => l.side)).size;
+  const type = calls === n ? "call" : puts === n ? "put" : null;
+  if (n === 1) return o[0].option_type === "CALL" ? "call" : "put";
+  if (n === 2) {
+    const [a, b] = o;
+    if (type && expiries === 1 && sides === 2) return `${type} spread`;
+    if (type && expiries === 2 && sides === 2) return strikes === 1 ? `${type} calendar` : `${type} diagonal`;
+    if (!type && expiries === 1 && sides === 1) return a.strike === b.strike ? "straddle" : "strangle";
+    if (!type && expiries === 1 && sides === 2) return "risk reversal";
+    return "custom";
+  }
+  if (n === 3 && type && expiries === 1 && strikes === 3) {
+    const sorted = [...o].sort((x, y) => num(x.strike) - num(y.strike));
+    const [lo, mid, hi] = sorted;
+    if (lo.side === hi.side && mid.side !== lo.side && num(mid.size) === 2 * num(lo.size) && num(lo.size) === num(hi.size)) {
+      return `${type} butterfly`;
     }
   }
-
-  const shown = options.slice(0, MAX_OPTION_LEGS_SHOWN).map((l) => signed(l.side, `${fmtSize(l.size)} ${optionLabel(l.meta, l.market)}`));
-  if (options.length > MAX_OPTION_LEGS_SHOWN) shown.push(`+${options.length - MAX_OPTION_LEGS_SHOWN} more`);
-  const parts = [`${base} block`, shown.join(", ")];
-  const hedges = legs.filter((l) => !isOption(l.meta));
-  if (showHedge && hedges.length > 0) {
-    parts.push(`hedge ${hedges.map((l) => signed(l.side, `${fmtSize(l.size)} ${hedgeLabel(l.meta, l.market)}`)).join(", ")}`);
+  if (n === 4 && expiries === 1 && sizes === 1) {
+    if (type && strikes === 4) return `${type} condor`;
+    if (calls === 2 && puts === 2) return strikes === 3 ? "iron butterfly" : "iron condor";
   }
-  parts.push(`taker ${premium >= 0 ? "pays" : "receives"} ${fmtUsd(premium)}`);
-  if (notionalKnown) parts.push(`${fmtUsd(notional)} notional`);
-  if (ivWeight > 0) parts.push(`mark IV ${Math.round(ivSum / ivWeight)}%`);
-  return { line: parts.join(" · "), base, premium, notional: notionalKnown ? notional : null };
+  return "custom";
 }
 
-/** The user's filters: underlyings, and minimum premium and notional in USD. */
-export function passes(described, { baseAssets = [], minPremium = 0, minNotional = 0 } = {}) {
-  if (baseAssets.length > 0 && !baseAssets.includes(described.base)) return false;
-  if (Math.abs(described.premium) < minPremium) return false;
-  // Unknown notional (no summary for a leg) is not a reason to hide a trade.
-  if (described.notional != null && described.notional < minNotional) return false;
+function legLabel(l) {
+  if (!isOption(l)) return `${l.side === "SELL" ? "-" : "+"}${fmtSize(l.size)} ${l.kind === "PERP" ? "PERP" : l.instrument}`;
+  const cp = l.option_type === "PUT" ? "P" : "C";
+  return `${l.side === "SELL" ? "-" : "+"}${fmtSize(l.size)} ${fmtExpiry(l.expiry)} ${fmtSize(l.strike)}${cp}`;
+}
+
+/**
+ * One package as a line, with what the filters read: `{line, venue,
+ * underlying, premium, notional}`.
+ *
+ * + and - are each leg's side as the venue reports it. Premium is the option
+ * legs' price in USD times size, bought minus sold: what that side pays
+ * (positive) or receives (negative).
+ */
+export function describe(p, { showHedge = true } = {}) {
+  const legs = p.legs.filter((l) => showHedge || l.kind !== "PERP");
+  const opts = p.legs.filter(isOption).sort(
+    (a, b) => (num(a.expiry) ?? 0) - (num(b.expiry) ?? 0) || (num(a.strike) ?? 0) - (num(b.strike) ?? 0) || (a.option_type < b.option_type ? -1 : 1),
+  );
+  const hedges = legs.filter((l) => !isOption(l));
+  let premium = 0;
+  for (const l of opts) premium += sign(l) * (num(l.price_usd) ?? 0) * (num(l.size) ?? 0);
+  const notional = num(p.notional_usd);
+  const venue = VENUES[p.venue] ?? p.venue;
+  const shown = [...opts, ...hedges].map(legLabel);
+  const legsText = shown.length > MAX_LEGS_SHOWN ? `${shown.slice(0, MAX_LEGS_SHOWN).join(", ")}, +${shown.length - MAX_LEGS_SHOWN} more` : shown.join(", ");
+  const parts = [`${venue} · ${p.underlying} ${strategyName(legs)}`, legsText];
+  if (opts.length > 0) parts.push(`${premium >= 0 ? "pays" : "receives"} ${fmtUsd(premium)}`);
+  if (notional != null) parts.push(`${fmtUsd(notional)} notional`);
+  if (p.route === "PARADIGM") parts.push("via Paradigm");
+  return { line: parts.join(" · "), venue: p.venue, underlying: p.underlying, premium, notional };
+}
+
+/**
+ * The user's filters: venues (codes or names), underlyings, and minimum
+ * notional and premium in USD (premium either way). Empty lists pass all.
+ */
+export function passes(d, { venues = [], underlyings = [], minNotional = 0, minPremium = 0 } = {}) {
+  if (venues.length > 0) {
+    const want = venues.map((v) => String(v).toUpperCase());
+    const name = (VENUES[d.venue] ?? d.venue).toUpperCase();
+    if (!want.includes(d.venue) && !want.includes(name)) return false;
+  }
+  if (underlyings.length > 0 && !underlyings.map((u) => String(u).toUpperCase()).includes(d.underlying)) return false;
+  if (d.notional != null && d.notional < minNotional) return false;
+  if (Math.abs(d.premium) < minPremium) return false;
   return true;
 }

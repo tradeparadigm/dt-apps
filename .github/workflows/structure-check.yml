@@ -44,6 +44,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Some skills ship node scripts (a datafeed suggestion's WebSocket among
+      # them), and the agent's pod runs Node 22 or later.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
       # No dependencies on purpose. These run as plain scripts and print their
       # own tally, so a file that imports nothing still has to say "passed".

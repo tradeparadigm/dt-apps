@@ -54,7 +54,7 @@ agent lists (`feeds.mjs suggestions`):
 ---
 name: options-monitor            # the directory; lowercase, digits, hyphens, 1-40
 title: Global Options Monitor    # up to 80 characters
-description: Posts each options block trade on Paradex with its legs and premium.
+description: Options block trades across five venues, one line per package.
 needs: Nothing: public data.     # optional, plain words: what to enrol first
 ---
 ```
