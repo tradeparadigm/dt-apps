@@ -64,11 +64,15 @@ table. Relay those as printed.
 - **Greeks**: net Δ (coin), vega and theta (USD), Γ, as Σ sign × ratio × leg
   greek × package size. Every leg on the tape carries the taker's side, so the
   signs are the taker's.
-- **Fair**: the package fill against the package mark, and each leg's IV.
-  - Deribit blocks: against the mark Deribit recorded on the leg's own trade.
-  - Paradex, Derive and OKX blocks: against that venue's live mark, since the
-    tape keeps no mark at the trade.
-  - Any other venue: against the same option's live Deribit mark, in USD.
+- **Fair**: the package fill against the package mark at the trade, and each
+  leg's IV.
+  - Deribit and Derive: the mark recorded on the leg's own trade (Deribit's
+    trades also carry the IV).
+  - Paradex and OKX: the close of the venue's one-minute mark candle the trade
+    printed in.
+  - Any other venue: the same option's live Deribit mark, in USD.
+  - A leg with no mark at the trade moves the whole package to the live mark,
+    and the block says so. IVs other than Deribit's are live.
   - Coin-quoted fills (Deribit BTC/ETH, OKX) in bps, dollar fills in %.
 - **History**: other blocks of the same structure (coin, types, strikes,
   expiries, any size or side) on the options tape over the last 7 days, by

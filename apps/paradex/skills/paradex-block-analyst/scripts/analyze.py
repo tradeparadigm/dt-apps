@@ -11,14 +11,14 @@ live ticker concurrently, and prints the finished block (--render): net
 greeks, the fill against the mark, the week's same-structure history, and the
 live quotes.
 
-Each block is benchmarked on the venue it settled on:
-  DBT   the leg's own Deribit trade, which carries the mark and IV at the
-        trade, and the live Deribit ticker for greeks and quotes;
-  PRDX  Paradex's live market summary;
-  OKX   OKX's live mark, book and Black-Scholes greeks;
-  DRV   Derive's live ticker;
+Each block is benchmarked on the venue it settled on, against that venue's
+mark at the trade and its live ticker for greeks and quotes:
+  DBT   the leg's own Deribit trade (mark and IV);
+  PRDX  Paradex's per-minute mark candles;
+  OKX   OKX's per-minute mark candles;
+  DRV   the leg's own Derive trade;
   else  the same option's live Deribit ticker (Bullish), against the fill's
-        USD price.
+        USD price, since nothing records a mark at the trade.
 
 Exit 0: stdout is the answer. Exit 1: stdout ends with a "## For the agent"
 section holding the task and every number already pulled.
@@ -39,6 +39,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import core  # noqa: E402
 
 DERIBIT = "https://www.deribit.com/api/v2/public"
+# www keeps about a day of public trades; history keeps them all.
+DERIBIT_HISTORY = "https://history.deribit.com/api/v2/public"
 PARADEX = "https://api.prod.paradex.trade/v1"
 OKX = "https://www.okx.com/api/v5"
 DERIVE = "https://api.derive.xyz/v3"
@@ -197,25 +199,75 @@ def fetch_derive_ticker(sym):
         return _failed(sym, e)
 
 
-def fetch_trade_mark(sym, trade_id, at_ms):
-    """The mark and IV Deribit recorded on this leg's own trade, or None."""
+def deribit_mark_at(sym, trade_id, at_ms):
+    """The mark and IV Deribit recorded on this leg's own trade."""
+    d = _open_json(f"{DERIBIT_HISTORY}/get_last_trades_by_instrument_and_time?" + urlencode(
+        {"instrument_name": sym, "start_timestamp": at_ms - 2000,
+         "end_timestamp": at_ms + 2000, "count": 100}))
+    for t in (d.get("result") or {}).get("trades") or []:
+        if str(t.get("trade_id")) == trade_id:
+            return {"mark": core._f(t.get("mark_price")), "iv": core._f(t.get("iv"))}
+    return None
+
+
+def derive_mark_at(sym, trade_id, at_ms):
+    """The mark Derive recorded on this leg's own trade."""
+    d = _open_json(f"{DERIVE}/public/get_trade_history?" + urlencode(
+        {"instrument_name": sym, "from_timestamp": at_ms - 2000,
+         "to_timestamp": at_ms + 2000, "page_size": 100}))
+    for t in (d.get("result") or {}).get("trades") or []:
+        if str(t.get("trade_id")) == trade_id:
+            return {"mark": core._f(t.get("mark_price"))}
+    return None
+
+
+def _minute(at_ms):
+    return at_ms - at_ms % 60_000
+
+
+def paradex_mark_at(sym, _trade_id, at_ms):
+    """The close of Paradex's one-minute mark candle the trade printed in."""
+    start = _minute(at_ms)
+    page = _paradex("markets/klines", {"symbol": sym, "resolution": 1, "start_at": start,
+                                       "end_at": start + 60_000, "price_kind": "mark"})
+    for c in page.get("results") or []:
+        if c and int(c[0]) == start:
+            return {"mark": core._f(c[4])}
+    return None
+
+
+def okx_mark_at(sym, _trade_id, at_ms):
+    """The close of OKX's one-minute mark candle the trade printed in."""
+    start = _minute(at_ms)
+    for c in _okx("market/history-mark-price-candles",
+                  {"instId": sym, "bar": "1m", "after": start + 60_000, "before": start - 1}):
+        if c and int(c[0]) == start:
+            return {"mark": core._f(c[4])}
+    return None
+
+
+MARKS_AT_TRADE = {"own": deribit_mark_at, "paradex": paradex_mark_at,
+                  "okx": okx_mark_at, "derive": derive_mark_at}
+
+
+def fetch_mark_at(how, sym, trade_id, at_ms):
+    """(leg id, {mark, iv?}) at the trade, or (leg id, None)."""
     try:
-        r = _deribit("get_last_trades_by_instrument_and_time",
-                     {"instrument_name": sym, "start_timestamp": at_ms - 2000,
-                      "end_timestamp": at_ms + 2000, "count": 100})
-        for t in r.get("trades") or []:
-            if str(t.get("trade_id")) == trade_id:
-                return trade_id, {"mark": core._f(t.get("mark_price")), "iv": core._f(t.get("iv"))}
-        warn(f"trade {sym} {trade_id}: not in Deribit's trades at {at_ms}")
+        m = MARKS_AT_TRADE[how](sym, trade_id, at_ms)
+        if m is None or m.get("mark") is None:
+            warn(f"mark at trade {sym} {trade_id}: none recorded at {at_ms}")
+            return trade_id, None
+        return trade_id, m
     except Exception as e:  # noqa: BLE001
-        warn(f"trade {sym} {trade_id}: {e}")
-    return trade_id, None
+        warn(f"mark at trade {sym} {trade_id}: {e}")
+        return trade_id, None
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default="/tmp/analyze")
     ap.add_argument("--render", action="store_true")
+    ap.add_argument("--now-ms", type=int)
     args = ap.parse_args()
     try:
         return _run(args)
@@ -268,6 +320,9 @@ def _run(args):
     legs, unit = core.legs_from_block(block)
     opt = core.option_legs(legs)
     how = benchmark(venue)
+    now_ms = getattr(args, "now_ms", None) or int(time.time() * 1000)
+    for l in opt:
+        l["expired"] = bool(l.get("expiry_ms")) and l["expiry_ms"] <= now_ms
 
     for l in opt:
         if how == "own":
@@ -281,13 +336,14 @@ def _run(args):
     ticker = TICKERS.get(how, fetch_ticker)
     perp = core.paradex_perp_symbol(asset) if how == "paradex" else core.perp_symbol(asset)
     perp_ticker = fetch_paradex_ticker if how == "paradex" else fetch_ticker
-    syms = list(dict.fromkeys(l["_sym"] for l in opt))
+    # An expired option has no live market to ask.
+    syms = list(dict.fromkeys(l["_sym"] for l in opt if not l["expired"]))
 
     tickers, at_trade = {}, {}
-    with ThreadPoolExecutor(max_workers=min(12, 2 * len(syms) + 2)) as ex:
+    with ThreadPoolExecutor(max_workers=min(12, 2 * len(opt) + 2)) as ex:
         tf = [ex.submit(ticker, s) for s in syms] + [ex.submit(perp_ticker, perp)]
-        mf = ([ex.submit(fetch_trade_mark, l["_sym"], l["leg_id"], l["traded_at"])
-               for l in opt if l["leg_id"] and l["traded_at"]] if how == "own" else [])
+        mf = ([ex.submit(fetch_mark_at, how, l["_sym"], l["leg_id"], l["traded_at"])
+               for l in opt if l["leg_id"] and l["traded_at"]] if how in MARKS_AT_TRADE else [])
         for f in tf:
             s, v = f.result()
             tickers[s] = v
@@ -305,22 +361,23 @@ def _run(args):
     # The fill and the mark in one unit per leg: the venue's own price, or USD
     # for a block benchmarked on another venue's market.
     quote = "USD"
-    marks_at_trade = how == "own"
+    marks_at_trade = how in MARKS_AT_TRADE
     for l in opt:
-        t = tickers.get(l["_sym"])
+        t = None if l["expired"] else tickers.get(l["_sym"])
         l["tkr"] = t
-        if how == "own":
-            quote = l["asset"] if core.deribit_inverse(l["asset"]) else "USDC"
-            l["fill"] = l["price"]
-            m = at_trade.get(l["leg_id"])
-            l["mark"], l["iv"] = (m or {}).get("mark"), (m or {}).get("iv")
-            marks_at_trade = marks_at_trade and l["mark"] is not None
-        elif how in ("paradex", "derive", "okx"):
-            # OKX quotes its options in coin, Paradex and Derive in USD.
-            if how == "okx":
+        if how in MARKS_AT_TRADE:
+            # Deribit and OKX quote BTC/ETH options in coin, Deribit's alts in
+            # USDC, Paradex and Derive in USD.
+            if how == "own":
+                quote = l["asset"] if core.deribit_inverse(l["asset"]) else "USDC"
+            elif how == "okx":
                 quote = l["asset"]
             l["fill"] = l["price"]
-            l["mark"], l["iv"] = (t or {}).get("mark"), (t or {}).get("iv")
+            m = at_trade.get(l["leg_id"]) or {}
+            l["mark"] = m.get("mark")
+            l["iv"] = m.get("iv") if m.get("iv") is not None else (t or {}).get("iv")
+            l["iv_at_trade"] = m.get("iv") is not None
+            marks_at_trade = marks_at_trade and l["mark"] is not None
         else:
             l["fill"] = l["price_usd"]
             mark = (t or {}).get("mark")
@@ -329,11 +386,12 @@ def _run(args):
                 mark = mark * index if index else None
             l["mark"], l["iv"] = mark, (t or {}).get("iv")
 
-    # One kind of mark for the whole package: a leg Deribit's trades did not
-    # answer for moves every leg to the live mark.
-    if how == "own" and not marks_at_trade:
+    # One kind of mark for the whole package: a leg with no mark at the trade
+    # moves every leg to the live mark.
+    if how in MARKS_AT_TRADE and not marks_at_trade:
         for l in opt:
             l["mark"], l["iv"] = (l["tkr"] or {}).get("mark"), (l["tkr"] or {}).get("iv")
+            l["iv_at_trade"] = False
 
     greeks = {}
     for l in legs:
@@ -344,8 +402,10 @@ def _run(args):
     ng = core.net_greeks(legs, greeks, unit or 0)
     fill_net = core.package_net(legs, "fill")
     mark_net = core.package_net(legs, "mark")
-    gaps = [_leg_lbl(l, False) for l in opt if not l.get("tkr") and l["_sym"] not in UNLISTED]
-    unlisted = [_leg_lbl(l, False) for l in opt if not l.get("tkr") and l["_sym"] in UNLISTED]
+    live_missing = [l for l in opt if not l.get("tkr") and not l["expired"]]
+    gaps = [_leg_lbl(l, False) for l in live_missing if l["_sym"] not in UNLISTED]
+    unlisted = [_leg_lbl(l, False) for l in live_missing if l["_sym"] in UNLISTED]
+    expired = [_leg_lbl(l, False) for l in opt if l["expired"]]
     if spot is None:
         gaps.append("spot")
 
@@ -355,9 +415,11 @@ def _run(args):
         "traded_at": core.to_ms(block.get("traded_at")), "how": how,
         "unit": unit, "struct": core.struct_name(legs), "spot": spot, "quote": quote,
         "fill_net": fill_net, "mark_net": mark_net, "marks_at_trade": marks_at_trade,
+        "marked": mark_net is not None,
         "offset": core.package_offset(fill_net, mark_net, quote),
         "complete": block.get("complete", True) is not False,
-        "legs": legs, "net_greeks": ng, "gaps": gaps, "unlisted": unlisted, "history": hist,
+        "legs": legs, "net_greeks": ng, "gaps": gaps, "unlisted": unlisted,
+        "expired": expired, "history": hist,
         "warnings": WARN,
     }
     if args.render:
@@ -415,6 +477,14 @@ def _signed(x) -> str:
     return f"{x:+,.0f}" if abs(x) >= 10 else f"{x:+.2f}"
 
 
+def _spot(x) -> str:
+    """Whole dollars for BTC and ETH, four significant figures under 100 (ADA
+    at 0.236 would otherwise print 0)."""
+    if not x:
+        return "unavailable"
+    return f"{x:,.0f}" if x >= 100 else f"{x:.4g}"
+
+
 def _greek_parts(ng, a) -> str:
     parts = [(f"Δ {ng['delta']:+.2f} {a}" if ng.get("delta") is not None else None),
              (f"Vega {_signed(ng['vega'])}/v" if ng.get("vega") is not None else None),
@@ -445,15 +515,19 @@ def _when(ms) -> str:
 
 def _notes(r) -> list[str]:
     out = []
+    venue = VENUES.get(r["venue"], r["venue"])
     if r["how"] == "deribit":
-        out.append(f"{VENUES.get(r['venue'], r['venue'])}'s market is not read here, so the legs "
-                   f"are benchmarked on Deribit's live market, in USD.")
-    elif r["how"] != "own":
-        out.append(f"The tape keeps no mark at the trade, so the fill is against "
-                   f"{VENUES.get(r['venue'], r['venue'])}'s live mark.")
+        out.append(f"{venue}'s market is not read here, so the legs are benchmarked on "
+                   f"Deribit's live market, in USD.")
     elif not r["marks_at_trade"]:
-        out.append("Deribit's mark at the trade could not be read for every leg, so the fill is "
-                   "against the live mark.")
+        then = ("so the fill is against the live mark" if r["marked"]
+                else "and there is no live mark for every leg either, so the fill is not compared")
+        out.append(f"{venue}'s mark at the trade could not be read for every leg, {then}.")
+    if r.get("expired"):
+        which = ", ".join(r["expired"])
+        out.append(f"{which} expired after the trade, so it has no live quote or greeks."
+                   if len(r["expired"]) == 1 else
+                   f"{which} expired after the trade, so they have no live quotes or greeks.")
     if r.get("unlisted"):
         where = "Deribit" if r["how"] == "deribit" else VENUES.get(r["venue"], r["venue"])
         out.append(f"{where} lists no {', '.join(r['unlisted'])}, so those legs have no benchmark.")
@@ -473,7 +547,7 @@ def render(r) -> tuple[str, int]:
     opt = sorted(core.option_legs(legs), key=lambda l: (l.get("expiry_ms") or 0, l["strike"], l["cp"]))
     venue = VENUES.get(r["venue"], r["venue"])
     route = "via Paradigm" if r["route"] == "PARADIGM" else "direct"
-    sp = f"{r['spot']:,.0f}" if r.get("spot") else "unavailable"
+    sp = _spot(r.get("spot"))
 
     if not opt or r["unit"] is None:
         L = [f"**{a} block {r['venue']}:{r['block_id']}** · {venue} {route}", "",
@@ -502,6 +576,9 @@ def render(r) -> tuple[str, int]:
     L.append("")
 
     ng = r["net_greeks"]
+    def gap(l):
+        return "expired" if l.get("expired") else "no data"
+
     missing = [l for l in opt if not l.get("tkr")]
     rows = []
     if missing:
@@ -509,11 +586,14 @@ def render(r) -> tuple[str, int]:
                      + ", ".join(_leg_lbl(l, multi_exp) for l in missing)))
     else:
         rows.append(("Greeks", _greek_parts(ng, a)))
-    ivs = " / ".join(f"{_leg_lbl(l, multi_exp)} " + (f"{l['iv']:g}v" if l.get("iv") is not None else "no data")
+    ivs = " / ".join(f"{_leg_lbl(l, multi_exp)} " + (f"{l['iv']:g}v" if l.get("iv") is not None else gap(l))
                      for l in opt)
+    # Only Deribit records an IV on the trade; every other IV is live.
+    if not all(l.get("iv_at_trade") for l in opt):
+        ivs = "live IV " + ivs
     rows.append(("Fair", f"{_offset_txt(r)} · {ivs}"))
     rows.append(("History", _history_text(r["history"])))
-    live = " · ".join(f"{_leg_lbl(l, multi_exp)} " + (_quote(l["tkr"]) if l.get("tkr") else "no data")
+    live = " · ".join(f"{_leg_lbl(l, multi_exp)} " + (_quote(l["tkr"]) if l.get("tkr") else gap(l))
                       for l in opt)
     rows.append(("Live", live + (" (Deribit)" if r["how"] == "deribit" else "")))
     L += ["|  | Detail |", "| --- | --- |"]
