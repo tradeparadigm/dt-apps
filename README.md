@@ -87,11 +87,12 @@ ties it back to the app.
   what it relies on.
 - **Credentials in prose.** Say in plain words what access the data feed
   needs (`needs`, and the body where it matters); the agent picks from the
-  credentials the user has and writes the placeholder into the script or its
-  config, since a data feed's process does not get the user's `CRED_*`
-  variables. The credential proxy swaps in the secret. A test step runs with
-  `CRED_*` unset, as the registered data feed will. A data feed cannot call an
-  app's MCP tools: they exist only inside an agent run.
+  credentials the user has. The script reads that credential's placeholder
+  from `process.env.CRED_<LABEL>` after `openDataFeed`, which loads them into
+  a data feed's process (which openclaw starts without them; agents from
+  before dime-terminal#520 do not load them). The credential proxy swaps in
+  the secret. A data feed cannot call an app's MCP tools: they exist only
+  inside an agent run.
 - **Its files are copied, not run in place.** The skills directory is replaced
   on every publish, so the setup copies the template into the agent's
   workspace.
