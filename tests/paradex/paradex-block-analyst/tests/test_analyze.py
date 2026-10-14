@@ -17,11 +17,12 @@ import analyze as az
 t = Tally()
 
 
+LIVE_MARKS = {"80000": 0.0100, "83500": 0.0110, "84000": 0.0050, "87000": 0.0040}
+
+
 def deribit_ticker(name):
-    if "83500" in name or "80000" in name:
-        mark, delta = 0.0100, -0.3
-    else:
-        mark, delta = 0.0050, 0.2
+    delta = -0.3 if "83500" in name or "80000" in name else 0.2
+    mark = next((m for k, m in LIVE_MARKS.items() if k in name), 0.0050)
     return {"result": {"mark_price": mark, "best_bid_price": mark - 0.0002, "best_ask_price": mark + 0.0002,
                        "mark_iv": 40.0, "greeks": {"delta": delta, "vega": 10.0, "gamma": 0.0001, "theta": -20.0},
                        "index_price": 84000.0, "underlying_price": 84000.0}}
@@ -77,7 +78,9 @@ def market(url, unlisted=()):
         legs = {l["instrument"]: l for l in block("DRV:01a1388e-cb52-7f72-bf85-983d5fb212e4")["legs"]}
         leg = legs[name]
         assert int(q["from_timestamp"]) <= leg["traded_at"] <= int(q["to_timestamp"])
-        return {"result": {"trades": [{"trade_id": leg["leg_id"], "mark_price": "11" if "2475" in name else "4"}]}}
+        # Another trade in the same seconds comes first.
+        return {"result": {"trades": [{"trade_id": "other", "mark_price": "99"},
+                                      {"trade_id": leg["leg_id"], "mark_price": "11" if "2475" in name else "4"}]}}
     if "derive" in u.netloc:
         mark = 20 if "2475" in name else 9
         return {"result": {"M": str(mark), "b": str(mark - 1), "a": str(mark + 1), "I": "2505",
@@ -137,7 +140,8 @@ MISSING_TRADE.clear()
 t.ok(not r["marks_at_trade"] and all(l["mark"] == l["tkr"]["mark"] for l in r["legs"]),
      "never a mix of marks at trade and live marks")
 t.ok("could not be read for every leg, so the fill is against the live mark" in text
-     and "mark at trade" not in text.splitlines()[0], "and says so")
+     and "live mark" in text.splitlines()[0] and "mark at trade" not in text.splitlines()[0],
+     "and says so")
 
 # Paradex: in percent
 code, text, r = analyse(block("PRDX:1791942177030201709226870000"))
@@ -187,7 +191,10 @@ t.ok(r["marks_at_trade"] and {l["mark"] for l in r["legs"]} == {11.0, 4.0},
 # an option that has since expired has no live market
 bl = block("PRDX:1791942177030201709226870000")
 code, text, r = analyse(bl, now_ms=max(l["expiry"] for l in bl["legs"]) + 1)
-t.ok("2200P expired" in text and "Paradex lists no" not in text, "an expired leg says so")
+t.ok("_2200P, 2300P expired after the trade, so they have no live quotes or greeks._" in text
+     and "No live data" not in text and "Paradex lists no" not in text,
+     "an expired leg says it expired, never that its data is missing")
+t.ok("live IV 2200P expired" not in text, "an expired leg has no IV to call live")
 t.ok(r["marks_at_trade"] and "mark at trade" in text, "and is still compared at the trade")
 
 # spot for a coin under a dollar keeps its figures

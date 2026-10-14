@@ -89,8 +89,9 @@ t.ok(core.struct_name(legs_of_three := core.legs_from_block({"underlying": "BTC"
     for side, k in (("BUY", 90000), ("SELL", 95000), ("BUY", 100000))]})[0]) == "Custom",
      "1:1:1 calls are not a butterfly")
 t.ok(core.structure_key({"underlying": "BTC", "legs": [
+    {"kind": "OPTION", "option_type": "CALL", "strike": "90000", "expiry": 1792137600000},
     {"kind": "OPTION", "option_type": "CALL", "strike": None, "expiry": 1792137600000}]}) is None,
-     "a leg with no strike has no structure to match")
+     "a block with a leg that has no strike has no structure to match")
 
 # offsets
 t.ok(core.offset(0.0131, 0.0135, "BTC")["txt"] == "-4 bps", "coin offset in bps")
