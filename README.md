@@ -70,10 +70,11 @@ ties it back to the app.
 - **Any app, any venue.** Where a suggestion goes is the publisher's call: one
   that combines Paradex and Bybit can live in either app, and says in `needs`
   what it relies on.
-- **Credentials as a skill uses them.** A data feed's script finds the user's
-  placeholders in `process.env` (`CRED_<LABEL>`, `CRED_<LABEL>_META`), loaded
-  for it when it starts. A data feed cannot call an app's MCP tools: they
-  exist only inside an agent run.
+- **Credentials as placeholders in its config.** A data feed's process does
+  not get the user's `CRED_*` variables, so the setup has the agent write the
+  placeholder values it sees (`CRED_<LABEL>`, `CRED_<LABEL>_META`) into the
+  script's config; the credential proxy swaps in the secret. A data feed
+  cannot call an app's MCP tools: they exist only inside an agent run.
 - **Its files are copied, not run in place.** The skills directory is replaced
   on every publish, so the setup copies the template into the agent's
   workspace.

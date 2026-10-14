@@ -206,8 +206,8 @@ check("expiry", f["expiry"] == ["16OCT26", "PERP", "PERP"])
 # ---- datafeed.mjs against a local stand-in for the tape ----
 
 STUB_HELPER = """
-export async function openDataFeed(name, opts = {}) {
-  console.log(`OPEN ${name} credentials=${opts.credentials}`);
+export async function openDataFeed(name) {
+  console.log(`OPEN ${name}`);
   return { post: (line) => console.log(`POST ${name} ${line}`), close: async () => {} };
 }
 """
@@ -359,7 +359,7 @@ config = {"api": tape.url, "ws": "ws://127.0.0.1:9/never"}
 proc = run_once(config, backfill_minutes=60)
 posts = posts_of(proc.stdout)
 check("one run exits cleanly", proc.returncode == 0)
-check("it posts with no credential lookup", "OPEN options-monitor credentials=false" in proc.stdout)
+check("it opens the data feed by its configured name", "OPEN options-monitor" in proc.stdout)
 check("each package posts once, oldest first, and only from the backfill window",
       [l.split(" · ")[0] + " " + l.split(" · ")[1] for l in posts]
       == ["Derive ETH put", "Paradex BTC call spread", "Deribit BTC iron condor"])

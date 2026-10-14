@@ -56,7 +56,7 @@ const FLOOR = Date.now() - BACKFILL_MS;
 
 const skills = process.env.OPENCLAW_SKILLS_DIR || path.join(process.env.HOME ?? "", ".openclaw", "skills");
 const { openDataFeed } = await import(pathToFileURL(path.join(skills, "notification-feed", "scripts", "feed.mjs")).href);
-const out = await openDataFeed(cfg.name, { credentials: false });
+const out = await openDataFeed(cfg.name);
 
 const seen = createSeen();
 let newest = FLOOR;
