@@ -10,9 +10,9 @@
 schema_version: 1
 
 id: bybit
-version: 1.2.0
+version: 1.3.0
 name: Bybit
-blurb: Trade Bybit perpetuals and futures with a secret your agent never holds.
+blurb: Trade Bybit perpetuals, futures and options with a secret your agent never holds.
 
 # What this app is for, on two axes that do not imply each other:
 # whether its credentials can write, and whether it has been exercised
@@ -30,15 +30,16 @@ description: |
   on one unified v5 API.
 
   This app gives your agent Bybit tools for balances, positions, orders,
-  fills, funding and market data on USDT and USDC perpetuals and futures. It
-  also adds Bybit to the credentials form.
+  fills, funding and market data on USDT and USDC perpetuals and futures, and
+  option chains, greeks and orders on mainnet and testnet. It also adds Bybit
+  to the credentials form.
 
   You paste two things from Bybit's API management page: the **API key**,
   stored as ordinary metadata, and the **API secret**, which is sealed and
   never reaches your agent. The credential proxy signs every private request.
 
-  Spot, options, inverse contracts, transfers and private WebSocket streams
-  are not covered yet.
+  Spot, inverse contracts, transfers and private WebSocket streams are not
+  covered yet, and options are not available on demo.
 
 developer: Bybit
 developer_url: https://www.bybit.com
@@ -94,7 +95,7 @@ credential_types:
 # safe-cex support on Bybit's unified account becomes another flag here.
 mcp_server:
   command: npx
-  args: ["-y", "@tealstreet/exchange-mcp@0.1.2"]
+  args: ["-y", "@tealstreet/exchange-mcp@0.2.0"]
   credential_types:
     - type: secret
       env:
@@ -105,10 +106,12 @@ mcp_server:
     - id: mainnet
       env:
         EXCHANGE: bybit
+        EXCHANGE_OPTIONS: "true"
     - id: testnet
       env:
         EXCHANGE: bybit
         EXCHANGE_TESTNET: "true"
+        EXCHANGE_OPTIONS: "true"
     - id: demo
       env:
         EXCHANGE: bybitdemo
