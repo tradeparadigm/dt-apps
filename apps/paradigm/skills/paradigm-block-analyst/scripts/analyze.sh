@@ -120,6 +120,16 @@ esac
 # swallowed — followed by a blank line, or markdown joins it to the header.
 [ -n "$note" ] && printf '%s\n\n' "$note"
 
+# Why this block matters to the user (interest.py): one line or nothing, asked
+# of JEV beside the render. It reads the fill collect just wrote, and it never
+# fails the analysis. Once the render is done it gets ANALYZE_INTEREST_GRACE
+# seconds more, not its whole deadline: a slow JEV costs the line, never the
+# user's wait.
+interest="$OUT/.interest.out"
+(cd "$DIR" && deadline "${ANALYZE_INTEREST_TIMEOUT:-15}" uv run scripts/interest.py --fill-csv "$OUT/fill.csv") \
+  >"$interest" 2>/dev/null &
+interest_pid=$!
+
 # No exec — the EXIT trap must survive to clean the CSVs after the render.
 # analyze.py exits 0 (the answer) or 1 (with its own section for the agent).
 # Anything else, or a 1 without that section, is the render dying: the trade is
@@ -128,9 +138,29 @@ out="$OUT/.render.out"
 (cd "$DIR" && deadline "$RENDER_S" uv run scripts/analyze.py --csv-dir "$OUT" --render) >"$out" 2>"$OUT/.render.err"
 status=$?
 if [ "$status" -eq 0 ] || { [ "$status" -eq 1 ] && grep -q '^## For the agent$' "$out"; }; then
-  cat "$out"
+  grace=$(( ${ANALYZE_INTEREST_GRACE:-3} * 10 ))
+  while [ "$grace" -gt 0 ] && kill -0 "$interest_pid" 2>/dev/null; do
+    sleep 0.1; grace=$((grace - 1))
+  done
+  line=""
+  if kill -0 "$interest_pid" 2>/dev/null; then
+    # Still asking: drop it (and the deadline/uv under it) and show the block.
+    pkill -P "$interest_pid" 2>/dev/null; kill "$interest_pid" 2>/dev/null
+  else
+    wait "$interest_pid" 2>/dev/null
+    line=$(head -n 1 "$interest" 2>/dev/null)
+  fi
+  if [ -z "$line" ]; then
+    cat "$out"
+  elif [ "$status" -eq 0 ]; then
+    cat "$out"; printf '\n%s\n' "$line"
+  else
+    # The line belongs to the block, above the agent's section.
+    awk -v line="$line" '/^## For the agent$/ && !done { print line; print ""; done = 1 } { print }' "$out"
+  fi
   exit "$status"
 fi
+pkill -P "$interest_pid" 2>/dev/null; kill "$interest_pid" 2>/dev/null
 cat "$out"
 if [ "$status" -eq 124 ]; then
   printf 'analyze: fetching live data took longer than %ss.\n' "$RENDER_S"

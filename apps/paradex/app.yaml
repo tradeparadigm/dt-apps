@@ -16,7 +16,7 @@
 schema_version: 1
 
 id: paradex
-version: 1.2.0
+version: 1.2.1
 name: Paradex
 blurb: Trade perpetual futures on Paradex with a key your agent never holds.
 
@@ -172,15 +172,14 @@ credential_types:
       request header and the request body, on POST to /v1/auth/*,
       /v1/onboarding and /v1/orders.
 
-# Paradex's own MCP server, pinned to forks by commit until Paradex merges
-# signer support. The signing key comes first: it can trade.
+# Paradex's own MCP server. The signing key comes first: it can trade.
 mcp_server:
   command: uvx
   args:
     - --from
-    - git+https://github.com/samparadigm/mcp-paradex-py@9c26a535c17944b9e844e1ac41699df4dd050d31
+    - mcp-paradex @ https://github.com/tradeparadex/mcp-paradex-py/archive/1cd0304b39dbfa43ca23e5061cc1fefb28001db9.tar.gz
     - --with
-    - git+https://github.com/samparadigm/paradex-py@604304c5693ba43c37b0c7915357f7a7d814e25c
+    - paradex-py==0.8.2
     - mcp-paradex
   credential_types:
     - type: priv-key
