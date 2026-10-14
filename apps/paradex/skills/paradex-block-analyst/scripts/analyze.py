@@ -589,7 +589,7 @@ def render(r) -> tuple[str, int]:
     ivs = " / ".join(f"{_leg_lbl(l, multi_exp)} " + (f"{l['iv']:g}v" if l.get("iv") is not None else gap(l))
                      for l in opt)
     # Only Deribit records an IV on the trade; every other IV is live.
-    if not all(l.get("iv_at_trade") for l in opt):
+    if any(l.get("iv") is not None and not l.get("iv_at_trade") for l in opt):
         ivs = "live IV " + ivs
     rows.append(("Fair", f"{_offset_txt(r)} · {ivs}"))
     rows.append(("History", _history_text(r["history"])))
