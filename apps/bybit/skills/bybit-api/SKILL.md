@@ -1,118 +1,76 @@
 ---
 name: bybit-api
 description: >
-  Trading and account access on Bybit's v5 unified API using an API secret held
-  by the DIME credential proxy. Linear contracts and options go through the
-  `bybit__*` MCP tools, called by exact name. Spot, inverse and everything else
-  go through the shipped signed client. Covers the whole flow: building Bybit's signed
-  string, reading instruments, tickers and orderbook, reading wallet balance and
-  positions, placing, amending and cancelling orders, and what to do about
-  private WebSocket streams. Use for ANY request to api.bybit.com,
-  api-testnet.bybit.com or api-demo.bybit.com — including "buy BTC on Bybit",
-  "what is my Bybit balance", "cancel my Bybit orders", "show my Bybit
-  positions", or a 403 from the credential proxy on a Bybit call. Read this
-  BEFORE calling Bybit: Bybit's signature covers the API key and a byte-exact
-  copy of the query string or body, and the order of those bytes is not
-  something you can work out from Bybit's own documentation.
+  Bybit, the centralised exchange: balances, positions, orders, fills,
+  funding, market data, and placing, amending and cancelling orders. Use for
+  ANY Bybit request. The tools are `bybit__*` MCP tools, called by exact name.
 metadata:
   author: tradeparadigm
 ---
 
 # Bybit
 
-Bybit is a centralised exchange. One API — v5 — serves spot, USDT and inverse
-perpetuals, futures and options; which one you are trading is a `category`
-parameter rather than a different endpoint.
-
-Your `AGENTS.md` already explains the placeholder mechanism in general — how
-`CRED_<NAME>` and `CRED_<NAME>_META` work, what the `sign-` prefix means, and
-how to name the `X-Dime-Sign-` header. This file assumes that and covers only
-what is specific to Bybit.
-
-## Tools: linear contracts and options
-
-Balance, and positions, orders, fills and market data for linear contracts
-(USDT and USDC perpetuals and futures, Bybit's `linear` category) and options,
-go through the `bybit` MCP server. The server signs for you. For these, do not look for
-credentials, environment variables, the shipped client or errata. Call a tool
-with `tool_call`, passing its exact name below as `id` and its arguments as
-`args`. You do not need `tool_search` or `tool_describe`. Use the signed client
-further down only for spot, inverse, transfers and anything these tools do not
-cover.
+Every Bybit read and write goes through the `bybit` MCP server, which signs
+for you. Do not look for credentials, environment variables or a client, and
+do not build HTTP requests. Call a tool with `tool_call`, passing its exact
+name below as `id` and its arguments as `args`. You do not need `tool_search`
+or `tool_describe`.
 
 `?` marks an optional argument.
 
-### Account
+## Account
 
-- `bybit__get_balance()`: total, free, used and unrealised PnL
+- `bybit__get_balance()`: total, free, used and unrealised PnL, per coin
 - `bybit__get_positions(symbols?)`: open positions
-- `bybit__get_fills(symbol?, orderId?, from?, to?, limit?)`: your executions
+- `bybit__get_fills(symbol, orderId?, from?, to?, limit?)`: your executions on one market. Without `symbol` it returns nothing: when the user names no market, take the symbols from `bybit__get_positions` or `bybit__get_order_history` and ask per symbol
 - `bybit__get_closed_pnl(symbol, from?, to?, limit?)`: realised PnL of closed positions
-- `bybit__get_income(symbol?, incomeType?, startTime?, endTime?, limit?)`: funding, fees and realised PnL records
+- `bybit__get_income(symbol?, incomeType?, startTime?, endTime?, limit?)`: funding, fees and realised PnL records. `incomeType` is `FUNDING_FEE`, `COMMISSION` or `REALIZED_PNL`; any other value returns nothing. For funding paid, pass `incomeType: "FUNDING_FEE"` and a `startTime`
 
-### Orders
+## Orders
 
 - `bybit__get_open_orders(symbols?)`: resting and conditional orders
 - `bybit__get_order_history(symbol?, orderId?, from?, to?, limit?)`: past orders
-- `bybit__place_order(symbol, side, type, amount, price?, triggerPrice?, triggerType?, stopLoss?, takeProfit?, reduceOnly?, timeInForce?, clientOrderId?, impliedVolatility?)`: returns the new order ids
-- `bybit__amend_order(orderId, price?, amount?)`: pass exactly one of `price` and `amount`
+- `bybit__place_order(symbol, side, type, amount, price?, triggerPrice?, triggerType?, stopLoss?, takeProfit?, reduceOnly?, timeInForce?, clientOrderId?)`: returns the new order ids
+- `bybit__amend_order(orderId, price?, amount?)`: exactly one of `price` and `amount`
 - `bybit__cancel_orders(orderIds)`: cancel by id
 - `bybit__cancel_all_orders(symbol?)`: every open order, or every open order on one market
 - `bybit__set_leverage(symbol, leverage)`
 - `bybit__set_position_mode(hedged)`
-- `bybit__set_margin_type(isolated)`
+- `bybit__set_margin_type(isolated)`: switches the whole account between isolated and cross margin, for every market
 
 `side` is `buy` or `sell`. `type` is `limit`, `market`, `conditional`,
-`stop_market`, `take_profit_market` or `trailing_stop_market`. `timeInForce`
-is `GoodTillCancel`, `ImmediateOrCancel`, `FillOrKill` or `PostOnly`.
-`triggerType` is `mark_price`, `last_price` or `index_price`.
+`stop_market`, `take_profit_market` or `trailing_stop_market`.
+`timeInForce` is `GoodTillCancel`, `ImmediateOrCancel`, `FillOrKill` or
+`PostOnly`. `triggerType` is `mark_price`, `last_price` or `index_price`.
 
-### Market data
+## Market data
 
-- `bybit__get_markets(symbols?, search?)`: tick size, size step, minimum size and maximum leverage. With no argument it returns symbols only
+- `bybit__get_markets(symbols?, search?)`: tick size, size step, minimum size and maximum leverage. With no argument, symbols only
 - `bybit__get_tickers(symbols?)`: last, mark, index, bid, ask, 24h volume, open interest and funding rate
-- `bybit__get_candles(symbol, interval, from?, to?, limit?)`: `interval` is one of `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `12h`, `1d`, `1w`
+- `bybit__get_candles(symbol, interval, from?, to?, limit?)`: `interval` is `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `12h`, `1d` or `1w`
 
-### Options
+## Facts
 
-- `bybit__get_option_expiries(underlying)`: expiries as ms and ISO dates
-- `bybit__get_option_chain(underlying, expiry?, right?, strikeMin?, strikeMax?)`: bid, ask, mark, IVs, underlying price and greeks per option, plus `units` for the greeks. `right` is `call` or `put`. `expiry` is the millisecond `expiry` field from `get_option_expiries`, never the date. Pass a strike range too: one underlying has hundreds of options
-- `bybit__get_account_greeks()`: delta, gamma, vega and theta summed per underlying
-
-Option symbols look like `BTC-30OCT26-96000-C-USDT`. Copy them from the chain
-and never build one by hand: the day has no leading zero and the suffix
-varies. Underlyings include BTC, ETH, SOL and some stocks. Option positions, orders, fills and cancels use the
-same tools as linear contracts.
-
-- An option order is `limit` or `market`, priced in USDT premium. Triggers,
-  `stopLoss` and `takeProfit` are refused.
-- Price by implied volatility with `impliedVolatility` as a fraction (`0.5`
-  is 50%), and leave `price` out.
-- BTC options tick in 5 USDT, with a 5 USDT minimum price and a 0.01 minimum
-  size. `bybit__get_markets(symbols: [<option symbol>])` gives any option's
-  tick, step and minimums. `get_markets` without symbols lists no options.
-- `amount` is in the base coin: `0.01` is 0.01 BTC of underlying.
-- IVs are fractions. Greeks are Black-Scholes per 1 unit of the underlying in
-  USDT: vega per 1 vol point, theta per calendar day.
-- Account greeks include the delta of perpetual positions, not only options.
-- Option positions report `leverage` and `liquidationPrice` as 0. Closed PnL,
-  leverage and position mode do not exist for options.
-
-### Facts
-
-- Linear symbols look like `BTCUSDT` or `BTCPERP`. Take exact names from
-  `bybit__get_markets`, and option names from `bybit__get_option_chain`.
+- The tools cover the markets `bybit__get_markets` lists. Take exact symbols
+  from it, such as `BTCUSDT` or `BTCPERP`; never build one by hand.
 - `amount` is in the base coin: `0.001` on `BTCUSDT` is 0.001 BTC. The
-  minimum and the step are `limits.amount.min` and `precision.amount` from
-  `bybit__get_markets`, and `precision.price` is the tick size.
-- Time arguments are unix milliseconds. Run `date +%s%3N` for now before you
-  build a window. In results, `timestamp` on fills and candles is unix
-  seconds, and on income it is milliseconds.
+  minimum and step are `limits.amount.min` and `precision.amount`, and
+  `precision.price` is the tick.
+- Time arguments are unix milliseconds. Run `date +%s%3N` for now. In
+  results, `timestamp` on fills and candles is unix seconds, and on income
+  it is milliseconds.
 - Post-only is `timeInForce: "PostOnly"`. Reduce-only is `reduceOnly: true`.
 - `bybit__cancel_all_orders()` with no symbol cancels every open order. Name
   the market unless the user asked for all of it.
+- The environment comes from the enrolled credential. Mainnet is real money.
 
-### When there are no `bybit__` tools
+## Not covered yet
+
+Spot, inverse contracts, transfers, deposits, withdrawals and private
+WebSocket streams. Tell the user Bybit's tools do not cover them yet; do not
+try to reach them another way.
+
+## When there are no `bybit__` tools
 
 The server did not start for this account. Tell the user which of these
 applies, cheapest to check first:
@@ -120,397 +78,30 @@ applies, cheapest to check first:
 - The change has not reached the agent yet. Ask the user to reload, or retry
   shortly.
 - No Bybit credential is enrolled.
-- The credential was enrolled with a custom host. Only a credential for one of
-  the app's environments (mainnet, testnet, demo) starts the server.
+- The credential was enrolled with a custom host. Only a credential for one
+  of the app's environments (mainnet, testnet, demo) starts the server.
 - The credential is missing its API key.
 - Another MCP server is already named `bybit`.
 
-On demo trading there are `bybit__` tools but no option tools, because options
-are off for the demo environment. Tell the user options are not available on
-demo.
-
-The signed client below still works in every one of these cases.
-
-## Hosts
-
-| Environment | REST base |
-|---|---|
-| Mainnet | `https://api.bybit.com` |
-| Testnet | `https://api-testnet.bybit.com` |
-| Demo trading | `https://api-demo.bybit.com` |
-
-Check which one your credential is scoped to before assuming mainnet. Testnet
-and demo trading are different things: testnet is a separate chain with fake
-markets, demo trading is mainnet's real market data with a simulated balance.
-
-**The credential decides the host, not the machine you are running on.** The
-name of your own host says nothing about it: a box called `…-testnet-…`
-routinely holds a mainnet credential, and treating the hostname as evidence
-gets you a real order you believed was a paper one. The credential's variable
-name is the only thing that answers this — `CRED_BYBIT_MAINNET_SECRET` is
-mainnet, and mainnet is real money.
-
-## What you hold
-
-One credential, and one piece of public metadata that comes with it.
-
-- **`CRED_BYBIT_<ENV>_SECRET`** — the API secret, as a `sign-` placeholder. You
-  never see the secret. You put the placeholder where the signature goes and
-  tell the proxy what to sign.
-- **`CRED_BYBIT_<ENV>_SECRET_META`** — JSON, containing `api_key`. This is your
-  API key. It is **not** a secret in the sense the API secret is: it identifies
-  the key pair and cannot authenticate anything on its own. You send it in a
-  header yourself.
-
-**Send the api key verbatim.** It goes in `X-BAPI-API-KEY` and it is also the
-second field of the signed string, so it has to be the real value in both. The
-habit of masking a credential in a command you are about to show someone —
-`***`, `<redacted>`, `$KEY` left unexpanded — breaks the call here, and Bybit
-reports it as a signature problem rather than a key problem. Mask it when you
-QUOTE the command afterwards, never in the request.
-
-The exact variable names depend on the label chosen at enrolment; read them
-from the environment rather than assuming.
-
-## Know what the key can do, before you need it
-
-```
-GET /v5/user/query-api    # signed
-```
-
-One call, and it answers the questions that otherwise surface as a confusing
-rejection halfway through a task:
-
-- `permissions` — per product group: `ContractTrade`, `Spot`, `Options`,
-  `Derivatives`, `Wallet`, and more. An empty list means the key cannot touch
-  that product at all. A key with `Spot: []` will fail every spot call no
-  matter how well formed.
-- `readOnly` — `0` means it can trade, `1` means every order will be refused.
-- `expiredAt` and `deadlineDay` — Bybit keys EXPIRE. `deadlineDay` counts down.
-- `ips` — `["*"]` is any address; a list means the request must come from one
-  of them, and the proxy's egress address is what Bybit sees, not yours.
-- `uta` — whether this is a Unified Trading Account, which decides whether
-  `accountType=UNIFIED` is the right read.
-
-**Check this first when a call fails with a permission or auth error**, and say
-which permission is missing rather than retrying. The user has to fix that on
-Bybit's website; no amount of retrying will.
-
-## Every private request
-
-Run the client the app ships. It is at `scripts/bybit.mjs`, beside this file.
-
-```sh
-METHOD=GET TARGET='/v5/account/wallet-balance?accountType=UNIFIED' node scripts/bybit.mjs
-
-METHOD=GET TARGET='/v5/position/list?category=linear&settleCoin=USDT' node scripts/bybit.mjs
-
-METHOD=POST TARGET=/v5/order/create \
-  BODY='{"category":"linear","symbol":"BTCUSDT","side":"Buy","orderType":"Limit","qty":"0.001","price":"50000","timeInForce":"PostOnly"}' \
-  node scripts/bybit.mjs
-```
-
-`TARGET` carries the path and, on a GET, its query. A POST leaves `TARGET`
-bare and puts everything in `BODY`. The client prints the HTTP status and the
-body. If the account holds more than one Bybit credential it refuses and lists
-them; pick with `BYBIT_CRED=CRED_BYBIT_MAINNET_SECRET`.
-
-Public market data needs none of this:
-
-```sh
-curl -sS 'https://api.bybit.com/v5/market/tickers?category=linear&symbol=BTCUSDT'
-```
-
-How the signing works is in [references/signing.md](references/signing.md).
-Read it when a call fails, not before.
-
-### When this client is wrong
-
-Check `~/.openclaw/workspace/tools/bybit/errata-1.3.0.md` before your first
-call. An earlier chat writes it when this client turns out to be wrong against
-the live venue, and it says what to change. The version in the name is this
-app's version, so a file naming any other version is stale: delete it and
-ignore what it said.
-
-When the client is wrong and no errata covers it, fix your own call, get the
-user their answer, then write that file yourself. Say what failed, how you
-knew, and what you changed. Tell the user in one line that you did.
-
-Never edit `scripts/bybit.mjs`. A publish replaces it, so an edit there is
-lost and the next chat repeats your work.
-
-## Which calls need signing
-
-The proxy demands the placeholder on exactly these paths, and refuses a request
-to one of them without it:
-
-```
-/v5/order/*      /v5/position/*      /v5/execution/*
-/v5/account/*    /v5/asset/*         /v5/user/*
-/v5/spot-margin-trade/*
-```
-
-Everything under `/v5/market/*` is public. Send those with no auth headers at
-all — no api key, no timestamp, no signature. Adding a signature to a public
-call is not harmless here: the proxy is not watching those paths, so your
-placeholder would go to Bybit verbatim.
-
-**There is a third kind, and it is the one that will waste your time.** Bybit
-adds authenticated families over time, and this credential can sign only the
-paths above. On any other path the proxy substitutes nothing, so your
-placeholder travels to Bybit as literal text and is rejected. Your signing was
-fine; re-deriving it will not help, and neither will retrying.
-
-Check the path against the list BEFORE you conclude anything about your
-signature. If the user needs that call, say so plainly: the credential's
-allowed routes have to be widened where it was enrolled, which is their action
-and not something you can work around.
-
-### Telling an unsignable path from one that does not exist
-
-Both look like a failure you did not cause, and they need opposite answers, so
-do not guess between them. Three calls settle it — the same request unsigned,
-then signed, then a path you know is signable as a control:
-
-```sh
-curl -sS -w '\nHTTP %{http_code}\n' 'https://api.bybit.com/v5/<the path in question>'
-METHOD=GET TARGET='/v5/<the path in question>' node scripts/bybit.mjs
-METHOD=GET TARGET='/v5/account/wallet-balance?accountType=UNIFIED' node scripts/bybit.mjs
-```
-
-- **Same answer signed and unsigned, while the control returns 200** — the
-  path does not exist. Bybit's router dropped it before any auth check. A bare
-  `404` with an empty body is this. Check the endpoint name; nothing about the
-  credential will fix it.
-- **Unsigned and signed differ, and the signed one is rejected** — the path
-  exists and is authenticated, and the credential cannot sign it. This is the
-  routes problem above.
-
-## Market data (public, unsigned)
-
-```
-GET /v5/market/instruments-info?category=linear&symbol=BTCUSDT
-GET /v5/market/tickers?category=linear&symbol=BTCUSDT
-GET /v5/market/orderbook?category=linear&symbol=BTCUSDT&limit=25
-GET /v5/market/kline?category=linear&symbol=BTCUSDT&interval=60&limit=200
-```
-
-`category` is required on nearly every v5 call: `spot`, `linear`, `inverse`
-(coin-margined) or `option`.
-
-### What lives under `linear`, and how to tell them apart
-
-`linear` is three different products sharing one category — 885 contracts
-today:
-
-| Settles | Contract | Count | Symbol looks like |
-|---|---|---|---|
-| USDT | `LinearPerpetual` | 777 | `BTCUSDT`, `ETHUSDT` |
-| **USDC** | `LinearPerpetual` | 68 | **`BTCPERP`**, `ETHPERP`, `1000PEPEPERP` |
-| USDT | `LinearFutures` | 40 | `BTCUSDT-25DEC26` (dated) |
-
-**A USDC perpetual is `BTCPERP`, not `BTCUSDC`.** That is the single most
-common way to ask Bybit for a contract that does not exist. Dated futures carry
-the expiry after a dash, and every one of them settles USDT — there are no USDC
-futures listed.
-
-Filter with `settleCoin` (`USDT` or `USDC`) and read `contractType` to tell a
-perpetual from a dated future. `settleCoin` is also what most signed queries
-want: `position/list?category=linear&settleCoin=USDC` returns the USDC book and
-nothing else.
-
-`inverse` is separate again: coin-margined, settling in the base asset
-(`BTCUSD` settles BTC), 28 contracts.
-
-**USDC contracts have session settlement and USDT ones do not.** Unrealised PnL
-on a USDC position is periodically realised, and the record is
-`GET /v5/asset/settlement-record` — `category=linear` and USDC only. A user
-asking "why did my PnL move without a trade" on a `*PERP` symbol is asking
-about this. There is no equivalent for USDT contracts, and none for options.
-
-Check `instruments-info` before placing your first order on a symbol. It carries
-`lotSizeFilter.qtyStep`, `priceFilter.tickSize` and
-`lotSizeFilter.minNotionalValue` (5 USDT/USDC on BTC either way), and an order
-that is not a multiple of those, or is below the minimum notional, is
-rejected.
-
-## Spot
-
-`category=spot`, and its instrument shape is not the derivatives one.
-
-```
-GET /v5/market/instruments-info?category=spot&symbol=BTCUSDT
-```
-
-`lotSizeFilter` carries `basePrecision`, `quotePrecision`, `minOrderQty`,
-`minOrderAmt` (5 USDT on BTCUSDT) and separate `maxLimitOrderQty` /
-`maxMarketOrderQty` — there is no `qtyStep`, and `priceFilter` is `tickSize`
-alone. An order can satisfy the quantity precision and still be refused for
-falling under `minOrderAmt`.
-
-Spot reads take no `settleCoin` — it is a derivatives concept. Use `symbol`.
-
-Spot trading is a SEPARATE permission on the key (`Spot: ["SpotTrade"]`); a key
-that trades perpetuals happily may have nothing for spot. See the key-scope
-section above before concluding a spot failure is your request's fault.
-
-## Options
-
-Use the option tools above for chains, greeks, positions and orders. These
-facts are not visible through them:
-
-- Options trade only under the Unified Trading Account.
-- Every listed contract settles in USDT, 08:00 UTC, to a 30-minute average of
-  the index. `GET /v5/market/delivery-price?category=option` returns contracts delivering between 08:00 and
-  12:00 UTC; after expiry the result is in
-  `GET /v5/asset/delivery-record?category=option`, with strike and realised PnL.
-- Limits that bite market makers: 50 open orders per coin, and
-  `/v5/order/cancel-all` at 1 per second for options against 10 elsewhere.
-- Market maker protection: `POST /v5/account/mmp-modify`,
-  `POST /v5/account/mmp-reset` and `GET /v5/account/mmp-state`, keyed by
-  `baseCoin`. Bybit has to enable MMP for the account first, so `mmp-state`
-  answering does not mean MMP is on. Use the signed client for these.
-
-## Account state (signed)
-
-For linear contracts use the tools above. These calls are for every other
-category.
-
-```
-GET /v5/account/wallet-balance?accountType=UNIFIED
-GET /v5/position/list?category=linear&settleCoin=USDT
-GET /v5/order/realtime?category=linear&settleCoin=USDT   # working orders
-GET /v5/order/history?category=linear&limit=50          # closed orders
-GET /v5/execution/list?category=linear&limit=50         # fills
-```
-
-**`order/realtime` needs more than `category` on `linear`**: one of `symbol`,
-`settleCoin` or `baseCoin` is required, and without it Bybit answers
-`10001 params error`. `inverse` does not — `category=inverse` alone returns the
-list. Neither do `order/history` and `execution/list`.
-
-`accountType` is `UNIFIED` for a Unified Trading Account, which is what a
-recent Bybit account is. If that returns nothing, try `CONTRACT` (legacy
-derivatives) or `SPOT`.
-
-## Placing an order
-
-For linear contracts use `bybit__place_order`. This section is for spot,
-options and inverse.
-
-```
-POST /v5/order/create
-Content-Type: application/json
-```
-
-```json
-{
-  "category": "linear",
-  "symbol": "BTCUSDT",
-  "side": "Buy",
-  "orderType": "Limit",
-  "qty": "0.001",
-  "price": "60000",
-  "timeInForce": "GTC",
-  "orderLinkId": "my-order-1"
-}
-```
-
-Sign the body string exactly as you will send it — see the warning above.
-
-- `side` is `Buy` or `Sell`, capitalised exactly like that.
-- `orderType` is `Limit` or `Market`. A market order omits `price`.
-- `qty` and `price` are **strings**, not numbers. Sending them as JSON numbers
-  is a common source of both rejections and signature mismatches.
-- `timeInForce`: `GTC`, `IOC`, `FOK`, or `PostOnly` for a maker-only order.
-- `orderLinkId` is your own id, up to 36 characters. Set it. It is how you
-  cancel or amend without first looking up Bybit's `orderId`, and how a retry
-  after a timeout avoids placing the order twice — Bybit rejects a duplicate
-  `orderLinkId`.
-- `reduceOnly: true` to close rather than open.
-
-A `200` with `retCode: 0` means accepted. **Any other `retCode` is a failure
-even though the HTTP status is 200** — always read `retCode` and `retMsg`
-rather than trusting the status line.
-
-## Amending and cancelling
-
-```
-POST /v5/order/amend     {"category":"linear","symbol":"BTCUSDT","orderLinkId":"my-order-1","price":"59000"}
-POST /v5/order/cancel    {"category":"linear","symbol":"BTCUSDT","orderLinkId":"my-order-1"}
-POST /v5/order/cancel-all {"category":"linear","settleCoin":"USDT"}
-```
-
-All three are `POST`, including cancel — Bybit has no `DELETE` verb on orders.
-Identify an order by `orderId` or `orderLinkId`; one of the two is required.
-
-`cancel-all` without a `symbol` cancels every open order in the category, so
-scope it with `symbol` or `settleCoin` unless that is genuinely what was asked
-for.
-
-## WebSocket
-
-**Public streams work.** `wss://stream.bybit.com/v5/public/linear` and its
-siblings need no authentication — subscribe and read.
-
-**Private streams do not work through the credential proxy.** Bybit
-authenticates `wss://stream.bybit.com/v5/private` with an `auth` frame sent
-*after* the connection is established, carrying a signature over
-`"GET/realtime" + expires`. The proxy signs HTTP requests; it does not sign
-WebSocket frames, and there is no placeholder mechanism inside a frame.
-
-So for order updates, fills and position changes, poll the signed REST
-endpoints above instead — `/v5/order/realtime` for working orders,
-`/v5/execution/list` for fills. Say so if asked to stream private data: it is a
-real limitation, not something to work around by asking for the secret.
-
-## When something fails
-
-- **403 from the credential proxy**, body naming `placeholder_absent` — you
-  called a signed path without putting the placeholder in `X-BAPI-SIGN`. The
-  body lists where it looked.
-- **`retCode: 10004`, `error sign!`** — the string you signed is not the string
-  Bybit reconstructed. Almost always the body was re-serialised after signing,
-  or the query string order changed, or `recv_window` in the header differs from
-  the one you concatenated. **Check the path first**: on a family outside the
-  signed list the proxy never substituted at all, and Bybit is comparing
-  against the literal placeholder. Nothing about your signing is wrong and no
-  amount of redoing it will help.
-- **HTTP 404 with an empty body** — the path does not exist. Bybit's router
-  dropped the request before any auth check, so this says nothing about your
-  credential. Confirm it with the three calls under "Telling an unsignable path
-  from one that does not exist" rather than assuming either way.
-- **`retCode: 10002`, `invalid request, please check your timestamp`** — your
-  timestamp is outside `recv_window`. Use milliseconds, not seconds.
-- **`retCode: 10003`, `API key is invalid`** — the `api_key` in `_META` does not
-  match the enrolled secret, or the key was revoked on Bybit's side, or you sent
-  a masked value in `X-BAPI-API-KEY`. Print the header you actually sent before
-  you start re-deriving the signature.
-- **`retCode: 110043`, leverage not modified** and similar — Bybit returns many
-  non-zero `retCode`s that are informational. Read `retMsg` before treating one
-  as fatal.
-
-**Tell the two layers apart by the SHAPE of the failure, not by guessing.**
-
-- **HTTP 403 with a plain-text body** is the credential proxy, and that body is
-  the answer: it names the placeholder to use and lists exactly where it looked
-  for it. Read it and retry. The request never reached Bybit.
-- **HTTP 401 with an EMPTY body**, `server: Openresty`, CloudFront headers, is
-  BYBIT rejecting the request at its edge before it writes a JSON body. Either
-  the signed bytes do not match what you sent, or `X-BAPI-API-KEY` is not a real
-  key. The same bad key answers 10003 on some endpoints and an empty 401 on
-  others, so check the key header before you re-derive the signature; after
-  that, the timestamp discipline above.
-- **HTTP 200 with a non-zero `retCode`** is Bybit's application layer — the
-  request authenticated and the venue disagreed with its contents.
-
-Do not read an empty-bodied 401 as a proxy refusal. A proxy refusal always has
-a body that tells you what to do.
-
-## Reference
-
-Full API documentation: https://bybit-exchange.github.io/docs/v5/intro
-
-Go there for anything this file does not cover — parameter lists, rate limits,
-error codes, the full `category` matrix. This file is the part Bybit's own docs
-cannot tell you: that the secret is not yours to hold, and what to send instead.
+## When a tool fails
+
+The error text is Bybit's or the credential proxy's. Each symptom below lists
+every cause we know, cheapest to check first.
+
+- **`10003` API key is invalid, or an HTTP 401 with an empty body**: the API
+  key in the credential is wrong or was revoked on Bybit, or it belongs to a
+  different environment from the credential. The same bad key gives `10003`
+  on some calls and an empty 401 on others.
+- **`10004` error sign**: the enrolled secret does not belong to the API key,
+  or the call went to a path outside the credential's routes, so the proxy
+  never signed it.
+- **`10005` permission denied**: the key lacks the permission the call needs,
+  such as trading, or is restricted to IP addresses that exclude the agent.
+- **HTTP 403 with a plain-text body**: the credential proxy refused the call
+  before it reached Bybit, and the body says why. Report it to the user.
+- **Another non-zero code**: Bybit understood the call and disagreed with it,
+  for example size below the minimum or insufficient margin. Read the message.
+  Some codes, such as `110043` leverage not modified, are informational.
+
+For the first three, ask the user to check the key on Bybit's API management
+page and re-enrol it. You cannot see or fix the secret.
