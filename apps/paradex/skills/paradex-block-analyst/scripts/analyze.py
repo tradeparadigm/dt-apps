@@ -524,10 +524,7 @@ def _notes(r) -> list[str]:
                 else "and there is no live mark for every leg either, so the fill is not compared")
         out.append(f"{venue}'s mark at the trade could not be read for every leg, {then}.")
     if r.get("expired"):
-        which = ", ".join(r["expired"])
-        out.append(f"{which} expired after the trade, so it has no live quote or greeks."
-                   if len(r["expired"]) == 1 else
-                   f"{which} expired after the trade, so they have no live quotes or greeks.")
+        out.append(f"Expired after the trade, with no live quote or greeks: {', '.join(r['expired'])}.")
     if r.get("unlisted"):
         where = "Deribit" if r["how"] == "deribit" else VENUES.get(r["venue"], r["venue"])
         out.append(f"{where} lists no {', '.join(r['unlisted'])}, so those legs have no benchmark.")

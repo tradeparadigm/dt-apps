@@ -127,7 +127,7 @@ t.ok(r["marks_at_trade"] and r["how"] == "own", "marks come from the legs' own t
 t.ok(r["struct"] == "Iron Condor" and r["unit"] == 10, "iron condor ×10")
 t.ok(r["fill_net"] < 0 and "| Seller | Recd" in text, "a credit condor is a Seller who received")
 t.ok("mark at trade" in text and "bps" in text, f"coin offset against the mark at trade: {text.splitlines()[0]}")
-t.ok("41.5v" in text, "IV at the trade, from Deribit's own trade")
+t.ok("41.5v" in text and "live IV" not in text, "IV at the trade, from Deribit's own trade, not called live")
 t.ok("| History | 2 other same-structure block(s) on the options tape, 7d (Deribit 2) |" in text, "history row")
 t.ok("Deribit direct" in text, "venue and route")
 # Δ = 10 × (+1×-0.3 [80kP] −1×0.2 [84kC] −1×-0.3 [83.5kP] +1×0.2 [87kC]) = 0
@@ -191,11 +191,19 @@ t.ok(r["marks_at_trade"] and {l["mark"] for l in r["legs"]} == {11.0, 4.0},
 # an option that has since expired has no live market
 bl = block("PRDX:1791942177030201709226870000")
 code, text, r = analyse(bl, now_ms=max(l["expiry"] for l in bl["legs"]) + 1)
-t.ok("_2200P, 2300P expired after the trade, so they have no live quotes or greeks._" in text
+t.ok("_Expired after the trade, with no live quote or greeks: 2200P, 2300P._" in text
      and "No live data" not in text and "Paradex lists no" not in text,
      "an expired leg says it expired, never that its data is missing")
 t.ok("live IV 2200P expired" not in text, "an expired leg has no IV to call live")
 t.ok(r["marks_at_trade"] and "mark at trade" in text, "and is still compared at the trade")
+
+# an expired leg with no mark candle has no mark at all, and says so
+saved_close = dict(CANDLE_CLOSE)
+del CANDLE_CLOSE["ETH-USD-23OCT26-2200-P"]
+code, text, r = analyse(bl, now_ms=max(l["expiry"] for l in bl["legs"]) + 1)
+CANDLE_CLOSE.update(saved_close)
+t.ok("n/a vs mark" in text.splitlines()[0] and "so the fill is not compared" in text
+     and "against the live mark" not in text, "no mark anywhere: the fill is not compared")
 
 # spot for a coin under a dollar keeps its figures
 t.ok(az._spot(0.236) == "0.236" and az._spot(1.37) == "1.37" and az._spot(83611.2) == "83,611",
