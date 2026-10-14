@@ -120,7 +120,7 @@ mcp_server:
   command: uvx
   args:
     - --from
-    - git+https://github.com/samparadigm/mcp-paradigm-py@8a21b3b7a1f0e0494cea7e59937c5e91582f1c78
+    - git+https://github.com/samparadigm/mcp-paradigm-py@21b2c26ccdddf41917de7cfef5d2dbd3313c34aa
     - mcp-paradigm
   bind: all
   credential_types:
@@ -129,6 +129,7 @@ mcp_server:
         PARADIGM_ACCESS_KEY: "${placeholder}"
     - type: signing-key
       env:
+        PARADIGM_SIGNING_DRIVER: proxy
         PARADIGM_SIGNER_HEADER: "X-Dime-Sign-${label}"
         PARADIGM_SIGNER_SIGNATURE: "${placeholder}"
   environments:
