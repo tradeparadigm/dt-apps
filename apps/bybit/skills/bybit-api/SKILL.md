@@ -2,9 +2,9 @@
 name: bybit-api
 description: >
   Trading and account access on Bybit's v5 unified API using an API secret held
-  by the DIME credential proxy. Linear contracts go through the `bybit__*` MCP
-  tools, called by exact name. Everything else goes through the shipped signed
-  client. Covers the whole flow: building Bybit's signed
+  by the DIME credential proxy. Linear contracts and options go through the
+  `bybit__*` MCP tools, called by exact name. Spot, inverse and everything else
+  go through the shipped signed client. Covers the whole flow: building Bybit's signed
   string, reading instruments, tickers and orderbook, reading wallet balance and
   positions, placing, amending and cancelling orders, and what to do about
   private WebSocket streams. Use for ANY request to api.bybit.com,
@@ -29,15 +29,16 @@ Your `AGENTS.md` already explains the placeholder mechanism in general — how
 how to name the `X-Dime-Sign-` header. This file assumes that and covers only
 what is specific to Bybit.
 
-## Tools: linear contracts
+## Tools: linear contracts and options
 
 Balance, and positions, orders, fills and market data for linear contracts
-(USDT and USDC perpetuals and futures, Bybit's `linear` category), go through
-the `bybit` MCP server. The server signs for you. For these, do not look for
+(USDT and USDC perpetuals and futures, Bybit's `linear` category) and options,
+go through the `bybit` MCP server. The server signs for you. For these, do not look for
 credentials, environment variables, the shipped client or errata. Call a tool
 with `tool_call`, passing its exact name below as `id` and its arguments as
-`args`. You do not need `tool_search` or `tool_describe`. Use the signed client further down only
-for spot, options, inverse, transfers and anything these tools do not cover.
+`args`. You do not need `tool_search` or `tool_describe`. Use the signed client
+further down only for spot, inverse, transfers and anything these tools do not
+cover.
 
 `?` marks an optional argument.
 
@@ -53,7 +54,7 @@ for spot, options, inverse, transfers and anything these tools do not cover.
 
 - `bybit__get_open_orders(symbols?)`: resting and conditional orders
 - `bybit__get_order_history(symbol?, orderId?, from?, to?, limit?)`: past orders
-- `bybit__place_order(symbol, side, type, amount, price?, triggerPrice?, triggerType?, stopLoss?, takeProfit?, reduceOnly?, timeInForce?, clientOrderId?)`: returns the new order ids
+- `bybit__place_order(symbol, side, type, amount, price?, triggerPrice?, triggerType?, stopLoss?, takeProfit?, reduceOnly?, timeInForce?, clientOrderId?, impliedVolatility?)`: returns the new order ids
 - `bybit__amend_order(orderId, price?, amount?)`: pass exactly one of `price` and `amount`
 - `bybit__cancel_orders(orderIds)`: cancel by id
 - `bybit__cancel_all_orders(symbol?)`: every open order, or every open order on one market
@@ -72,9 +73,35 @@ is `GoodTillCancel`, `ImmediateOrCancel`, `FillOrKill` or `PostOnly`.
 - `bybit__get_tickers(symbols?)`: last, mark, index, bid, ask, 24h volume, open interest and funding rate
 - `bybit__get_candles(symbol, interval, from?, to?, limit?)`: `interval` is one of `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `12h`, `1d`, `1w`
 
+### Options
+
+- `bybit__get_option_expiries(underlying)`: expiries as ms and ISO dates
+- `bybit__get_option_chain(underlying, expiry?, right?, strikeMin?, strikeMax?)`: bid, ask, mark, IVs, underlying price and greeks per option, plus `units` for the greeks. `right` is `call` or `put`. `expiry` is the millisecond `expiry` field from `get_option_expiries`, never the date. Pass a strike range too: one underlying has hundreds of options
+- `bybit__get_account_greeks()`: delta, gamma, vega and theta summed per underlying
+
+Option symbols look like `BTC-30OCT26-96000-C-USDT`. Copy them from the chain
+and never build one by hand: the day has no leading zero and the suffix
+varies. Underlyings include BTC, ETH, SOL and some stocks. Option positions, orders, fills and cancels use the
+same tools as linear contracts.
+
+- An option order is `limit` or `market`, priced in USDT premium. Triggers,
+  `stopLoss` and `takeProfit` are refused.
+- Price by implied volatility with `impliedVolatility` as a fraction (`0.5`
+  is 50%), and leave `price` out.
+- BTC options tick in 5 USDT, with a 5 USDT minimum price and a 0.01 minimum
+  size. `bybit__get_markets(symbols: [<option symbol>])` gives any option's
+  tick, step and minimums. `get_markets` without symbols lists no options.
+- `amount` is in the base coin: `0.01` is 0.01 BTC of underlying.
+- IVs are fractions. Greeks are Black-Scholes per 1 unit of the underlying in
+  USDT: vega per 1 vol point, theta per calendar day.
+- Account greeks include the delta of perpetual positions, not only options.
+- Option positions report `leverage` and `liquidationPrice` as 0. Closed PnL,
+  leverage and position mode do not exist for options.
+
 ### Facts
 
-- Symbols look like `BTCUSDT` or `BTCPERP`. Take exact names from `bybit__get_markets`.
+- Linear symbols look like `BTCUSDT` or `BTCPERP`. Take exact names from
+  `bybit__get_markets`, and option names from `bybit__get_option_chain`.
 - `amount` is in the base coin: `0.001` on `BTCUSDT` is 0.001 BTC. The
   minimum and the step are `limits.amount.min` and `precision.amount` from
   `bybit__get_markets`, and `precision.price` is the tick size.
@@ -97,6 +124,10 @@ applies, cheapest to check first:
   the app's environments (mainnet, testnet, demo) starts the server.
 - The credential is missing its API key.
 - Another MCP server is already named `bybit`.
+
+On demo trading there are `bybit__` tools but no option tools, because options
+are off for the demo environment. Tell the user options are not available on
+demo.
 
 The signed client below still works in every one of these cases.
 
@@ -195,7 +226,7 @@ Read it when a call fails, not before.
 
 ### When this client is wrong
 
-Check `~/.openclaw/workspace/tools/bybit/errata-1.2.0.md` before your first
+Check `~/.openclaw/workspace/tools/bybit/errata-1.3.0.md` before your first
 call. An earlier chat writes it when this client turns out to be wrong against
 the live venue, and it says what to change. The version in the name is this
 app's version, so a file naming any other version is stale: delete it and
@@ -325,99 +356,20 @@ section above before concluding a spot failure is your request's fault.
 
 ## Options
 
-`category=option`, and almost nothing above transfers unchanged. Options trade
-only under the Unified Trading Account.
+Use the option tools above for chains, greeks, positions and orders. These
+facts are not visible through them:
 
-### Symbols and what is listed
-
-`BASE-EXPIRY-STRIKE-C|P-QUOTE` — `BTC-25SEP26-130000-C-USDT`,
-`ETH-26MAR27-3700-P-USDT`, `SOL-24SEP26-111-C-USDT`. The day has no leading
-zero (`6NOV26`). Every listed contract settles **USDT**; there is no USDC
-suffix in the live catalogue, so never construct one.
-
-```
-GET /v5/market/option-base-coins                                  # what is tradable
-GET /v5/market/instruments-info?category=option&baseCoin=BTC      # baseCoin=All for every series
-GET /v5/market/tickers?category=option&baseCoin=BTC
-```
-
-**`baseCoin` is REQUIRED on the market endpoints** — `tickers?category=option`
-alone is `10001 PARAMS_ERROR`. The SIGNED endpoints are the opposite:
-`category=option` on its own is accepted, where `linear` demands a symbol or
-settle coin.
-
-`instruments-info` for an option returns `priceFilter` (`minPrice`, `maxPrice`,
-`tickSize`) and `lotSizeFilter` (`minOrderQty`, `maxOrderQty`, `qtyStep`) and
-**nothing else** — no `minNotionalValue`, no `leverageFilter`. BTC options quote
-in whole units of 5 USDT (`minPrice: 5`, `tickSize: 5`) with `qtyStep: 0.01`
-contracts. Check the filters before every first order on a symbol; a price that
-is not a multiple of `tickSize` is rejected.
-
-It also defaults to returning `PreLaunch`, `Trading` AND `Delivering` symbols,
-unlike the other categories. Filter on `status == "Trading"` before offering
-something as tradable.
-
-### Placing an option order
-
-```
-POST /v5/order/create
-{"category":"option","symbol":"BTC-25DEC26-350000-C-USDT","side":"Buy",
- "orderType":"Limit","qty":"0.01","price":"5","timeInForce":"GTC",
- "orderLinkId":"my-order-1"}
-```
-
-- **`orderLinkId` is REQUIRED for options.** It is optional everywhere else on
-  this venue, and omitting it here is rejected.
-- `qty` is contracts, never a quote amount.
-- **`orderIv` is option-only** — pass implied volatility as a real number
-  (`0.1` for 10%). If you send both, `orderIv` wins over `price`.
-- **`mmp` is option-only** (market-maker protection orders).
-- **Conditional and trigger orders are not available**: `triggerPrice`,
-  `triggerBy`, `triggerDirection`, `closeOnTrigger`, `tpslMode` and the
-  partial/limit TP-SL fields are documented for `linear` and `inverse` only.
-  An option take-profit or stop-loss is full-size and market-type.
-- `reduceOnly` does work for options.
-
-Two limits that bite market-makers rather than one-shot traders: **50 open
-orders per coin** (not per symbol), and `/v5/order/cancel-all` is rate-limited
-to **1/s** for options against 10/s elsewhere.
-
-### Greeks, and where they come from
-
-Do not compute your own. Three layers, all live:
-
-```
-GET /v5/market/tickers?category=option&baseCoin=BTC   # per symbol: delta gamma vega theta
-                                                      # markIv bid1Iv ask1Iv underlyingPrice
-GET /v5/asset/coin-greeks?baseCoin=BTC                # account totals per base coin
-GET /v5/account/option-asset-info?baseCoin=BTC        # option-only: totalDelta, UPL/RPL, IM/MM
-```
-
-`/v5/account/coin-greeks` does **not** exist — it is a 404. The greeks live
-under `/v5/asset/`.
-
-`/v5/position/list?category=option` carries `delta`, `gamma`, `vega`, `theta`
-too, and two fields that are empty for options and mean nothing:
-`cumRealisedPnl` and `breakEvenPrice`. **`/v5/position/closed-pnl` has no
-`option` category at all** — do not call it for options.
-
-### Expiry
-
-```
-GET /v5/market/delivery-price?category=option&symbol=...
-GET /v5/asset/delivery-record?category=option           # strike, deliveryRpl
-```
-
-Without a symbol, `delivery-price` returns only contracts currently DELIVERING
-(08:00–12:00 UTC). After expiry the outcome shows up in `delivery-record` with
-the strike and the realised PnL of the delivery.
-
-### Market maker protection
-
-`POST /v5/account/mmp-modify`, `POST /v5/account/mmp-reset`,
-`GET /v5/account/mmp-state` — all option-only, all keyed by `baseCoin` with no
-`category`. MMP has to be enabled by Bybit for the account first; it is not
-self-service, so `mmp-state` answering is not the same as MMP being on.
+- Options trade only under the Unified Trading Account.
+- Every listed contract settles in USDT, 08:00 UTC, to a 30-minute average of
+  the index. `GET /v5/market/delivery-price?category=option` returns contracts delivering between 08:00 and
+  12:00 UTC; after expiry the result is in
+  `GET /v5/asset/delivery-record?category=option`, with strike and realised PnL.
+- Limits that bite market makers: 50 open orders per coin, and
+  `/v5/order/cancel-all` at 1 per second for options against 10 elsewhere.
+- Market maker protection: `POST /v5/account/mmp-modify`,
+  `POST /v5/account/mmp-reset` and `GET /v5/account/mmp-state`, keyed by
+  `baseCoin`. Bybit has to enable MMP for the account first, so `mmp-state`
+  answering does not mean MMP is on. Use the signed client for these.
 
 ## Account state (signed)
 
