@@ -66,8 +66,8 @@ or `tool_describe`.
 
 ## Not covered yet
 
-Spot, inverse contracts, transfers, deposits, withdrawals and private
-WebSocket streams. Tell the user Bybit's tools do not cover them yet; do not
+Spot, options, inverse contracts, transfers, deposits, withdrawals and
+private WebSocket streams. Tell the user Bybit's tools do not cover them yet; do not
 try to reach them another way.
 
 ## When there are no `bybit__` tools
@@ -78,6 +78,10 @@ applies, cheapest to check first:
 - The change has not reached the agent yet. Ask the user to reload, or retry
   shortly.
 - No Bybit credential is enrolled.
+- The credential's API key is wrong, revoked, or for another environment.
+  The server exits at startup when Bybit rejects the key, so its tools
+  disappear. Ask the user to check the key on Bybit's API management page and
+  re-enrol it.
 - The credential was enrolled with a custom host. Only a credential for one
   of the app's environments (mainnet, testnet, demo) starts the server.
 - The credential is missing its API key.
