@@ -45,7 +45,7 @@ for spot, options, inverse, transfers and anything these tools do not cover.
 
 - `bybit__get_balance()`: total, free, used and unrealised PnL
 - `bybit__get_positions(symbols?)`: open positions
-- `bybit__get_fills(symbol?, orderId?, from?, to?, limit?)`: your executions
+- `bybit__get_fills(symbol, orderId?, from?, to?, limit?)`: your executions on one market. Without `symbol` it returns nothing, so when the user names no market take the symbols from `bybit__get_positions` or `bybit__get_order_history` and ask per symbol
 - `bybit__get_closed_pnl(symbol, from?, to?, limit?)`: realised PnL of closed positions
 - `bybit__get_income(symbol?, incomeType?, startTime?, endTime?, limit?)`: funding, fees and realised PnL records
 
@@ -59,7 +59,7 @@ for spot, options, inverse, transfers and anything these tools do not cover.
 - `bybit__cancel_all_orders(symbol?)`: every open order, or every open order on one market
 - `bybit__set_leverage(symbol, leverage)`
 - `bybit__set_position_mode(hedged)`
-- `bybit__set_margin_type(isolated)`
+- `bybit__set_margin_type(isolated)`: switches the whole account between isolated and cross margin, for every market. Bybit has no per-market switch on a unified account
 
 `side` is `buy` or `sell`. `type` is `limit`, `market`, `conditional`,
 `stop_market`, `take_profit_market` or `trailing_stop_market`. `timeInForce`
