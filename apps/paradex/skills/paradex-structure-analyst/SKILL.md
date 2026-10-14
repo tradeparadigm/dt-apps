@@ -8,7 +8,8 @@ description: >
   says what the structure costs, in one pass, with no venue reads. Use when
   the user asks about a structure in the order builder. A trade that already
   filled belongs to paradex-trade-analyst. Paradigm RFQ blocks belong to
-  paradigm-block-analyst.
+  paradigm-block-analyst, and a block from the Option Monitor to
+  paradex-block-analyst.
 compatibility: >
   Reads nothing. Everything it needs arrives in the message, so it needs no
   credential, no helper and no network.
