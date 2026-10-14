@@ -169,7 +169,7 @@ t.ok("benchmarked on Deribit" in text and "(Deribit)" in text, "says where it wa
 
 code, text, r = analyse(bl, unlisted={"BTC-16OCT26-80000-P"})
 t.ok("Deribit lists no 80kP" in text and "Rerun" not in text, "an unlisted leg is not a retry")
-t.ok("net unavailable: 80kP no data" in text, "no net greeks with a leg missing")
+t.ok("| Greeks | net unavailable: 80kP no data |" in text, "no net greeks with a leg missing, and only it named")
 
 # what the venues answer never closes the warnings comment
 az.WARN.clear()

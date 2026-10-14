@@ -363,7 +363,7 @@ def _run(args):
     quote = "USD"
     marks_at_trade = how in MARKS_AT_TRADE
     for l in opt:
-        t = None if l["expired"] else tickers.get(l["_sym"])
+        t = tickers.get(l["_sym"])
         l["tkr"] = t
         if how in MARKS_AT_TRADE:
             # Deribit and OKX quote BTC/ETH options in coin, Deribit's alts in
