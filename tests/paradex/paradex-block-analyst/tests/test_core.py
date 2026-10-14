@@ -83,9 +83,19 @@ t.ok(sold_2300 and abs(ng["delta"] - 73 * (0.3 - 0.1)) < 1e-9, f"short 2300P lon
 t.ok(ng["theta"] is None, "a greek the venue does not publish stays unknown")
 t.ok(core.net_greeks(legs, {}, unit) == {}, "no greeks when a leg has none")
 
+t.ok(core.struct_name(legs_of_three := core.legs_from_block({"underlying": "BTC", "legs": [
+    {"kind": "OPTION", "option_type": "CALL", "strike": str(k), "expiry": 1792137600000,
+     "side": side, "size": "1", "instrument": str(k)}
+    for side, k in (("BUY", 90000), ("SELL", 95000), ("BUY", 100000))]})[0]) == "Custom",
+     "1:1:1 calls are not a butterfly")
+t.ok(core.structure_key({"underlying": "BTC", "legs": [
+    {"kind": "OPTION", "option_type": "CALL", "strike": None, "expiry": 1792137600000}]}) is None,
+     "a leg with no strike has no structure to match")
+
 # offsets
 t.ok(core.offset(0.0131, 0.0135, "BTC")["txt"] == "-4 bps", "coin offset in bps")
 t.ok(core.offset(2.90, 2.7494, "USD")["txt"] == "+5.5%", "USD offset in percent")
+t.ok(core.offset(0.0052, 0.0056, "USD")["unit"] == "%", "a sub-dollar USD premium is still percent")
 t.ok(core.package_offset(-0.0153, -0.01556, "BTC")["sign"] == -1, "a smaller credit is below mark")
 t.ok(core.package_offset(0.001, -0.002, "BTC")["sign"] == 1, "a debit where the mark said credit is above")
 

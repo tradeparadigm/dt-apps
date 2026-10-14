@@ -51,7 +51,7 @@ def run(ref, injected=None, pages=None, fail=False):
 code, _, b, _, asked = run(DBT, injected=[[{"note": 1}, block(DBT)], {"results": []}])
 t.ok(code == 0 and b["block_id"] == "BLOCK-302780", "block found inside nested attached JSON")
 t.ok(all("underlying" in a or "cursor" in a for a in asked), "no tape lookup for the block itself")
-code, _, b, _, _ = run(DBT, injected="DATA: " + json.dumps(block(DBT)))
+code, _, b, _, _ = run(DBT, injected="DATA: " + json.dumps(block(DBT)), pages=[[]])
 t.ok(code == 0 and b, "a DATA: label is stripped")
 
 newer = dict(block(DBT), revision=2, quantity="11")
@@ -84,7 +84,8 @@ twin = dict(block(DBT), venue="DRV", block_id="x1")
 dead = dict(block(DBT), venue="OKX", block_id="x2", removed=True)
 other = dict(block(DBT), block_id="x3",
              legs=[dict(block(DBT)["legs"][0], strike="1")] + block(DBT)["legs"][1:])
-code, _, _, h, _ = run(DBT, injected=[block(DBT)], pages=[[block(DBT), twin, dead], [other]])
+partial = dict(block(DBT), venue="BLSH", block_id="x4", complete=False)
+code, _, _, h, _ = run(DBT, injected=[block(DBT)], pages=[[block(DBT), twin, dead, partial], [other]])
 t.ok(h == {"count": 1, "by_venue": {"DRV": 1}, "truncated": False, "days": 7},
      f"history counts the twin only: {h}")
 

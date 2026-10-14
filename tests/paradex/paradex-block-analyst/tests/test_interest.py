@@ -43,6 +43,14 @@ t.ok(interest.bet_line(ans, "BTC") == "*The taker is betting BTC falls.*", "an u
 t.ok(interest.bet_line(ans, "BTC", "up") == "*The taker is betting BTC rises.*", "the worked-out direction wins")
 t.ok(interest.bet_line({}, "BTC") is None, "nothing sure, no line")
 
+# a sidecar without the jev capability has no relay
+saved_http = interest.http_json
+interest.http_json = lambda *a, **k: (200, {"capabilities": ["sync"]})
+t.ok(interest.relay_available() is False, "no jev capability, no relay")
+interest.http_json = lambda *a, **k: (200, {"capabilities": ["jev"]})
+t.ok(interest.relay_available() is True, "a jev capability is a relay")
+interest.http_json = saved_http
+
 # no relay, no line, exit 0
 with tempfile.TemporaryDirectory() as d:
     p = os.path.join(d, "block.json")
