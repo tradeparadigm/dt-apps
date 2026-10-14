@@ -290,7 +290,7 @@ class Socket:
         self.srv = socket.socket()
         self.srv.bind(("127.0.0.1", 0))
         self.srv.listen(4)
-        self.url = f"ws://127.0.0.1:{self.srv.getsockname()[1]}/v1?cancel-on-disconnect=false&sbeSchemaId=1"
+        self.url = f"ws://127.0.0.1:{self.srv.getsockname()[1]}/v1"
         threading.Thread(target=self.serve, daemon=True).start()
 
     def serve(self):
@@ -323,6 +323,8 @@ def install(d, config):
     work.mkdir()
     for f in ("datafeed.mjs", "monitor.mjs"):
         shutil.copy(DIR / f, work / f)
+    for f in ("paradex.mjs", "sbe.mjs", "paradex_1_0.xml"):
+        shutil.copy(DIR.parent / "lib" / f, work / f)
     (work / "config.json").write_text(json.dumps({"name": "options-monitor", **config}))
     helper = pathlib.Path(d) / "skills/notification-feed/scripts/feed.mjs"
     helper.parent.mkdir(parents=True)
@@ -380,7 +382,7 @@ check("without a backfill, what is on the tape is history", proc.returncode == 0
 refusing = Tape([], status=429)
 proc = run_once({"api": refusing.url}, backfill_minutes=60)
 check("a refused read fails the test run, saying so",
-      proc.returncode == 1 and "reading the tape failed: /v1/options-tape: HTTP 429" in proc.stderr)
+      proc.returncode == 1 and "reading the tape failed: /options-tape: HTTP 429" in proc.stderr)
 
 
 # ---- The socket, with the HTTP read beside it ----
@@ -413,7 +415,8 @@ with tempfile.TemporaryDirectory() as d:
     err = child.stderr.read()
 
 posts = posts_of("".join(lines))
-check("it connects with the URL's query", sock.request_line == "GET /v1?cancel-on-disconnect=false&sbeSchemaId=1 HTTP/1.1")
+check("it connects through the Paradex client, naming the schema version",
+      sock.request_line == "GET /v1?sbeSchemaId=1&sbeSchemaVersion=2 HTTP/1.1")
 check("it subscribes to the whole tape",
       sock.subscribe == {"id": 1, "jsonrpc": "2.0", "method": "subscribe", "params": {"channel": "options_tape.ALL"}})
 check("it reads the tape over HTTP when it connects", bool(both.requests))

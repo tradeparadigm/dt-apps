@@ -1,0 +1,123 @@
+# Building a Paradex data feed
+
+Read this before writing a data feed, or any script, that reads Paradex. A
+script cannot call the `paradex__` tools: they exist only inside your turns.
+`lib/` beside this file is a client that does the Paradex part for you, so
+the only thing left to write is what is worth a line.
+
+## 1. Copy the client
+
+The folder holding this file is replaced when the app updates, so copy the
+three files in `lib/` into the data feed's own directory:
+
+```sh
+mkdir -p ~/.openclaw/workspace/datafeeds/<name>
+cp <this folder>/lib/paradex.mjs <this folder>/lib/sbe.mjs <this folder>/lib/paradex_1_0.xml \
+  ~/.openclaw/workspace/datafeeds/<name>/
+```
+
+Then `import { stream, perpSummaries, rest, restPages } from "./paradex.mjs";`
+in `datafeed.mjs`, and post with the notification-feed skill's
+`openDataFeed`, as its SKILL.md says.
+
+## 2. Pick the channel
+
+Subscribe per market. A channel name without a market (`markets_summary`)
+sends every market, about 9,600 options among them, at thousands of frames a
+second.
+
+| You want | Channel | The event's fields |
+|---|---|---|
+| Funding rate, mark, index, last price, open interest, 24h volume, an option's IV and greeks | `markets_summary.<market>` (about one a second) | `fundingRatePrecise` (prefer it; `fundingRate` when it is null), `markPrice`, `indexPrice`, `lastPrice`, `openInterest`, `volumeUsd24h`, `priceChangeRate24h`, `bid`, `ask`, `markIv`, `delta`, `gamma`, `vega` |
+| Funding settlement detail | `funding_data.<market>` (every few seconds) | `fundingRate`, `fundingRate8h`, `fundingPremium`, `fundingIndex`, `fundingPeriodHours` |
+| Best bid and offer | `bbo.<market>` | `bidPrice`, `bidSize`, `askPrice`, `askSize` |
+| Trades | `trades.<market>` | `side` (`BUY`, `SELL`), `price`, `size`, `tradeType` (`FILL`, `LIQUIDATION`, `BLOCK_TRADE`...), `tradeIdStr` (not `tradeId`, which wraps) |
+| Order book, 15 levels | `order_book.<market>.snapshot@15@100ms` (or `@50ms`) | `bids`, `asks`: `[{price, size}]`, best first |
+| Options block trades on Paradex, Derive, Deribit, Bullish and OKX | `options_tape.ALL` | Paradex sends this one as JSON: the event is `{type, channel, data}`. The `options-monitor` suggestion shows it in use |
+
+Every event also has `type` (the channel's kind, `"markets_summary"`),
+`market` (`"BTC-USD-PERP"`) and `ts`.
+
+- Prices and sizes are plain numbers. Rates are fractions: `0.0001` is
+  0.01%.
+- A funding rate is per funding period, 8 hours on every perp today.
+- `ts` and `createdAt` are microseconds since the epoch; `ts / 1000` is
+  milliseconds.
+- A field Paradex leaves empty is `null`.
+
+## 3. List the markets once, not per tick
+
+`perpSummaries()` answers every perp's REST summary (`symbol`,
+`funding_rate`, `mark_price`... as strings). Paradex's REST market reads take
+no filter but a single market, so this read is every market, options
+included: 6.5 MB and about 2 seconds. Call it once at start, for the list of
+perps and where they stand, then follow them on the stream. Never put it, or
+`GET /markets` (14.5 MB), on a timer.
+
+Market symbols: `BTC-USD-PERP` for a perp, `BTC-USD-27JUN26-70000-C` for an
+option.
+
+## Example: perps with funding above 0.01%
+
+The whole data feed for "every 3 seconds, list the Paradex perps whose
+funding rate is above 0.01%":
+
+```js
+import { perpSummaries, stream } from "./paradex.mjs";
+import { openDataFeed } from "__FEED_HELPER__";
+
+const THRESHOLD = 0.0001; // 0.01% per 8-hour funding period
+const EVERY_MS = 3_000;
+
+const out = await openDataFeed("paradex-high-funding");
+const funding = new Map(); // market -> rate
+
+for (const p of await perpSummaries()) funding.set(p.symbol, Number(p.funding_rate));
+stream([...funding.keys()].map((m) => `markets_summary.${m}`), (e) => {
+  if (e.type === "markets_summary") funding.set(e.market, e.fundingRatePrecise ?? e.fundingRate);
+});
+
+const pct = (r) => `${(r * 100).toFixed(4)}%`;
+let shown = null;
+setInterval(() => {
+  const above = [...funding].filter(([, r]) => r > THRESHOLD).sort((a, b) => b[1] - a[1]);
+  const names = above.map(([m]) => m).join();
+  if (names === shown) return; // post when the list changes, not every tick
+  shown = names;
+  out.post(
+    above.length === 0
+      ? `No perp above ${pct(THRESHOLD)}`
+      : `${above.length} above ${pct(THRESHOLD)}: ${above.map(([m, r]) => `${m.replace("-USD-PERP", "")} ${pct(r)}`).join(", ")}`,
+  );
+}, EVERY_MS);
+```
+
+A perp listed after it starts is picked up at its next start.
+
+## What cost time before this client existed
+
+- Paradex's WebSocket accepts only SBE, a binary encoding. A URL without
+  `sbeSchemaId` and `sbeSchemaVersion` is refused (HTTP 400, code 40301),
+  and market data arrives as binary frames. `stream()` adds the parameters
+  and decodes the frames with `sbe.mjs`, which reads Paradex's own schema
+  file, `paradex_1_0.xml`.
+- Subscribe and unsubscribe are JSON-RPC text frames; so are their answers.
+- REST is plain JSON, and market data needs no key:
+  `https://api.prod.paradex.trade/v1`.
+- Testnet: pass `{url: "wss://ws.api.testnet.paradex.trade/v1"}` to `stream`
+  and `{base: "https://api.testnet.paradex.trade/v1"}` to the REST helpers.
+
+## When it does not work
+
+The client logs to stderr with `[paradex]` in front. Cheapest cause first:
+
+| Log line | Causes |
+|---|---|
+| `connected` and then no events | The market symbol is misspelt or not listed: Paradex accepts any market name and sends nothing, so compare it with `perpSummaries()`; the market is quiet (a `trades` channel can be silent for minutes). `bbo.BTC-USD-PERP` updates every second or so, to check the connection |
+| `<channel> refused: invalid subscribe request` | The channel name is malformed (an order book needs `.snapshot@15@100ms`); the channel is a private one (`orders`, `fills`, `positions`, `account`), which needs an authenticated connection this client does not make |
+| `reconnecting` over and over | The pod cannot reach `ws.api.prod.paradex.trade`; Paradex stopped serving schema version 2 (its answer at connect is HTTP 400): the app needs an update, so tell the user |
+| `undecodable frame skipped` | Paradex sent a frame `paradex_1_0.xml` does not describe: the app needs an update, so tell the user |
+| A REST read throws `HTTP 429` | Too many REST reads; read on the stream instead |
+
+If something here is wrong for what the user asked, change the smallest thing
+that works, run it, and tell the user the change in one line.

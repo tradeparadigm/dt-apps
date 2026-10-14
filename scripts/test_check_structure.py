@@ -835,10 +835,6 @@ class TestMcpServer(unittest.TestCase):
         self.refuses("X_ENV: prod", "X_ENV: ${label}", "env.X_ENV is a literal")
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
-
 SUGGESTION = "apps/example/skills/example-api/datafeeds/ticks/DATAFEED.md"
 
 
@@ -875,6 +871,32 @@ class TestDatafeedSuggestions(unittest.TestCase):
             suggestion_md(title='"Ticks: live"', extra="needs: An Example read-only key.\n")
         )
         self.assertEqual(code, 0, out)
+
+    def test_a_guide_and_a_shared_lib_sit_beside_the_suggestions(self):
+        base = "apps/example/skills/example-api/datafeeds"
+        code, out = self.with_suggestion(more={
+            f"{base}/GUIDE.md": "# Building an Example data feed\n",
+            f"{base}/lib/client.mjs": "// shared\n",
+            f"{base}/lib/schema.xml": "<x/>\n",
+        })
+        self.assertEqual(code, 0, out)
+        self.assertIn("datafeeds ticks", out)
+        self.assertNotIn("lib", out.split("datafeeds", 1)[1].split("\n", 1)[0])
+
+    def test_a_lib_and_a_guide_need_no_suggestion(self):
+        base = "apps/example/skills/example-api/datafeeds"
+        code, out = check(extra={f"{base}/GUIDE.md": "# Guide\n", f"{base}/lib/client.mjs": "//\n"})
+        self.assertEqual(code, 0, out)
+
+    def test_an_empty_guide_is_refused(self):
+        code, out = self.with_suggestion(more={"apps/example/skills/example-api/datafeeds/GUIDE.md": "\n"})
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("GUIDE.md: empty", out)
+
+    def test_any_other_loose_file_is_refused(self):
+        code, out = self.with_suggestion(more={"apps/example/skills/example-api/datafeeds/NOTES.md": "x\n"})
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("plus GUIDE.md and lib/, and nothing else", out)
 
     def test_it_needs_its_markdown(self):
         code, out = check(extra={"apps/example/skills/example-api/datafeeds/ticks/datafeed.mjs": "//\n"})
@@ -938,3 +960,7 @@ class TestDatafeedSuggestions(unittest.TestCase):
         )
         self.assertNotEqual(code, 0, out)
         self.assertIn("example/ticks is already suggested", out)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

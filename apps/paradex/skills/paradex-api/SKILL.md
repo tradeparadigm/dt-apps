@@ -17,6 +17,13 @@ signs for you. Do not look for credentials, environment variables or a CLI.
 Call a tool with `tool_call`, passing its exact name below as `id` and its
 arguments as `args`. You do not need `tool_search` or `tool_describe`.
 
+## Data feeds and other scripts
+
+A script cannot call the `paradex__` tools: they exist only in your turns. For
+a data feed, or any script that reads Paradex market data, read
+`datafeeds/GUIDE.md` in this skill's folder first. It has a client to copy
+and the channel for each kind of data.
+
 ## Paradex is not Paradigm
 
 Paradex is an exchange with an order book. Paradigm is an institutional RFQ

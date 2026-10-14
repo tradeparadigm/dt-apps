@@ -3,9 +3,10 @@
 // (app.paradex.trade/option-monitor) lists them. Public data, no credential.
 // monitor.mjs says where the data comes from.
 //
-// Installed by the agent from Paradex's suggestion: this file and monitor.mjs
-// copied into the data feed's workspace directory, beside a config.json
-// holding what the user chose (DEFAULTS below lists every key).
+// Installed by the agent from Paradex's suggestion: this file, monitor.mjs
+// and the client in ../lib (paradex.mjs, sbe.mjs, paradex_1_0.xml) copied
+// into the data feed's workspace directory, beside a config.json holding what
+// the user chose (DEFAULTS below lists every key).
 //
 // It listens on the tape's WebSocket and reads the tape over HTTP each time
 // it connects and every few minutes, so a package the socket missed (it was
@@ -19,6 +20,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { createSeen, describe, passes, takeNew } from "./monitor.mjs";
+import { REST_URL, WS_URL, restPages, stream } from "./paradex.mjs";
 
 const DEFAULTS = {
   name: "options-monitor", // the data feed's name, as registered
@@ -28,8 +30,8 @@ const DEFAULTS = {
   minPremium: 0, // USD, either direction
   showHedge: true, // show a package's perp hedge legs
   pollMinutes: 5, // the HTTP read between connects
-  api: "https://api.prod.paradex.trade/v1",
-  ws: "wss://ws-public.api.prod.paradex.trade/v1?cancel-on-disconnect=false&sbeSchemaId=1&sbeSchemaVersion=3",
+  api: REST_URL,
+  ws: WS_URL,
 };
 const CHANNEL = "options_tape.ALL";
 // Each HTTP read goes this far behind the newest package seen: a venue can
@@ -42,8 +44,6 @@ const MAX_PAGES = 10;
 // socket open meanwhile, so only a long silence reconnects. The HTTP reads
 // cover the gap whatever the socket does.
 const IDLE_MS = 30 * 60_000;
-const STABLE_MS = 30_000;
-const CLOSE_GRACE_MS = 10_000;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const log = (text) => process.stderr.write(`[options-monitor] ${text}\n`);
@@ -91,27 +91,12 @@ function offer(p) {
   if (passes(d, cfg)) out.post(d.line);
 }
 
-async function getJson(url) {
-  const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
-  if (!res.ok) throw new Error(`${new URL(url).pathname}: HTTP ${res.status}`);
-  return res.json();
-}
-
 /** The tape since a little before the newest package seen, oldest first. */
 async function readTape() {
-  const start = Math.min(newest, Date.now()) - LOOKBACK_MS;
-  const found = [];
-  let url = `${cfg.api}/options-tape?start_time=${Math.max(0, start)}&page_size=${PAGE_SIZE}`;
-  for (let page = 0; page < MAX_PAGES && url; page++) {
-    const body = await getJson(url);
-    if (!Array.isArray(body?.results)) throw new Error("/options-tape: no results list");
-    found.push(...body.results);
-    // A later page needs only its cursor, which carries the window.
-    url = body.next ? `${cfg.api}/options-tape?cursor=${encodeURIComponent(body.next)}` : null;
-  }
+  const start = Math.max(0, Math.min(newest, Date.now()) - LOOKBACK_MS);
+  const found = await restPages("/options-tape", { start_time: start, page_size: PAGE_SIZE }, { base: cfg.api, maxPages: MAX_PAGES });
   // Newest first on the wire; posting oldest first keeps the feed in order.
-  found.sort((a, b) => (Number(a?.traded_at) || 0) - (Number(b?.traded_at) || 0));
-  return found;
+  return found.sort((a, b) => (Number(a?.traded_at) || 0) - (Number(b?.traded_at) || 0));
 }
 
 async function catchUp() {
@@ -125,71 +110,19 @@ async function catchUp() {
   }
 }
 
-function packagesIn(message) {
-  if (message?.method !== "subscription" || message.params?.channel !== CHANNEL) return [];
-  const data = message.params.data;
-  return Array.isArray(data) ? data : [data];
-}
-
-function connect(backoffMs = 1_000) {
-  const ws = new WebSocket(cfg.ws);
-  ws.binaryType = "arraybuffer";
-  let openedAt = 0;
-  let idleTimer = null;
-  let reason = "disconnected";
-  let done = false;
-
-  const reconnect = () => {
-    if (done) return;
-    done = true;
-    clearTimeout(idleTimer);
-    ws.close();
-    const wait = openedAt > 0 && Date.now() - openedAt >= STABLE_MS ? 1_000 : backoffMs;
-    log(`${reason}; reconnecting in ${wait / 1000}s`);
-    setTimeout(() => connect(Math.min(wait * 2, 60_000)), wait);
-  };
-  const touch = () => {
-    clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => {
-      reason = `sent nothing for ${IDLE_MS / 60_000} minutes`;
-      ws.close();
-      setTimeout(reconnect, CLOSE_GRACE_MS);
-    }, IDLE_MS);
-  };
-
-  ws.addEventListener("open", () => {
-    openedAt = Date.now();
-    log("connected");
-    touch();
-    ws.send(JSON.stringify({ id: 1, jsonrpc: "2.0", method: "subscribe", params: { channel: CHANNEL } }));
-    // Whatever printed while it was not connected.
-    void catchUp();
-  });
-  ws.addEventListener("message", (event) => {
-    touch();
-    let message;
-    try {
-      message = JSON.parse(typeof event.data === "string" ? event.data : Buffer.from(event.data).toString("utf8"));
-    } catch {
-      return;
-    }
-    if (message?.id === 1 && message.error) {
-      reason = `subscribe refused: ${JSON.stringify(message.error).slice(0, 200)}`;
-      reconnect();
-      return;
-    }
-    for (const p of packagesIn(message)) offer(p);
-  });
-  // Node's WebSocket fires only `error` for a connection that never opens.
-  ws.addEventListener("close", reconnect);
-  ws.addEventListener("error", reconnect);
-}
-
 if (ONCE) {
   await catchUp();
   await out.close();
   process.exitCode = readFailing ? 1 : 0;
 } else {
-  connect();
+  stream(
+    [CHANNEL],
+    (event) => {
+      if (event.channel !== CHANNEL) return;
+      for (const p of Array.isArray(event.data) ? event.data : [event.data]) offer(p);
+    },
+    // Whatever printed while it was not connected.
+    { url: cfg.ws, idleMs: IDLE_MS, onOpen: catchUp, log },
+  );
   setInterval(() => void catchUp(), Math.max(1, Number(cfg.pollMinutes) || DEFAULTS.pollMinutes) * 60_000);
 }

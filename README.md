@@ -45,7 +45,16 @@ the skill's `datafeeds/`:
 ```
 datafeeds/<name>/DATAFEED.md     what the user sees, and how the agent sets it up
 datafeeds/<name>/datafeed.mjs    a template, or whatever files the setup names
+datafeeds/GUIDE.md               optional: how to build any data feed for this venue
+datafeeds/lib/                   optional: what those data feeds share, such as a client
 ```
+
+`GUIDE.md` is for the data feed nobody suggested. Point at it from the
+skill's `SKILL.md` (a script cannot call an app's MCP tools, so the agent
+needs telling where to look), and keep it to what makes the venue fast to
+build on: a client in `lib/` to copy, which channel or endpoint carries what,
+one worked example. Paradex's is the model: its WebSocket sends binary SBE
+frames, so `lib/` carries a decoder that reads Paradex's own schema file.
 
 `DATAFEED.md` opens with one-line frontmatter, which the terminal shows and the
 agent lists (`feeds.mjs suggestions`):

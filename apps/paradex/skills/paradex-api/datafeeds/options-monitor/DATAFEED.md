@@ -28,9 +28,10 @@ paths.
 
 ## 1. Install
 
-Copy `monitor.mjs` and `datafeed.mjs` from `<this folder>` into
-`~/.openclaw/workspace/datafeeds/options-monitor/`. Use another name there if
-the user already has one called that. Beside them, write `config.json` with
+Copy `monitor.mjs` and `datafeed.mjs` from `<this folder>`, and the
+Paradex client from `<this folder>/../lib/` (`paradex.mjs`, `sbe.mjs`,
+`paradex_1_0.xml`), into `~/.openclaw/workspace/datafeeds/options-monitor/`.
+Use another name there if the user already has one called that. Beside them, write `config.json` with
 only what differs from the defaults at the top of `datafeed.mjs`, for example:
 
 ```json
@@ -56,7 +57,7 @@ exits 0.
   `config.json` names a venue or underlying the tape spells differently. Try a
   longer window (up to a day), then check the names against a run with no
   filters.
-- `reading the tape failed: /v1/options-tape: HTTP <status>` and exit 1:
+- `reading the tape failed: /options-tape: HTTP <status>` and exit 1:
   Paradex refused or moved the route. A 404 means it moved; a 429, that it
   was read too often; a 5xx, an outage to retry later.
 - `reading the tape failed: fetch failed` or a timeout: the pod cannot reach
@@ -98,11 +99,9 @@ asked rather than to this file.
 - Paradex's options tape holds each block as one package with its legs,
   whichever venue printed it. Both reads are public and need no key; neither is
   in Paradex's API reference.
-- The socket: `wss://ws-public.api.prod.paradex.trade/v1?cancel-on-disconnect=false&sbeSchemaId=1&sbeSchemaVersion=3`,
-  then `{"id":1,"jsonrpc":"2.0","method":"subscribe","params":{"channel":"options_tape.ALL"}}`.
-  Each package comes as JSON text in
-  `{"method":"subscription","params":{"channel":"options_tape.ALL","data":<package>}}`.
-  Without the `sbeSchema` parameters the handshake is refused.
+- The socket is the client's `stream(["options_tape.ALL"], ...)`
+  (`../GUIDE.md`). Paradex sends this channel as JSON, so each event is
+  `{type, channel, data: <package>}`.
 - Over HTTP: `GET https://api.prod.paradex.trade/v1/options-tape?start_time=<ms>&page_size=1000`,
   newest first, `{results, next}`; the next page is `?cursor=<next>` alone.
   It also takes `end_time` and `venue`. `/v1/options-tape/status` says when

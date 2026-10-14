@@ -243,6 +243,12 @@ SCHEMA_VERSION = 1
 # lib/common.mjs: 1-40, no hyphen at either end.
 DATAFEED_DIR = "datafeeds"
 DATAFEED_FILE = "DATAFEED.md"
+# Beside the suggestions, an app may keep what every data feed for its venue
+# shares: a guide the agent reads before writing one (its SKILL.md points
+# there, and feeds.mjs suggestions lists it) and a client to copy. So `lib`
+# can never be a suggestion's name.
+DATAFEED_GUIDE = "GUIDE.md"
+DATAFEED_LIB = "lib"
 DATAFEED_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$")
 DATAFEED_LINE_RE = re.compile(r"^(?P<key>[a-z_]+):[ \t]+(?P<value>\S.*)$")
 DATAFEED_FIELDS = {"name": 40, "title": 80, "description": 300, "needs": 200}
@@ -763,9 +769,16 @@ def check_datafeeds(app: str, skill_dir: Path, seen: dict[str, Path], failures: 
     if not base.is_dir():
         return
     for entry in sorted(base.iterdir()):
+        if entry.name == DATAFEED_GUIDE and entry.is_file():
+            if not entry.read_text().strip():
+                failures.append(f"{entry}: empty; say how to build a data feed for this venue, or remove it")
+            continue
+        if entry.name == DATAFEED_LIB and entry.is_dir():
+            continue
         if not entry.is_dir():
             failures.append(
-                f"{entry}: {DATAFEED_DIR}/ holds one directory per suggestion and nothing else"
+                f"{entry}: {DATAFEED_DIR}/ holds one directory per suggestion, plus "
+                f"{DATAFEED_GUIDE} and {DATAFEED_LIB}/, and nothing else"
             )
             continue
         name = entry.name
