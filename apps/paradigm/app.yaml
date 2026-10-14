@@ -112,15 +112,15 @@ credential_types:
       base64, substituted into the Paradigm-API-Signature header, on every path
       under /v2/drfq.
 
-# Paradigm's own MCP server, pinned to a fork by commit until Paradigm merges
-# signer support. bind: all, because every call needs both credentials. The
-# tools are the DRFQv2 REST ones: the credentials cover /v2/drfq/* on one host,
-# and the other tools call /v1, the forward-swap host or the WebSocket.
+# Paradigm's own MCP server. bind: all, because every call needs both
+# credentials. The tools are the DRFQv2 REST ones: the credentials cover
+# /v2/drfq/* on one host, and the other tools call /v1, the forward-swap host
+# or the WebSocket.
 mcp_server:
   command: uvx
   args:
     - --from
-    - git+https://github.com/samparadigm/mcp-paradigm-py@21b2c26ccdddf41917de7cfef5d2dbd3313c34aa
+    - mcp-paradigm==0.1.4
     - mcp-paradigm
   bind: all
   credential_types:
