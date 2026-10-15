@@ -55,6 +55,7 @@ export async function call(method, params = {}, { cred = placeholder() } = {}) {
 }
 
 // Splits on whole code points, at the last newline that fits when there is one.
+// Blank parts are dropped: Telegram refuses an empty message.
 export function chunks(text) {
   const rest = Array.from(text);
   const out = [];
@@ -64,17 +65,19 @@ export function chunks(text) {
     out.push(rest.splice(0, cut).join(''));
     if (rest[0] === '\n') rest.shift();
   }
-  if (rest.length > 0 || out.length === 0) out.push(rest.join(''));
-  return out;
+  out.push(rest.join(''));
+  return out.filter((part) => part.trim() !== '');
 }
 
 export async function sendMessage(chat, text, { html = false, silent = false, cred } = {}) {
+  const parts = chunks(text);
+  if (parts.length === 0) throw new Error('nothing to send');
   // A cut through HTML can land inside a tag, and Telegram refuses the half.
-  if (html && Array.from(text).length > MAX_TEXT) {
+  if (html && parts.length > 1) {
     throw new Error(`HTML text over ${MAX_TEXT} characters: send it as several messages`);
   }
   const sent = [];
-  for (const part of chunks(text)) {
+  for (const part of parts) {
     sent.push(
       await call(
         'sendMessage',
@@ -170,7 +173,6 @@ async function main() {
       break;
     case 'send': {
       const text = flags.text ?? (await readStdin());
-      if (!text.trim()) throw new Error('nothing to send');
       out = (await sendMessage(need('chat'), text, flags)).map((m) => m.message_id);
       break;
     }

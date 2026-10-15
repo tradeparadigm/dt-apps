@@ -56,6 +56,10 @@ check("a short message is one request", texts == ["hello"])
 check("the placeholder is the token in the path",
       sent[0]["url"] == "https://api.telegram.org/botcred-telegram-api-bot-PH/sendMessage")
 check("the chat id is sent", sent[0]["body"]["chat_id"] == 42)
+check("plain text sets no parse mode", "parse_mode" not in sent[0]["body"])
+
+texts, _, err = send(" \n ")
+check("blank text is refused before anything is sent", texts == [] and err == "nothing to send")
 
 texts, _, _ = send("x" * 4095 + "\U0001F600" + "y")
 check("an emoji on the boundary stays whole",
@@ -71,8 +75,9 @@ check("a trailing newline past the limit sends no empty message", texts == ["x" 
 texts, _, err = send("<b>" + "x" * 4100 + "</b>", html=True)
 check("long HTML is refused before anything is sent", texts == [] and "several messages" in (err or ""))
 
-texts, _, _ = send("<b>bold</b>", html=True)
-check("short HTML is sent whole", texts == ["<b>bold</b>"])
+texts, sent, _ = send("<b>bold</b>", html=True)
+check("short HTML is sent whole, as HTML",
+      texts == ["<b>bold</b>"] and sent[0]["body"].get("parse_mode") == "HTML")
 
 print(f"{passed} passed, {len(failed)} failed")
 for name in failed:
