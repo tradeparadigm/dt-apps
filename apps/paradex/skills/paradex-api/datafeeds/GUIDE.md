@@ -100,6 +100,25 @@ perps and where they stand, then follow them on the stream. Never put it, or
 Market symbols: `BTC-USD-PERP` for a perp, `BTC-USD-27JUN26-70000-C` for an
 option.
 
+## Example: a whole data feed
+
+Every trade on the markets it names, one line each:
+
+```js
+import { openDataFeed } from "__FEED_HELPER__"; // keep the path init filled in
+import { stream } from "./paradex.mjs";
+
+const MARKETS = ["BTC-USD-PERP", "ETH-USD-PERP"];
+
+const out = await openDataFeed("paradex-trades");
+stream(MARKETS.map((m) => `trades.${m}`), (e) => {
+  const kind = e.tradeType === "FILL" ? "" : ` ${e.tradeType}`;
+  out.post(`${e.market} ${e.side} ${e.size} @ ${e.price}${kind}`);
+});
+```
+
+A line reads `BTC-USD-PERP SELL 0.00015 @ 83742.7`.
+
 ## When it does not work
 
 The client logs to stderr with `[paradex]` in front. Cheapest cause first:
