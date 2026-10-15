@@ -905,5 +905,152 @@ class TestMcpServerBindAll(unittest.TestCase):
         self.assertEqual(code, 0, out)
 
 
+SUGGESTION = "apps/example/skills/example-api/datafeeds/ticks/DATAFEED.md"
+
+
+def suggestion_md(name="ticks", title="Live ticks", extra=""):
+    return (
+        f"---\nname: {name}\ntitle: {title}\n"
+        "description: Posts each tick as it arrives.\n"
+        f"{extra}---\n\nHow to set it up.\n"
+    )
+
+
+class TestDatafeedSuggestions(unittest.TestCase):
+    """skills/<skill>/datafeeds/<name>/DATAFEED.md, as the agent's helper reads it.
+
+    That reader (feeds.mjs suggestions in DIME Terminal) takes one-line keys
+    and no YAML, so every way a suggestion would be listed wrong or not at all
+    is a refusal here rather than a silent gap on every agent.
+    """
+
+    def with_suggestion(self, body=None, path=SUGGESTION, more=None):
+        extra = {path: body if body is not None else suggestion_md()}
+        extra.update(more or {})
+        return check(extra=extra)
+
+    def test_a_suggestion_with_its_template_is_accepted(self):
+        code, out = self.with_suggestion(
+            more={"apps/example/skills/example-api/datafeeds/ticks/datafeed.mjs": "// template\n"}
+        )
+        self.assertEqual(code, 0, out)
+        self.assertIn("datafeeds ticks", out)
+
+    def test_needs_and_quoted_values_are_accepted(self):
+        code, out = self.with_suggestion(
+            suggestion_md(title='"Ticks: live"', extra="needs: An Example read-only key.\n")
+        )
+        self.assertEqual(code, 0, out)
+
+    def test_a_guide_and_a_shared_lib_sit_beside_the_suggestions(self):
+        base = "apps/example/skills/example-api/datafeeds"
+        code, out = self.with_suggestion(more={
+            f"{base}/GUIDE.md": "# Building an Example data feed\n",
+            f"{base}/lib/client.mjs": "// shared\n",
+            f"{base}/lib/schema.xml": "<x/>\n",
+        })
+        self.assertEqual(code, 0, out)
+        self.assertIn("datafeeds ticks", out)
+        self.assertNotIn("lib", out.split("datafeeds", 1)[1].split("\n", 1)[0])
+
+    def test_a_lib_and_a_guide_need_no_suggestion(self):
+        base = "apps/example/skills/example-api/datafeeds"
+        code, out = check(extra={f"{base}/GUIDE.md": "# Guide\n", f"{base}/lib/client.mjs": "//\n"})
+        self.assertEqual(code, 0, out)
+
+    def test_an_empty_guide_is_refused(self):
+        code, out = self.with_suggestion(more={"apps/example/skills/example-api/datafeeds/GUIDE.md": "\n"})
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("GUIDE.md: empty", out)
+
+    def test_any_other_loose_file_is_refused(self):
+        code, out = self.with_suggestion(more={"apps/example/skills/example-api/datafeeds/NOTES.md": "x\n"})
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("plus GUIDE.md and lib/, and nothing else", out)
+
+    def test_it_needs_its_markdown(self):
+        code, out = check(extra={"apps/example/skills/example-api/datafeeds/ticks/datafeed.mjs": "//\n"})
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("no DATAFEED.md", out)
+
+    def test_the_directory_must_be_a_data_feed_name(self):
+        code, out = self.with_suggestion(
+            suggestion_md(name="Bad_Name"),
+            path="apps/example/skills/example-api/datafeeds/Bad_Name/DATAFEED.md",
+        )
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("cannot name a data feed", out)
+
+    def test_the_name_must_match_the_directory(self):
+        code, out = self.with_suggestion(suggestion_md(name="other"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("frontmatter name is 'other', directory is 'ticks'", out)
+
+    def test_title_and_description_are_required(self):
+        code, out = self.with_suggestion("---\nname: ticks\n---\n")
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("frontmatter has no title", out)
+        self.assertIn("frontmatter has no description", out)
+
+    def test_a_value_the_terminal_reads_differently_is_refused(self):
+        for line, shown in (
+            ("title: Live ticks   # up to 80 characters", "Live ticks   # up to 80 characters"),
+            ('description: "Funding \\"spikes\\" across perps"', 'Funding \\"spikes\\" across perps'),
+            ("needs: 'Nothing: it''s public data.'", "Nothing: it''s public data."),
+        ):
+            key = line.split(":", 1)[0]
+            md = "---\nname: ticks\n" + "\n".join(
+                l for l in ("title: Live ticks", "description: Ticks as they print.") if not l.startswith(key)
+            ) + f"\n{line}\n---\n"
+            code, out = self.with_suggestion(md)
+            self.assertNotEqual(code, 0, out)
+            self.assertIn(f"{key}: the terminal reads this as {shown!r}", out)
+
+    def test_quotes_the_terminal_strips_too_are_fine(self):
+        code, out = self.with_suggestion(
+            "---\nname: ticks\ntitle: \"Ticks: live\"\ndescription: 'Every tick, as it prints.'\n---\n"
+        )
+        self.assertEqual(code, 0, out)
+
+    def test_a_block_scalar_is_refused(self):
+        code, out = self.with_suggestion(
+            "---\nname: ticks\ntitle: Live ticks\ndescription: >\n  Folded text.\n---\n"
+        )
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("block scalar", out)
+
+    def test_an_unknown_key_is_refused(self):
+        code, out = self.with_suggestion(suggestion_md(extra="schedule: hourly\n"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("unknown key 'schedule'", out)
+
+    def test_a_long_title_is_refused(self):
+        code, out = self.with_suggestion(suggestion_md(title="x" * 81))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("title is 81 characters, limit 80", out)
+
+    def test_unterminated_frontmatter_is_refused(self):
+        code, out = self.with_suggestion("---\nname: ticks\ntitle: Live ticks\n")
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("no frontmatter", out)
+
+    def test_a_loose_file_in_datafeeds_is_refused(self):
+        code, out = self.with_suggestion(
+            more={"apps/example/skills/example-api/datafeeds/notes.md": "loose\n"}
+        )
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("one directory per suggestion", out)
+
+    def test_a_name_is_unique_within_its_app(self):
+        code, out = self.with_suggestion(
+            more={
+                "apps/example/skills/example-extra/SKILL.md": skill_md("example-extra"),
+                "apps/example/skills/example-extra/datafeeds/ticks/DATAFEED.md": suggestion_md(),
+            }
+        )
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("example/ticks is already suggested", out)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

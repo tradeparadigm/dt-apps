@@ -85,6 +85,14 @@ What is checked, in each case because the consumer refuses the app without it:
     place this can be settled for everyone is here, in the pull request that
     introduces it.
 
+  * A datafeed suggestion, skills/<skill>/datafeeds/<name>/DATAFEED.md, has a
+    name DIME Terminal can give a data feed, and frontmatter of one-line
+    `name`, `title`, `description` and optional `needs`, with `name` equal to
+    its directory. The agent's helper reads those lines without a YAML parser
+    (feeds.mjs suggestions), so a block scalar or a stray key is a suggestion
+    it lists wrong or not at all. Names are unique within an app, because the
+    agent and the terminal address a suggestion as <app>/<name>.
+
 The manifest names NO skills. The directory is the content, the id is the
 join, and there is nothing for two files to disagree about.
 
@@ -234,6 +242,23 @@ SCHEMA_VERSION = 1
 
 # Mirrors pkg/apps: MaxSkillFileBytes, MaxSkillFiles, MaxSkillsPerApp.
 # MAX_FILES is per skill, so an app's ceiling is the product of the two.
+# A datafeed suggestion: what DIME Terminal's notification-feed skill reads
+# (lib/suggestions.mjs). The name is a data feed name there, NAME_RE in its
+# lib/common.mjs: 1-40, no hyphen at either end.
+DATAFEED_DIR = "datafeeds"
+DATAFEED_FILE = "DATAFEED.md"
+# Beside the suggestions, an app may keep what every data feed for its venue
+# shares: a guide the agent reads before writing one (its SKILL.md points
+# there, and feeds.mjs suggestions lists it) and a client to copy. So `lib`
+# can never be a suggestion's name.
+DATAFEED_GUIDE = "GUIDE.md"
+DATAFEED_LIB = "lib"
+DATAFEED_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$")
+DATAFEED_LINE_RE = re.compile(r"^(?P<key>[a-z_]+):[ \t]+(?P<value>\S.*)$")
+DATAFEED_FIELDS = {"name": 40, "title": 80, "description": 300, "needs": 200}
+DATAFEED_REQUIRED = ("name", "title", "description")
+MAX_DATAFEEDS = 20
+
 MAX_FILE_BYTES = 512 * 1024
 MAX_FILES = 32
 MAX_SKILLS = 8
@@ -769,6 +794,101 @@ def frontmatter(md: str) -> dict[str, str]:
     return got if isinstance(got, dict) else {}
 
 
+def check_datafeeds(app: str, skill_dir: Path, seen: dict[str, Path], failures: list[str]) -> None:
+    """Each datafeed suggestion in one skill, and its name unique within the app."""
+    base = skill_dir / DATAFEED_DIR
+    if not base.is_dir():
+        return
+    for entry in sorted(base.iterdir()):
+        if entry.name == DATAFEED_GUIDE and entry.is_file():
+            if not entry.read_text().strip():
+                failures.append(f"{entry}: empty; say how to build a data feed for this venue, or remove it")
+            continue
+        if entry.name == DATAFEED_LIB and entry.is_dir():
+            continue
+        if not entry.is_dir():
+            failures.append(
+                f"{entry}: {DATAFEED_DIR}/ holds one directory per suggestion, plus "
+                f"{DATAFEED_GUIDE} and {DATAFEED_LIB}/, and nothing else"
+            )
+            continue
+        name = entry.name
+        if not DATAFEED_NAME_RE.match(name):
+            failures.append(
+                f"{entry}: {name!r} cannot name a data feed: lowercase letters, digits "
+                "and hyphens, 1-40, no hyphen at either end"
+            )
+        if name in seen:
+            failures.append(
+                f"{entry}: {app}/{name} is already suggested by {seen[name]} — the agent "
+                "and the terminal address a suggestion by app and name"
+            )
+        seen[name] = entry
+        md = entry / DATAFEED_FILE
+        if not md.is_file():
+            failures.append(f"{entry}: no {DATAFEED_FILE}")
+            continue
+        check_datafeed_frontmatter(md, name, failures)
+
+
+def check_datafeed_frontmatter(md: Path, name: str, failures: list[str]) -> None:
+    """One-line keys only: the skill's reader is not a YAML parser."""
+    text = md.read_text()
+    lines = text.split("\n")
+    if lines[0] != "---" or "---" not in lines[1:]:
+        failures.append(f"{md}: no frontmatter: open and close it with a --- line")
+        return
+    block = lines[1:lines.index("---", 1)]
+    got: dict[str, str] = {}
+    for line in block:
+        if not line.strip():
+            continue
+        m = DATAFEED_LINE_RE.match(line)
+        if not m:
+            failures.append(
+                f"{md}: {line!r} is not `key: value` on one line; the agent's reader "
+                "takes nothing else"
+            )
+            continue
+        key, raw = m.group("key"), m.group("value").strip()
+        if key not in DATAFEED_FIELDS:
+            failures.append(
+                f"{md}: unknown key {key!r}; a suggestion carries "
+                f"{', '.join(DATAFEED_FIELDS)}"
+            )
+            continue
+        if raw[0] in ">|":
+            failures.append(f"{md}: {key} is a YAML block scalar; write it on one line")
+            continue
+        try:
+            value = yaml.safe_load(f"v: {raw}")["v"]
+        except yaml.YAMLError as err:
+            failures.append(f"{md}: {key} does not parse: {err}")
+            continue
+        if not isinstance(value, str):
+            failures.append(f"{md}: {key} must be text; quote it")
+            continue
+        # The terminal's reader (frontmatter() in the notification-feed skill)
+        # takes the raw value less one pair of matching outer quotes. YAML also
+        # drops a trailing # comment and undoes escapes, so a value the two read
+        # differently would pass here and show wrong on every agent.
+        shown = raw[1:-1] if len(raw) >= 2 and raw[0] in "\"'" and raw[-1] == raw[0] else raw
+        if shown != value:
+            failures.append(
+                f"{md}: {key}: the terminal reads this as {shown!r}, not {value!r}; "
+                "drop the comment, or the escapes"
+            )
+            continue
+        if len(value) > DATAFEED_FIELDS[key]:
+            failures.append(f"{md}: {key} is {len(value)} characters, limit {DATAFEED_FIELDS[key]}")
+        got[key] = value
+    for key in DATAFEED_REQUIRED:
+        if not got.get(key, "").strip():
+            failures.append(f"{md}: frontmatter has no {key}")
+    if got.get("name") and got["name"] != name:
+        failures.append(f"{md}: frontmatter name is {got['name']!r}, directory is {name!r}")
+
+
 # The lines every shipped client repeats. They are the proxy's protocol, not the
 # venue's, so a copy that drifts is a bug we get to find once per app.
 CLIENT_PREAMBLE = """const all = Object.keys(process.env).filter(k => (process.env[k] || '').startsWith('sign-{venue}'));
@@ -863,6 +983,7 @@ def main() -> int:
 
     claims: dict[str, str] = {}
     for app in apps:
+        suggested: dict[str, Path] = {}
         man = app / MANIFEST
         if not man.is_file():
             failures.append(f"{app}: no {MANIFEST}")
@@ -913,13 +1034,22 @@ def main() -> int:
             if version:
                 check_errata_version(app.name, version, files, failures)
                 check_helper_versions(app.name, version, name, files, failures)
+            check_datafeeds(app.name, d, suggested, failures)
             if len(files) > MAX_FILES:
                 failures.append(f"{d}: {len(files)} files, limit {MAX_FILES}")
             for f in files:
                 if f.stat().st_size > MAX_FILE_BYTES:
                     failures.append(f"{f}: {f.stat().st_size} bytes, limit {MAX_FILE_BYTES}")
 
-        print(f"{app.name}: {', '.join(on_disk) if on_disk else 'no skills'}")
+        if len(suggested) > MAX_DATAFEEDS:
+            failures.append(
+                f"{app}: {len(suggested)} datafeed suggestions, limit {MAX_DATAFEEDS}"
+            )
+
+        line = f"{app.name}: {', '.join(on_disk) if on_disk else 'no skills'}"
+        if suggested:
+            line += f"; datafeeds {', '.join(sorted(suggested))}"
+        print(line)
 
     if failures:
         print("\nStructure check failed:", file=sys.stderr)
