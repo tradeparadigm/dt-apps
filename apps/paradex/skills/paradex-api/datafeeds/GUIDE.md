@@ -8,7 +8,9 @@ the only thing left to write is what is worth a line.
 ## 1. Copy the client
 
 The folder holding this file is replaced when the app updates, so copy the
-three files in `lib/` into the data feed's own directory:
+three files in `lib/` into the data feed's own directory. Where the
+notification-feed skill has `feeds.mjs init`, `init <name> --from paradex`
+does this and writes the starting `datafeed.mjs`; otherwise:
 
 ```sh
 mkdir -p ~/.openclaw/workspace/datafeeds/<name>
@@ -19,6 +21,35 @@ cp <this folder>/lib/paradex.mjs <this folder>/lib/sbe.mjs <this folder>/lib/par
 Then `import { stream, perpSummaries, rest, restPages } from "./paradex.mjs";`
 in `datafeed.mjs`, and post with the notification-feed skill's
 `openDataFeed`, as its SKILL.md says.
+
+### What the client offers
+
+**`stream(channels, onEvent, options)`** subscribes to `channels`
+(`["markets_summary.BTC-USD-PERP", "bbo.ETH-USD-PERP"]`) and calls
+`onEvent(event)` for each update (section 2 has the fields), reconnecting and
+resubscribing for as long as the process runs. It answers
+`{subscribe(channel), unsubscribe(channel), close()}`. Every option is
+optional:
+
+| Option | Default | |
+|---|---|---|
+| `idleMs` | 5 minutes | reconnect after this long with no frame; `0` never |
+| `onOpen()` | none | called on each connect, after subscribing: read what the gap missed over REST here |
+| `log(text)` | stderr, `[paradex] ...` | connects, reconnects, a refused channel, giving up |
+| `giveUpMs` | 10 minutes | with no connection opening for this long, it logs Paradex's answer and calls `onGiveUp` |
+| `onGiveUp()` | exit 1 | so the data feed shows as failing rather than running and posting nothing |
+| `url` | `WS_URL` | the schema version is added to it |
+
+**`rest(path, query, {base, timeoutMs})`**: one `GET REST_URL + path` with
+`query`, as parsed JSON. Throws on a non-2xx, naming the path and status.
+`timeoutMs` is 30 s.
+
+**`restPages(path, query, {base, maxPages})`**: every page of a paged read
+(`{results, next}`) as one list; `maxPages` is 10.
+
+**`perpSummaries()`**: every perp's REST summary (section 3).
+
+`WS_URL` and `REST_URL` are exported too.
 
 ## 2. Pick the channel
 

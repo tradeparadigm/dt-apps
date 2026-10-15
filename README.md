@@ -56,6 +56,14 @@ build on: a client in `lib/` to copy, which channel or endpoint carries what,
 one worked example. Paradex's is the model: its WebSocket sends binary SBE
 frames, so `lib/` carries a decoder that reads Paradex's own schema file.
 
+**The guide is the client's documentation.** Every `lib/` function its
+examples use gets its arguments, options with their defaults, what it
+returns, and the fields of what it hands back. An agent that has to open
+`lib/` to learn a signature spends a turn on it in every data feed it writes,
+and the checker cannot tell a complete guide from a thin one, so review it.
+`feeds.mjs init <name> --from <app>` copies `lib/` beside a new data feed, so
+keep everything a script imports in `lib/`.
+
 `DATAFEED.md` opens with one-line frontmatter, which the terminal shows and the
 agent lists (`feeds.mjs suggestions`):
 
