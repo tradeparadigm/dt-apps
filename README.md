@@ -64,6 +64,12 @@ and the checker cannot tell a complete guide from a thin one, so review it.
 `feeds.mjs init <name> --from <app>` copies `lib/` beside a new data feed, so
 keep everything a script imports in `lib/`.
 
+**A skill with an MCP server scopes its "use only the tools" rule to the
+agent's turns.** A data feed is a separate process that cannot call them, so
+a skill that says every read goes through its tools, with no exception, sends
+the agent probing the venue's endpoints instead of reading the guide. Say in
+that same sentence that scripts use `datafeeds/`, as Paradex's does.
+
 `DATAFEED.md` opens with one-line frontmatter, which the terminal shows and the
 agent lists (`feeds.mjs suggestions`):
 

@@ -12,10 +12,12 @@ metadata:
 
 # Paradex
 
-Every Paradex read and write goes through the `paradex` MCP server. The server
-signs for you. Do not look for credentials, environment variables or a CLI.
-Call a tool with `tool_call`, passing its exact name below as `id` and its
-arguments as `args`. You do not need `tool_search` or `tool_describe`.
+Every Paradex read and write in your turns goes through the `paradex` MCP
+server. The server signs for you. Do not look for credentials, environment
+variables or a CLI. Call a tool with `tool_call`, passing its exact name below
+as `id` and its arguments as `args`. You do not need `tool_search` or
+`tool_describe`. A data feed or other script cannot call these tools: it reads
+Paradex with the client in `datafeeds/` (next section).
 
 ## Data feeds and other scripts
 
