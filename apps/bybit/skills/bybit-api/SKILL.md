@@ -54,7 +54,7 @@ or `tool_describe`.
 
 - `bybit__get_option_expiries(underlying)`: expiries as ms and ISO dates
 - `bybit__get_option_chain(underlying, expiry?, right?, strikeMin?, strikeMax?)`: bid, ask, mark, IVs, underlying price and greeks per option, with `units` for the greeks. `right` is `call` or `put`. `expiry` is the millisecond `expiry` from `get_option_expiries`, never the date. Pass a strike range: one underlying has hundreds of options
-- `bybit__get_account_greeks()`: delta, gamma, vega and theta summed per underlying, including the delta of perpetual positions
+- `bybit__get_account_greeks()`: delta, gamma, vega and theta summed per underlying
 
 Option positions, orders, fills and cancels use the tools above.
 
