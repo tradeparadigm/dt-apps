@@ -68,7 +68,9 @@ command prints Telegram's answer as JSON: `send` prints the message ids, and
 - Text is plain unless you pass `--html`. With `--html`, escape `<`, `>` and `&`
   in anything you did not write, or Telegram refuses the message.
 - `--silent` delivers without a notification sound.
-- Text over 4096 characters is split into several messages.
+- Plain text over 4096 characters is split into several messages, at a line
+  break where there is one. `--html` text over 4096 characters is refused:
+  split it yourself, keeping each tag inside one message.
 
 ## From a data feed
 

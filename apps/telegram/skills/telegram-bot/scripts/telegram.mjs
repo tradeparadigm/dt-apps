@@ -54,15 +54,33 @@ export async function call(method, params = {}, { cred = placeholder() } = {}) {
   return body.result;
 }
 
+// Splits on whole code points, at the last newline that fits when there is one.
+export function chunks(text) {
+  const rest = Array.from(text);
+  const out = [];
+  while (rest.length > MAX_TEXT) {
+    const newline = rest.lastIndexOf('\n', MAX_TEXT);
+    const cut = newline > 0 ? newline : MAX_TEXT;
+    out.push(rest.splice(0, cut).join(''));
+    if (rest[0] === '\n') rest.shift();
+  }
+  out.push(rest.join(''));
+  return out;
+}
+
 export async function sendMessage(chat, text, { html = false, silent = false, cred } = {}) {
+  // A cut through HTML can land inside a tag, and Telegram refuses the half.
+  if (html && Array.from(text).length > MAX_TEXT) {
+    throw new Error(`HTML text over ${MAX_TEXT} characters: send it as several messages`);
+  }
   const sent = [];
-  for (let i = 0; i < text.length; i += MAX_TEXT) {
+  for (const part of chunks(text)) {
     sent.push(
       await call(
         'sendMessage',
         {
           chat_id: chat,
-          text: text.slice(i, i + MAX_TEXT),
+          text: part,
           ...(html ? { parse_mode: 'HTML' } : {}),
           disable_notification: silent,
           link_preview_options: { is_disabled: true },
