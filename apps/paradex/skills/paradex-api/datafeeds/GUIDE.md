@@ -5,6 +5,21 @@ script cannot call the `paradex__` tools: they exist only inside your turns.
 `lib/` beside this file is a client that does the Paradex part for you, so
 the only thing left to write is what is worth a line.
 
+## Which environment
+
+Market data is public, and the client reads production, the live market, by
+default. The `paradex__` tools may not: they run against the environment of
+the user's Paradex credential, the first of mainnet, testnet and nightly they
+enrolled one for, so their numbers can differ from the client's. Use
+production unless the user names another environment, and don't compare the
+two. For another one, pass `url` to `stream` and `base` to the REST helpers:
+
+| Environment | `url` | `base` |
+|---|---|---|
+| production (default) | `wss://ws.api.prod.paradex.trade/v1` | `https://api.prod.paradex.trade/v1` |
+| testnet | `wss://ws.api.testnet.paradex.trade/v1` | `https://api.testnet.paradex.trade/v1` |
+| nightly | `wss://ws.api.nightly.paradex.trade/v1` | `https://api.nightly.paradex.trade/v1` |
+
 ## 1. Copy the client
 
 The folder holding this file is replaced when the app updates, so copy the
@@ -133,10 +148,7 @@ A perp listed after it starts is picked up at its next start.
   and decodes the frames with `sbe.mjs`, which reads Paradex's own schema
   file, `paradex_1_0.xml`.
 - Subscribe and unsubscribe are JSON-RPC text frames; so are their answers.
-- REST is plain JSON, and market data needs no key:
-  `https://api.prod.paradex.trade/v1`.
-- Testnet: pass `{url: "wss://ws.api.testnet.paradex.trade/v1"}` to `stream`
-  and `{base: "https://api.testnet.paradex.trade/v1"}` to the REST helpers.
+- REST is plain JSON, and market data needs no key.
 
 ## When it does not work
 
