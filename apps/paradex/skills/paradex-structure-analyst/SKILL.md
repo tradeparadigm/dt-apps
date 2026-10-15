@@ -8,7 +8,8 @@ description: >
   says what the structure costs, in one pass, with no venue reads. Use when
   the user asks about a structure in the order builder. A trade that already
   filled belongs to paradex-trade-analyst. Paradigm RFQ blocks belong to
-  paradigm-block-analyst.
+  paradigm-block-analyst, and a block from the Option Monitor to
+  paradex-block-analyst.
 compatibility: >
   Reads nothing. Everything it needs arrives in the message, so it needs no
   credential, no helper and no network.
@@ -49,7 +50,9 @@ Say what you would do. The user asked an expert, not a calculator.
 is a label. The structure is in the hidden context as JSON: each leg's
 `optionType`, `side`, `strike`, `size`, `price` (the live mark, not a fill),
 `expiry` and `symbol`, plus the underlying's `spot` and `nearby_strikes`,
-which are priced and ready to use.
+which are priced and ready to use. An `amount` arrives too when the user
+has set one in the builder: it scales the whole structure, and each leg's
+`size` stays per unit.
 
 `symbol` is the market the order builder already resolved. Pass it through
 when you draw. A leg the builder could not name arrives without the field.
@@ -102,6 +105,10 @@ The terminal renders the outermost `{...}` of a message when it carries
 `layout` and `children`, keeping the prose above as the text of the bubble.
 An object without both keys shows as raw JSON, which is what a bare
 `{"mode": ..., "component": ..., "props": ...}` does.
+
+Put `amount` in `props` exactly as the context carried it, and leave it out
+when the context has none; never fold it into the legs' sizes, and never
+send 1 in its place.
 
 Send every leg of the WHOLE structure, not just the one you added, and pass
 each `symbol` through as a string or leave the field out — never null, which
