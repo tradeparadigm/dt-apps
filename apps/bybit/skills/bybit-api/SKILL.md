@@ -2,7 +2,8 @@
 name: bybit-api
 description: >
   Bybit, the centralised exchange: balances, positions, orders, fills,
-  funding, market data, and placing, amending and cancelling orders. Use for
+  funding, market data, option chains and greeks, and placing, amending and
+  cancelling orders on perpetuals, futures and options. Use for
   ANY Bybit request. The tools are `bybit__*` MCP tools, called by exact name.
 metadata:
   author: tradeparadigm
@@ -30,7 +31,7 @@ or `tool_describe`.
 
 - `bybit__get_open_orders(symbols?)`: resting and conditional orders
 - `bybit__get_order_history(symbol?, orderId?, from?, to?, limit?)`: past orders
-- `bybit__place_order(symbol, side, type, amount, price?, triggerPrice?, triggerType?, stopLoss?, takeProfit?, reduceOnly?, timeInForce?, clientOrderId?)`: returns the new order ids
+- `bybit__place_order(symbol, side, type, amount, price?, triggerPrice?, triggerType?, stopLoss?, takeProfit?, reduceOnly?, timeInForce?, clientOrderId?, impliedVolatility?)`: returns the new order ids
 - `bybit__amend_order(orderId, price?, amount?)`: exactly one of `price` and `amount`
 - `bybit__cancel_orders(orderIds)`: cancel by id
 - `bybit__cancel_all_orders(symbol?)`: every open order, or every open order on one market
@@ -66,6 +67,32 @@ tool above takes them, and `bybit__get_markets` marks them `isInverse: true`.
 - Demo trading has no inverse markets. Tell the user they are not available
   on demo.
 
+## Options
+
+- `bybit__get_option_expiries(underlying)`: expiries as ms and ISO dates
+- `bybit__get_option_chain(underlying, expiry?, right?, strikeMin?, strikeMax?)`: bid, ask, mark, IVs, underlying price and greeks per option, with `units` for the greeks. `right` is `call` or `put`. `expiry` is the millisecond `expiry` from `get_option_expiries`, never the date. Pass a strike range: one underlying has hundreds of options
+- `bybit__get_account_greeks()`: delta, gamma, vega and theta summed per underlying
+
+Option positions, orders, fills and cancels use the tools above.
+
+- Take option symbols, such as `BTC-30OCT26-96000-C-USDT`, from the chain.
+  Underlyings include BTC, ETH, SOL and some stocks.
+- Every option Bybit lists is quoted and settled in USDT.
+- An option order is `limit` or `market`, priced in USDT premium. Triggers,
+  `stopLoss` and `takeProfit` are refused. To price by implied volatility,
+  pass `impliedVolatility` as a fraction (`0.5` is 50%) and leave `price` out.
+- BTC options tick in 5 USDT, with a 5 USDT minimum price and a 0.01 minimum
+  size. `bybit__get_markets(symbols: [<option symbol>])` gives any option's
+  tick, step and minimums; `get_markets` without symbols lists no options.
+- IVs are fractions. Greeks are Black-Scholes per 1 unit of the underlying in
+  USDT: vega per 1 vol point, theta per calendar day.
+- Option positions report `leverage` as 1 and `liquidationPrice` as 0. Closed PnL,
+  leverage and position mode do not exist for options.
+- Crypto options expire and settle at 08:00 UTC, and stock options at 20:00
+  or 21:00 UTC. Take the exact time from `bybit__get_option_expiries`.
+- Demo trading has no option tools. Tell the user options are not available
+  on demo.
+
 ## Facts
 
 - The tools cover the markets `bybit__get_markets` lists. Take exact symbols
@@ -83,9 +110,10 @@ tool above takes them, and `bybit__get_markets` marks them `isInverse: true`.
 
 ## Not covered yet
 
-Spot, options, transfers, deposits, withdrawals and private WebSocket
-streams. Tell the user Bybit's tools do not cover them yet; do not
-try to reach them another way.
+Spot, transfers, deposits, withdrawals and private WebSocket streams. Tell
+the user Bybit's tools do not cover them yet; do not try to reach them
+another way. Inverse contracts and options are covered on mainnet and
+testnet, not on demo.
 
 ## When there are no `bybit__` tools
 
@@ -126,3 +154,17 @@ every cause we know, cheapest to check first.
 
 For the first three, ask the user to check the key on Bybit's API management
 page and re-enrol it. You cannot see or fix the secret.
+
+For options:
+
+- **`bybit__` tools but no `get_option_*` tools, or "Options are not enabled
+  on this Bybit account"**: the account is on demo, which has no options, or
+  the agent is still running the previous version of the app. Ask the user to
+  reload; on demo, options are not available.
+- **`10005` on an option call**: the key lacks Bybit's options trading
+  permission, or the account is not a Unified Trading Account.
+- **"Bybit options do not support ..." or "limit and market orders only"**:
+  the order used a trigger, a stop loss, a take profit or another order type.
+  Place a plain limit or market order.
+- **"A limit option order needs a price or an impliedVolatility"**: pass one
+  of the two.
