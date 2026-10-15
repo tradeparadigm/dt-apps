@@ -69,6 +69,12 @@ line = "a" * 3000 + "\n"
 texts, _, _ = send(line * 3)
 check("long text splits at line breaks", texts == ["a" * 3000, "a" * 3000, "a" * 3000 + "\n"])
 
+texts, _, _ = send("a\n" + "x" * 4094)
+check("exactly 4096 characters is one message", texts == ["a\n" + "x" * 4094])
+
+texts, _, _ = send("\n" + "x" * 5000)
+check("a newline at a cut starts no message", texts == ["x" * 4096, "x" * 904])
+
 texts, _, _ = send("x" * 4096 + "\n")
 check("a trailing newline past the limit sends no empty message", texts == ["x" * 4096])
 

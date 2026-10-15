@@ -61,7 +61,7 @@ export function chunks(text) {
   const out = [];
   while (rest.length > MAX_TEXT) {
     const newline = rest.lastIndexOf('\n', MAX_TEXT);
-    const cut = newline > 0 ? newline : MAX_TEXT;
+    const cut = newline >= 0 ? newline : MAX_TEXT;
     out.push(rest.splice(0, cut).join(''));
     if (rest[0] === '\n') rest.shift();
   }
