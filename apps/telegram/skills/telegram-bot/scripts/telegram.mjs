@@ -64,7 +64,7 @@ export function chunks(text) {
     out.push(rest.splice(0, cut).join(''));
     if (rest[0] === '\n') rest.shift();
   }
-  out.push(rest.join(''));
+  if (rest.length > 0 || out.length === 0) out.push(rest.join(''));
   return out;
 }
 
