@@ -8,7 +8,9 @@ it. REST market reads need no key.
 
 ## Which environment
 
-Use production. Use another environment only when the user names it, by
+Use production, even when the `paradex__` tools answer from another
+environment and their numbers differ: market data is public, and production is
+the live market. Use another environment only when the user names it, by
 passing `url` to `stream` and `base` to the REST helpers:
 
 | Environment | `url` | `base` |
@@ -59,7 +61,7 @@ optional:
 **`restPages(path, query, {base, maxPages})`**: every page of a paged read
 (`{results, next}`) as one list; `maxPages` is 10.
 
-**`perpSummaries()`**: every perp's REST summary (section 3).
+**`perpSummaries({base})`**: every perp's REST summary (section 3).
 
 `WS_URL` and `REST_URL` are exported too.
 
