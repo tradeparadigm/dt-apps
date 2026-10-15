@@ -4,27 +4,26 @@ description: >
   Paradex, the Starknet perpetual futures and options exchange: markets, order
   book, account, positions, fills, funding, and placing and cancelling orders.
   Use for ANY Paradex request. The tools are `paradex__*` MCP tools, called by
-  exact name. NOT Paradigm: an RFQ or a block trade is paradigm-rfq-trader even
-  when it settles on Paradex.
+  exact name. For a data feed or other script, follow datafeeds/GUIDE.md
+  instead: a script cannot call the tools. NOT Paradigm: an RFQ or a block
+  trade is paradigm-rfq-trader even when it settles on Paradex.
 metadata:
   author: tradeparadigm
 ---
 
 # Paradex
 
-Every Paradex read and write in your turns goes through the `paradex` MCP
-server. The server signs for you. Do not look for credentials, environment
-variables or a CLI. Call a tool with `tool_call`, passing its exact name below
-as `id` and its arguments as `args`. You do not need `tool_search` or
-`tool_describe`. A data feed or other script cannot call these tools: it reads
-Paradex with the client in `datafeeds/` (next section).
+Every Paradex read and write goes through the `paradex` MCP server. The server
+signs for you. Do not look for credentials, environment variables or a CLI.
+Call a tool with `tool_call`, passing its exact name below as `id` and its
+arguments as `args`. You do not need `tool_search` or `tool_describe`.
 
 ## Data feeds and other scripts
 
-A script cannot call the `paradex__` tools: they exist only in your turns. For
-a data feed, or any script that reads Paradex market data, read
-`datafeeds/GUIDE.md` in this skill's folder first. It has a client to copy
-and the channel for each kind of data.
+For a data feed, or any script that reads Paradex, run the notification-feed
+skill's `feeds.mjs init <name> --from paradex`, then follow
+`datafeeds/GUIDE.md` in this skill's folder. Use these instead of the
+`paradex__` tools: a script cannot call them.
 
 ## Paradex is not Paradigm
 

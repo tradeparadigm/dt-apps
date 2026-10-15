@@ -1,18 +1,15 @@
 # Building a Paradex data feed
 
-Read this before writing a data feed, or any script, that reads Paradex. A
-script cannot call the `paradex__` tools: they exist only inside your turns.
-`lib/` beside this file is a client that does the Paradex part for you, so
-the only thing left to write is what is worth a line.
+Read this before writing a data feed, or any script, that reads Paradex.
+
+Read Paradex's WebSocket with `stream()` from the client in `lib/` beside
+this file: Paradex accepts only SBE, a binary encoding, and `stream()` speaks
+it. REST market reads need no key.
 
 ## Which environment
 
-Market data is public, and the client reads production, the live market, by
-default. The `paradex__` tools may not: they run against the environment of
-the user's Paradex credential, the first of mainnet, testnet and nightly they
-enrolled one for, so their numbers can differ from the client's. Use
-production unless the user names another environment, and don't compare the
-two. For another one, pass `url` to `stream` and `base` to the REST helpers:
+Use production. Use another environment only when the user names it, by
+passing `url` to `stream` and `base` to the REST helpers:
 
 | Environment | `url` | `base` |
 |---|---|---|
@@ -102,53 +99,6 @@ perps and where they stand, then follow them on the stream. Never put it, or
 
 Market symbols: `BTC-USD-PERP` for a perp, `BTC-USD-27JUN26-70000-C` for an
 option.
-
-## Example: perps with funding above 0.01%
-
-The whole data feed for "every 3 seconds, list the Paradex perps whose
-funding rate is above 0.01%":
-
-```js
-import { perpSummaries, stream } from "./paradex.mjs";
-import { openDataFeed } from "__FEED_HELPER__";
-
-const THRESHOLD = 0.0001; // 0.01% per 8-hour funding period
-const EVERY_MS = 3_000;
-
-const out = await openDataFeed("paradex-high-funding");
-const funding = new Map(); // market -> rate
-
-for (const p of await perpSummaries()) funding.set(p.symbol, Number(p.funding_rate));
-stream([...funding.keys()].map((m) => `markets_summary.${m}`), (e) => {
-  if (e.type === "markets_summary") funding.set(e.market, e.fundingRatePrecise ?? e.fundingRate);
-});
-
-const pct = (r) => `${(r * 100).toFixed(4)}%`;
-let shown = null;
-setInterval(() => {
-  const above = [...funding].filter(([, r]) => r > THRESHOLD).sort((a, b) => b[1] - a[1]);
-  const names = above.map(([m]) => m).join();
-  if (names === shown) return; // post when the list changes, not every tick
-  shown = names;
-  out.post(
-    above.length === 0
-      ? `No perp above ${pct(THRESHOLD)}`
-      : `${above.length} above ${pct(THRESHOLD)}: ${above.map(([m, r]) => `${m.replace("-USD-PERP", "")} ${pct(r)}`).join(", ")}`,
-  );
-}, EVERY_MS);
-```
-
-A perp listed after it starts is picked up at its next start.
-
-## What cost time before this client existed
-
-- Paradex's WebSocket accepts only SBE, a binary encoding. A URL without
-  `sbeSchemaId` and `sbeSchemaVersion` is refused (HTTP 400, code 40301),
-  and market data arrives as binary frames. `stream()` adds the parameters
-  and decodes the frames with `sbe.mjs`, which reads Paradex's own schema
-  file, `paradex_1_0.xml`.
-- Subscribe and unsubscribe are JSON-RPC text frames; so are their answers.
-- REST is plain JSON, and market data needs no key.
 
 ## When it does not work
 
