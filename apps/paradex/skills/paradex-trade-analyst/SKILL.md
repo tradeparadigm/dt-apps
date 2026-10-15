@@ -10,7 +10,8 @@ description: >
   benchmark or get market colour on a Paradex fill, or pastes Paradex fill
   JSON. A structure the user is
   considering rather than one they traded belongs to paradex-structure-analyst.
-  Paradigm RFQ blocks belong to paradigm-block-analyst.
+  Paradigm RFQ blocks belong to paradigm-block-analyst, and a block from the
+  Option Monitor to paradex-block-analyst.
 compatibility: >
   Needs the paradex-api skill's `paradex__*` tools, which means a Paradex
   credential enrolled. Names every read that failed.
