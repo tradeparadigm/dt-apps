@@ -337,10 +337,12 @@ def check_environments(man: str, envs: object, failures: list[str]) -> None:
     check_unique(man, "environments.host", [e.get("host") for e in envs if isinstance(e, dict)], failures)
 
 
-def check_credential_types(man: str, types: object, failures: list[str]) -> None:
+def check_credential_types(man: str, types: object, failures: list[str]) -> set[str]:
+    """Check every credential type, and return the delivery modes they declare."""
+    modes: set[str] = set()
     if not isinstance(types, list) or not types:
         failures.append(f"{man}: at least one credential type is required")
-        return
+        return modes
     for i, ct in enumerate(types):
         check_known(man, f"credential_types[{i}]", ct, "credential_type", failures)
         row = require(man, f"credential_types[{i}]", ct,
@@ -413,6 +415,7 @@ def check_credential_types(man: str, types: object, failures: list[str]) -> None
         if mode not in MODES:
             failures.append(f"{man}: {where}.delivery.mode {mode!r} is not one of {sorted(MODES)}")
         else:
+            modes.add(mode)
             # Present AND meaningful: a false match_body or an empty header is
             # what the consumer's canonical form would hold anyway.
             for field in sorted(set(delivery) - DELIVERY_FIELDS[mode]):
@@ -453,6 +456,7 @@ def check_credential_types(man: str, types: object, failures: list[str]) -> None
                 )
     check_unique(man, "credential_types.id", [c.get("id") for c in types if isinstance(c, dict)], failures)
     check_unique(man, "credential_types.slug", [c.get("slug") for c in types if isinstance(c, dict)], failures)
+    return modes
 
 
 def check_mcp_env(man: str, where: str, env: object, failures: list[str]) -> dict[str, str]:
@@ -705,17 +709,17 @@ def check_presentation(man: str, doc: dict, failures: list[str]) -> None:
         failures.append(f"{man}: icon.view_box {box!r} must be four numbers")
 
 
-def check_manifest(app: str, text: str, failures: list[str]) -> str:
-    """Check one manifest, and return the version it declares."""
+def check_manifest(app: str, text: str, failures: list[str]) -> tuple[str, set[str]]:
+    """Check one manifest, and return its version and its delivery modes."""
     man = f"{APPS}/{app}/{MANIFEST}"
     try:
         doc = yaml.safe_load(text)
     except yaml.YAMLError as exc:
         failures.append(f"{man}: is not readable YAML: {exc}")
-        return ""
+        return "", set()
     if not isinstance(doc, dict):
         failures.append(f"{man}: is not a mapping")
-        return ""
+        return "", set()
 
     check_known(man, "manifest", doc, "manifest", failures)
 
@@ -745,9 +749,9 @@ def check_manifest(app: str, text: str, failures: list[str]) -> str:
     check_presentation(man, doc, failures)
     check_scope(man, doc, failures)
     check_environments(man, doc.get("environments"), failures)
-    check_credential_types(man, doc.get("credential_types"), failures)
+    modes = check_credential_types(man, doc.get("credential_types"), failures)
     check_mcp_server(man, doc, failures)
-    return as_text(doc.get("version")) or ""
+    return as_text(doc.get("version")) or "", modes
 
 
 def frontmatter(md: str) -> dict[str, str]:
@@ -870,21 +874,6 @@ if (all.length > 1 && !process.env.{VENUE}_CRED) {{
 const HDR = 'X-Dime-Sign-' + V.replace(/^CRED_/, '').toLowerCase().replaceAll('_', '-');"""
 
 
-def signs(manifest: str) -> bool:
-    """Whether any credential type signs. The preamble finds a sign- placeholder."""
-    try:
-        doc = yaml.safe_load(manifest) or {}
-    except yaml.YAMLError:
-        return False
-    types = doc.get("credential_types") if isinstance(doc, dict) else None
-    return any(
-        isinstance(t, dict)
-        and isinstance(t.get("delivery"), dict)
-        and t["delivery"].get("mode") == "sign"
-        for t in types or []
-    )
-
-
 def check_client_preamble(app: str, files: list, failures: list[str]) -> None:
     """A shipped signing client opens with the proxy protocol, spelled one way."""
     for f in files:
@@ -972,7 +961,7 @@ def main() -> int:
         if not man.is_file():
             failures.append(f"{app}: no {MANIFEST}")
             continue
-        version = check_manifest(app.name, man.read_text(), failures)
+        version, modes = check_manifest(app.name, man.read_text(), failures)
 
         skills_dir = app / "skills"
         on_disk = (
@@ -1014,7 +1003,7 @@ def main() -> int:
                 failures.append(f"{entry}: frontmatter has no description")
 
             files = [p for p in d.rglob("*") if p.is_file()]
-            if signs(man.read_text()):
+            if "sign" in modes:
                 check_client_preamble(app.name, files, failures)
             if version:
                 check_errata_version(app.name, version, files, failures)
