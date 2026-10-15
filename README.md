@@ -11,6 +11,8 @@ apps/<id>/app.yaml                        what the app is, and what its
                                           credential may reach
 apps/<id>/skills/<skill-name>/SKILL.md    what the agent is taught
 apps/<id>/skills/<skill-name>/...         anything else that skill reads
+apps/<id>/skills/<skill-name>/datafeeds/<name>/DATAFEED.md
+                                          a data feed the app suggests
 ```
 
 **Publishing does not require a release of DIME Terminal.** It reads this
@@ -33,6 +35,83 @@ is all the separation the agent needs.
 The cap is on SKILLS. A skill is prose plus its references and scripts, and the
 512KB and 32-file limits are what one of those needs, so the per-app file ceiling
 is the product of the two. Eight is more than any venue teaches.
+
+## Datafeed suggestions
+
+A skill may suggest data feeds: live scripts DIME Terminal's notification-feed
+skill runs, posting lines into a chat the user reads. Each is a directory under
+the skill's `datafeeds/`:
+
+```
+datafeeds/<name>/DATAFEED.md     what the user sees, and how the agent sets it up
+datafeeds/<name>/datafeed.mjs    a template, or whatever files the setup names
+datafeeds/GUIDE.md               optional: how to build any data feed for this venue
+datafeeds/lib/                   optional: what those data feeds share, such as a client
+```
+
+`GUIDE.md` is for the data feed nobody suggested. Point at it from the
+skill's `SKILL.md` (a script cannot call an app's MCP tools, so the agent
+needs telling where to look), and keep it to what makes the venue fast to
+build on: a client in `lib/` to copy, which channel or endpoint carries what,
+one worked example. Paradex's is the model: its WebSocket sends binary SBE
+frames, so `lib/` carries a decoder that reads Paradex's own schema file.
+
+**The guide is the client's documentation.** Every `lib/` function its
+examples use gets its arguments, options with their defaults, what it
+returns, and the fields of what it hands back. An agent that has to open
+`lib/` to learn a signature spends a turn on it in every data feed it writes,
+and the checker cannot tell a complete guide from a thin one, so review it.
+`feeds.mjs init <name> --from <app>` copies `lib/` beside a new data feed, so
+keep everything a script imports in `lib/`.
+
+**A skill with an MCP server says what a script uses instead.** A data feed
+cannot call the tools, so the skill's description and a section of its own
+point to `datafeeds/`, as Paradex's do.
+
+`DATAFEED.md` opens with one-line frontmatter, which the terminal shows and the
+agent lists (`feeds.mjs suggestions`):
+
+```markdown
+---
+name: options-monitor
+title: Global Options Monitor
+description: Options block trades across five venues, one line per package.
+needs: Nothing. It reads public data.
+---
+```
+
+`name` is the directory's (lowercase letters, digits and hyphens, 1-40),
+`title` is up to 80 characters, and `needs`, optional, says in plain words
+what to enrol first. The terminal reads each value as written, less one pair
+of outer quotes, so the check refuses what YAML would read differently: a
+trailing `# comment`, an escaped quote.
+
+Its body is written to the agent: how to adapt the template, how to register
+the result with `feeds.mjs add`. A suggestion with nothing to adapt can say to
+install it as it is. Whatever the agent registers is
+an ordinary data feed the user owns and can have changed in any way; nothing
+ties it back to the app.
+
+- **Not `SKILL.md`.** openclaw loads every `SKILL.md` into every run; a
+  suggestion is read only when someone asks for it.
+- **Any app, any venue.** Where a suggestion goes is the publisher's call: one
+  that combines Paradex and Bybit can live in either app, and says in `needs`
+  what it relies on.
+- **Credentials in prose.** Say in plain words what access the data feed
+  needs (`needs`, and the body where it matters); the agent picks from the
+  credentials the user has. The script reads that credential's placeholder
+  from `process.env.CRED_<LABEL>` after `openDataFeed`, which loads them into
+  a data feed's process (which openclaw starts without them; agents from
+  before dime-terminal#520 do not load them). The credential proxy swaps in
+  the secret. A data feed cannot call an app's MCP tools: they exist only
+  inside an agent run.
+- **Its files are copied, not run in place.** The skills directory is replaced
+  on every publish, so the setup copies the template into the agent's
+  workspace.
+
+Names are unique within an app, since a suggestion is addressed as
+`<app>/<name>`. A suggestion's files count toward its skill's 32-file limit,
+and an app carries at most 20 suggestions.
 
 ## Naming
 
@@ -124,7 +203,12 @@ that made the mistake:
   nobody can enrol;
 - every skill directory holds a `SKILL.md` whose frontmatter `name` matches
   it, with a description, inside the file-count and size limits;
-- the version in a cached helper's filename matches the app's `version:`.
+- the version in a cached helper's filename matches the app's `version:`;
+- every datafeed suggestion's directory is a name a data feed can have, holds a
+  `DATAFEED.md`, and opens with one-line `name` (matching it), `title`,
+  `description` and optional `needs`. DIME Terminal's agent reads those lines
+  without a YAML parser, so a block scalar or a stray key would be listed wrong
+  or not at all. A suggestion's name is unique within its app.
   Nothing in the consumer reads that path, because it is an instruction the
   agent follows rather than a field anything parses. So a bump the filename does
   not follow is invisible: every agent that already wrote a helper keeps the one
