@@ -341,6 +341,21 @@ class TestSigning(unittest.TestCase):
         self.assertIn("key_encoding", out)
 
 
+class TestClientPreamble(unittest.TestCase):
+    """The preamble finds a sign- placeholder, so only a signing app needs it."""
+
+    CLIENT = {"apps/example/skills/example-api/scripts/client.mjs": "export const x = 1;\n"}
+
+    def test_a_client_without_a_signing_credential_needs_no_preamble(self):
+        code, out = check(extra=self.CLIENT)
+        self.assertEqual(code, 0, out)
+
+    def test_a_signing_client_without_the_preamble_is_refused(self):
+        code, out = check(TestSigning().sign("hmac-sha256"), extra=self.CLIENT)
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("no credential preamble", out)
+
+
 class TestScopeCaps(unittest.TestCase):
     """Set where the number stops being possible, mirroring the server."""
 
