@@ -49,13 +49,30 @@ or `tool_describe`.
 - `bybit__get_tickers(symbols?)`: last, mark, index, bid, ask, 24h volume, open interest and funding rate
 - `bybit__get_candles(symbol, interval, from?, to?, limit?)`: `interval` is `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `12h`, `1d` or `1w`
 
+## Inverse contracts
+
+Inverse perpetuals and futures, such as `BTCUSD` and `ETHUSDZ26`, are
+coin-margined: you post and settle in the coin, and prices are in USD. Every
+tool above takes them, and `bybit__get_markets` marks them `isInverse: true`.
+
+- `amount` on an inverse market is a whole number of USD contracts: `100` on
+  `BTCUSD` is 100 USD of BTC. Open orders, order history and fills also count
+  USD contracts.
+- Positions give `contracts` in the coin at the current mark, with the USD
+  size in `extra.contractsNative`. `notional` is USD.
+- `unrealizedPnl` on an inverse position, and fees and funding on its fills
+  and income, are in the coin. `bybit__get_balance` values them in USD.
+- `bybit__set_position_mode` changes linear markets only.
+- Demo trading has no inverse markets. Tell the user they are not available
+  on demo.
+
 ## Facts
 
 - The tools cover the markets `bybit__get_markets` lists. Take exact symbols
   from it, such as `BTCUSDT` or `BTCPERP`; never build one by hand.
-- `amount` is in the base coin: `0.001` on `BTCUSDT` is 0.001 BTC. The
-  minimum and step are `limits.amount.min` and `precision.amount`, and
-  `precision.price` is the tick.
+- On linear markets `amount` is in the base coin: `0.001` on `BTCUSDT` is
+  0.001 BTC. The minimum and step are `limits.amount.min` and
+  `precision.amount`, and `precision.price` is the tick.
 - Time arguments are unix milliseconds. Run `date +%s%3N` for now. In
   results, `timestamp` on fills and candles is unix seconds, and on income
   it is milliseconds.
@@ -66,8 +83,8 @@ or `tool_describe`.
 
 ## Not covered yet
 
-Spot, options, inverse contracts, transfers, deposits, withdrawals and
-private WebSocket streams. Tell the user Bybit's tools do not cover them yet; do not
+Spot, options, transfers, deposits, withdrawals and private WebSocket
+streams. Tell the user Bybit's tools do not cover them yet; do not
 try to reach them another way.
 
 ## When there are no `bybit__` tools
