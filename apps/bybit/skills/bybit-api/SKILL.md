@@ -71,7 +71,8 @@ Option positions, orders, fills and cancels use the tools above.
   USDT: vega per 1 vol point, theta per calendar day.
 - Option positions report `leverage` and `liquidationPrice` as 0. Closed PnL,
   leverage and position mode do not exist for options.
-- Options expire and settle at 08:00 UTC.
+- Crypto options expire and settle at 08:00 UTC, and stock options at 20:00
+  or 21:00 UTC. Take the exact time from `bybit__get_option_expiries`.
 - Demo trading has no option tools. Tell the user options are not available
   on demo.
 
