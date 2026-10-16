@@ -19,7 +19,7 @@ export const REST_URL = "https://api.prod.paradex.trade/v1";
 export const SBE_SCHEMA = { id: 1, version: 2 };
 // The app version this client shipped in. A data feed keeps the copy it was
 // built with, so the connect line says how old that copy is.
-export const CLIENT_VERSION = "paradex 1.4.0";
+export const CLIENT_VERSION = "paradex 1.4.1";
 // How long stream() keeps trying when no connection opens at all. Then it
 // says why and exits 1, so openclaw shows the data feed restarting (and
 // failed after five quick exits) rather than running and posting nothing.
