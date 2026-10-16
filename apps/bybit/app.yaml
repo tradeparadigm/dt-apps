@@ -10,9 +10,9 @@
 schema_version: 1
 
 id: bybit
-version: 1.3.0
+version: 1.4.0
 name: Bybit
-blurb: Trade Bybit perpetuals, futures and options with a secret your agent never holds.
+blurb: Trade Bybit perpetuals, futures, inverse contracts and options with a secret your agent never holds.
 
 # What this app is for, on two axes that do not imply each other:
 # whether its credentials can write, and whether it has been exercised
@@ -31,15 +31,16 @@ description: |
 
   This app gives your agent Bybit tools for balances, positions, orders,
   fills, funding and market data on USDT and USDC perpetuals and futures, and
-  option chains, greeks and orders on mainnet and testnet. It also adds Bybit
-  to the credentials form.
+  on coin-margined inverse perpetuals and futures, and option chains, greeks
+  and orders, on mainnet and testnet. It also adds Bybit to the credentials
+  form.
 
   You paste two things from Bybit's API management page: the **API key**,
   stored as ordinary metadata, and the **API secret**, which is sealed and
   never reaches your agent. The credential proxy signs every private request.
 
-  Spot, inverse contracts, transfers and private WebSocket streams are not
-  covered yet, and options are not available on demo.
+  Spot, transfers and private WebSocket streams are not covered yet, and
+  inverse contracts and options are not available on demo.
 
 developer: Bybit
 developer_url: https://www.bybit.com
@@ -106,11 +107,13 @@ mcp_server:
     - id: mainnet
       env:
         EXCHANGE: bybit
+        EXCHANGE_INVERSE: "true"
         EXCHANGE_OPTIONS: "true"
     - id: testnet
       env:
         EXCHANGE: bybit
         EXCHANGE_TESTNET: "true"
+        EXCHANGE_INVERSE: "true"
         EXCHANGE_OPTIONS: "true"
     - id: demo
       env:
