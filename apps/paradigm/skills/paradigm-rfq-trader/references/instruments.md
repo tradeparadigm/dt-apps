@@ -9,7 +9,7 @@ on the smaller enums the skill writes literally into a request body.
 ## Instrument lookup
 
 Resolve every leg via
-`GET /v2/drfq/instruments/?venue=<venue>&venue_instrument_name=<name>` before
+`paradigm_drfqv2_instruments(venue=<venue>, venue_instrument_name=[<name>])` before
 building an RFQ. The response
 carries `id`, `kind`, `option_kind`, `strike`, `margin_kind`,
 `min_block_size`, `min_order_size_increment`, `min_tick_size`,

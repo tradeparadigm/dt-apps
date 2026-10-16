@@ -11,7 +11,7 @@ Currently in scope: **PRDX (Paradex, primary)** and **DBT (Deribit)**.
 Each venue section answers four questions, in this order:
 
 1. **Naming** — how venue-native instrument names look (for the
-   `GET /v2/drfq/instruments/` lookup).
+   `paradigm_drfqv2_instruments` lookup).
 2. **Fair value** — which tool(s) to call to benchmark a quote or
    ranking, by `instrument.kind`.
 3. **Edge syntax** — what "+X over mark" means on this venue.
@@ -32,7 +32,7 @@ Plus any venue-specific quirks at the end.
 
 Paradex lists no dated futures today, only perpetuals, options and two spot
 markets, so resolve any dated instrument through
-`GET /v2/drfq/instruments/` rather than assembling a name for one.
+`paradigm_drfqv2_instruments` rather than assembling a name for one.
 
 Day **not** zero-padded. Month uppercase 3-letter. `-USD-` infix is
 the Paradex distinguisher vs Deribit.
@@ -42,16 +42,11 @@ the Paradex distinguisher vs Deribit.
 Default to every LP eligible for PRDX, named explicitly. Paradigm has no open
 broadcast on this path: an empty `counterparties` list is a 400.
 
-1. Call `GET /v2/drfq/counterparties/?venues=PRDX&group=LP` and **page through
-   the entire result**. The answer is `{count, next, results}`. `next` is a
-   bare cursor token rather than a URL, so page two is
-   `?venues=PRDX&group=LP&cursor=<token>`. Carry the filters on every page: the
-   cursor holds an offset only, so a bare `?cursor=` refilters against every
-   desk and returns page one. There is no `has_more`. Stopping at page 1
-   silently drops LPs, which is what "not all LPs got the RFQ" means.
-2. Keep the desks whose `groups` carry `LP` and whose `venues` carry `PRDX`.
-   Those two lists are what the endpoint returns per desk. Pass their
-   `desk_name` values as `counterparties` to `POST /v2/drfq/rfqs/` and surface
+1. Call `paradigm_drfqv2_counterparties(venue="PRDX")`. It reads every page
+   and returns the desks whose `venues` carry `PRDX`. If `truncated` is true
+   the list may be missing desks, so say so.
+2. Keep the desks whose `groups` carry `LP`. Pass their `desk_name` values as
+   `counterparties` to `paradigm_drfqv2_create_rfq` and surface
    the count (`all N PRDX LPs`). The desk name IS the ticker; nothing returns
    a key called `ticker`.
 
@@ -103,7 +98,7 @@ Base: `https://api.prod.paradex.trade/v1`. Pull fair value with
 
 No Paradex account integration at this skill version. After the cross:
 
-- Surface `trade_id` from `GET /v2/drfq/trades/`.
+- Surface `trade_id` from `paradigm_drfqv2_trades`.
 - Tell the user the block will appear on their Paradex account and
   to verify there directly.
 
@@ -137,7 +132,7 @@ one is `SOL_USDC-PERPETUAL`.
 
 So a wrong prefix on SOL fails at the lookup, and a wrong prefix on BTC
 resolves and settles the block in a currency the user did not ask for.
-Resolve the name through `GET /v2/drfq/instruments/` rather than assembling
+Resolve the name through `paradigm_drfqv2_instruments` rather than assembling
 it, and treat an empty ticker as a wrong name before treating it as no data.
 
 ### Fair value
@@ -184,7 +179,7 @@ it, and treat an empty ticker as a wrong name before treating it as no data.
 
 This skill reads no Deribit account. After the cross:
 
-- Surface `trade_id` from `GET /v2/drfq/trades/`.
+- Surface `trade_id` from `paradigm_drfqv2_trades`.
 - Tell the user the block will appear on their Deribit account and
   to verify there directly.
 

@@ -74,6 +74,8 @@ What is checked, in each case because the consumer refuses the app without it:
   * An optional mcp_server names only this app's credential types and
     environments, sets no env name the sidecar reserves, uses templates only
     where a credential fills them, and stays inside the sidecar's size limits.
+    `bind: all` binds every listed credential type at once, so it needs two or
+    more, no env name shared between them, and an app that is not exclusive.
   * No two apps claim the same skill name. openclaw resolves a collision by
     precedence rather than erroring, so one app's skill would simply never
     load and nothing would say so. The consumer has a backstop — it keeps the
@@ -196,7 +198,7 @@ KNOWN = {
         "match_query",
     },
     "route": {"path", "methods"},
-    "mcp_server": {"command", "args", "tools", "credential_types", "environments"},
+    "mcp_server": {"command", "args", "tools", "credential_types", "environments", "bind"},
     "mcp_credential_type": {"type", "env"},
     "mcp_environment": {"id", "env"},
 }
@@ -215,6 +217,8 @@ MCP_MAX_ENV = 64
 MCP_MAX_TOOLS = 256
 MCP_MAX_VALUE_BYTES = 4096
 MCP_MAX_COMMAND_BYTES = 512
+# Empty means first, as it does in pkg/apps.
+MCP_BIND_MODES = ("first", "all")
 # Only inject has no placeholder: the secret goes out as itself.
 MODES_WITHOUT_PLACEHOLDER = {"inject"}
 
@@ -598,10 +602,37 @@ def check_mcp_server(man: str, doc: dict, failures: list[str]) -> None:
                     "templates belong in credential_types"
                 )
 
-    # A binding is one credential type's env plus at most one environment's.
+    bind = as_text(mcp.get("bind"))
+    if bind not in ("",) + MCP_BIND_MODES:
+        failures.append(f"{man}: mcp_server.bind {mcp.get('bind')!r} is not one of {list(MCP_BIND_MODES)}")
+    env_rows = [{}] + [e for _, e in envs]
+    if bind != "all":
+        # A binding is one credential type's env plus at most one environment's.
+        for ref, cred_env in creds:
+            if any(len(cred_env.keys() | env.keys()) > MCP_MAX_ENV for env in env_rows):
+                failures.append(f"{man}: mcp_server: credential type {ref!r} binds more than {MCP_MAX_ENV} env entries")
+        return
+
+    if len(creds) < 2:
+        failures.append(f"{man}: mcp_server.bind all needs at least two credential_types")
+    if doc.get("exclusive_credential_types") is True:
+        failures.append(
+            f"{man}: mcp_server.bind all needs exclusive_credential_types false: "
+            "an exclusive app holds one credential per environment"
+        )
+    owner: dict[str, str] = {}
     for ref, cred_env in creds:
-        if any(len(cred_env.keys() | env.keys()) > MCP_MAX_ENV for env in [{}] + [e for _, e in envs]):
-            failures.append(f"{man}: mcp_server: credential type {ref!r} binds more than {MCP_MAX_ENV} env entries")
+        for name in cred_env:
+            if name in owner:
+                failures.append(
+                    f"{man}: mcp_server.credential_types[type={ref}].env.{name} is also set by "
+                    f"{owner[name]!r}, and bind all sets both"
+                )
+            else:
+                owner[name] = ref
+    # Under all, a binding is every credential type's env plus at most one environment's.
+    if any(len(owner.keys() | env.keys()) > MCP_MAX_ENV for env in env_rows):
+        failures.append(f"{man}: mcp_server: bind all binds more than {MCP_MAX_ENV} env entries")
 
 
 def as_text(value: object) -> str | None:

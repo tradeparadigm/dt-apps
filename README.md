@@ -181,10 +181,13 @@ that made the mistake:
   apply: a command of at most 512 bytes, at most 64 args and 256 tools of 4096
   bytes each, env values of 4096 bytes, no NUL in the command, args or env
   values, and at most 64 env names in one credential type's env plus one
-  environment's. The server is pinned with the app version, so a change to
-  `mcp_server` needs a `version:` bump. DIME Terminal must know the key before
-  an app here uses it, because its decoder runs with `KnownFields` and refuses
-  the whole app;
+  environment's. `bind: all` binds every listed credential type at once: it
+  needs at least two, no env name set by two of them, an app whose
+  `exclusive_credential_types` is false, and the 64-name limit then counts every
+  type's env plus one environment's. The server is pinned with the app
+  version, so a change to `mcp_server` needs a `version:` bump. DIME Terminal
+  must know the key before an app here uses it, because its decoder runs with
+  `KnownFields` and refuses the whole app;
 - no two apps claim the same skill name. openclaw resolves a collision by
   precedence rather than erroring, so one of them would simply never load;
 - hosts are bare lowercase hostnames — no scheme, port, path or underscore —

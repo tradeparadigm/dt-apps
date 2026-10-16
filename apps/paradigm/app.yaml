@@ -19,7 +19,7 @@
 schema_version: 1
 
 id: paradigm
-version: 1.3.1
+version: 1.4.0
 name: Paradigm
 blurb: Trade institutional blocks and analyse the tape, with keys your agent never sees.
 
@@ -36,11 +36,12 @@ default_install: true
 description: |
   Paradigm is an institutional liquidity network for crypto derivatives.
 
-  Install this and your agent can call the DRFQv2 REST API through the
-  credential proxy, analyse a filled block against live venue data, query the
-  historical trade tape, and write an options flow recap. It also adds
-  Paradigm to the credentials form, so you enrol the two values Paradigm
-  issues without filling in the signing details by hand.
+  Install this and your agent gets Paradigm's MCP server for the DRFQv2 RFQ
+  API, which signs through the credential proxy. Your agent can also analyse
+  a filled block against live venue data, query the historical trade tape,
+  and write an options flow recap. The app adds Paradigm to the credentials
+  form, so you enrol the two values Paradigm issues without filling in the
+  signing details by hand.
 
   You need both credentials. The access key identifies the desk and the
   signature proves the request, and we send both on every authenticated call.
@@ -68,9 +69,8 @@ credential_types:
     slug: access
     secret_label: Access key
     # NO DETAIL FIELDS. The signature identifies the desk, so a single-desk key
-    # needs nothing alongside it. A multi-desk key selects with a
-    # Paradigm-Account header, which the agent writes itself, so it needs no
-    # enrolment field either.
+    # needs nothing alongside it. A multi-desk key gets its default desk: the
+    # MCP server sends no Paradigm-Account header.
     detail_fields: []
     # NARROWED TO THE AUTHENTICATED SURFACE. Everything the skill calls is
     # under /v2/drfq, all of it authenticated, and nothing public lives there.
@@ -111,3 +111,44 @@ credential_types:
       Sets: signing credential, HMAC-SHA256 over the base64-decoded key,
       base64, substituted into the Paradigm-API-Signature header, on every path
       under /v2/drfq.
+
+# Paradigm's own MCP server. bind: all, because every call needs both
+# credentials. The tools are the DRFQv2 REST ones: the credentials cover
+# /v2/drfq/* on one host, and the other tools call /v1, the forward-swap host
+# or the WebSocket.
+mcp_server:
+  command: uvx
+  args:
+    - --from
+    - mcp-paradigm==0.1.4
+    - mcp-paradigm
+  bind: all
+  credential_types:
+    - type: access-key
+      env:
+        PARADIGM_ACCESS_KEY: "${placeholder}"
+    - type: signing-key
+      env:
+        PARADIGM_SIGNING_DRIVER: proxy
+        PARADIGM_SIGNER_HEADER: "X-Dime-Sign-${label}"
+        PARADIGM_SIGNER_SIGNATURE: "${placeholder}"
+  environments:
+    - id: mainnet
+      env:
+        PARADIGM_ENVIRONMENT: prod
+    - id: testnet
+      env:
+        PARADIGM_ENVIRONMENT: testnet
+  tools:
+    - paradigm_echo
+    - paradigm_drfqv2_rfqs
+    - paradigm_drfqv2_rfq_snapshot
+    - paradigm_drfqv2_create_rfq
+    - paradigm_drfqv2_orders
+    - paradigm_drfqv2_post_order
+    - paradigm_drfqv2_cancel
+    - paradigm_drfqv2_trades
+    - paradigm_drfqv2_instruments
+    - paradigm_drfqv2_counterparties
+    - paradigm_drfqv2_price_legs
+    - paradigm_drfqv2_mmp
