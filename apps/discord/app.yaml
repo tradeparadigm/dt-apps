@@ -63,7 +63,9 @@ credential_types:
         methods: [GET]
       - path: /api/v10/channels/*/messages
         methods: [GET, POST]
-      - path: /api/v10/channels/*/messages/*
+      # `**`, because the proxy reads a trailing `/*` as a literal prefix and
+      # the `*` before it would never match. `**` is one segment here.
+      - path: /api/v10/channels/*/messages/**
         methods: [PATCH, DELETE]
     delivery:
       mode: replace
