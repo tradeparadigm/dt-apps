@@ -133,9 +133,21 @@ got = call("sendMessage", CHANNEL, " \n ")
 check("blank text is refused before anything is sent",
       got["sent"] == [] and got["error"]["message"] == "nothing to send")
 
-got = call("sendMessage", "general", "hi")
-check("a channel that is not an id is refused before anything is sent",
-      got["sent"] == [] and "must be a Discord id" in got["error"]["message"])
+for fn, args in [
+    ("sendMessage", ["general", "hi"]),
+    ("sendFile", ["general", str(MANIFEST)]),
+    ("recentMessages", ["general"]),
+    ("editMessage", [CHANNEL, "../../guilds/1", "hi"]),
+    ("deleteMessage", [CHANNEL, "abc"]),
+    ("openDm", ["sam"]),
+]:
+    got = call(fn, *args)
+    check(f"{fn} refuses an id that is not a Discord id before anything is sent",
+          got["sent"] == [] and "must be a Discord id" in got["error"]["message"])
+
+got = call("editMessage", CHANNEL, MESSAGE, "x" * 2001)
+check("an edit over 2000 characters is refused before anything is sent",
+      got["sent"] == [] and "edit text must be" in got["error"]["message"])
 
 # --- splitting at 2000 ----------------------------------------------------
 
@@ -240,6 +252,10 @@ check("two credentials without DISCORD_CRED is refused",
 
 got = call("sendMessage", CHANNEL, "hi", env={**two, "DISCORD_CRED": "CRED_DISCORD_API_OTHER"})
 check("DISCORD_CRED picks one", got["sent"][0]["headers"]["Authorization"] == "Bot cred-other")
+
+got = call("sendMessage", CHANNEL, "hi", env={"OTHER_SECRET": "s3cret", "DISCORD_CRED": "OTHER_SECRET"})
+check("DISCORD_CRED cannot point at a variable that is not a Discord credential",
+      got["sent"] == [] and "must name a CRED_DISCORD" in got["error"]["message"])
 
 got = call("sendMessage", CHANNEL, "hi", env={"CRED_DISCORD_API_BOT_META": "{}"})
 check("a _META variable is not a credential", got["sent"][0]["headers"]["Authorization"] == f"Bot {CRED}")

@@ -22,6 +22,12 @@ function snowflake(v, what) {
   return s;
 }
 
+// The only place a channel or message id enters a URL.
+function messagesPath(channel, message) {
+  const base = `/channels/${snowflake(channel, 'channel')}/messages`;
+  return message === undefined ? base : `${base}/${snowflake(message, 'message')}`;
+}
+
 export function placeholder(env = process.env) {
   if (env.DISCORD_CRED) {
     if (!env.DISCORD_CRED.startsWith('CRED_DISCORD')) {
@@ -110,7 +116,7 @@ export async function sendMessage(channel, text, { silent = false, mention = fal
     sent.push(
       await call(
         'POST',
-        `/channels/${snowflake(channel, 'channel')}/messages`,
+        messagesPath(channel),
         {
           content: part,
           allowed_mentions: mentions(mention),
@@ -138,7 +144,21 @@ export async function sendFile(channel, file, { caption, silent = false, mention
     }),
   );
   form.set('files[0]', new Blob([await readFile(file)]), basename(file));
-  return call('POST', `/channels/${snowflake(channel, 'channel')}/messages`, form, cred ? { cred } : undefined);
+  return call('POST', messagesPath(channel), form, cred ? { cred } : undefined);
+}
+
+export async function editMessage(channel, message, text, { mention = false, cred } = {}) {
+  if (chunks(text).length !== 1) throw new Error(`edit text must be 1 to ${MAX_TEXT} characters`);
+  return call(
+    'PATCH',
+    messagesPath(channel, message),
+    { content: text, allowed_mentions: mentions(mention) },
+    cred ? { cred } : undefined,
+  );
+}
+
+export async function deleteMessage(channel, message, { cred } = {}) {
+  return call('DELETE', messagesPath(channel, message), undefined, cred ? { cred } : undefined);
 }
 
 // The direct-message channel with one user. They must share a server with the bot.
@@ -162,7 +182,7 @@ export async function recentChannels({ cred } = {}) {
 
 export async function recentMessages(channel, { limit = 20, cred } = {}) {
   const n = Math.min(Math.max(Number(limit) || 20, 1), 100);
-  const list = await call('GET', `/channels/${snowflake(channel, 'channel')}/messages?limit=${n}`, undefined, cred ? { cred } : undefined);
+  const list = await call('GET', `${messagesPath(channel)}?limit=${n}`, undefined, cred ? { cred } : undefined);
   return list.map((m) => ({
     id: m.id,
     author: m.author?.username,
@@ -227,19 +247,11 @@ async function main() {
     case 'file':
       out = (await sendFile(need('channel'), need('file'), flags)).id;
       break;
-    case 'edit': {
-      const text = need('text');
-      if (chunks(text).length !== 1) throw new Error(`edit text must be 1 to ${MAX_TEXT} characters`);
-      out = (
-        await call('PATCH', `/channels/${snowflake(need('channel'), 'channel')}/messages/${snowflake(need('message'), 'message')}`, {
-          content: text,
-          allowed_mentions: mentions(flags.mention),
-        })
-      ).id;
+    case 'edit':
+      out = (await editMessage(need('channel'), need('message'), need('text'), flags)).id;
       break;
-    }
     case 'delete':
-      await call('DELETE', `/channels/${snowflake(need('channel'), 'channel')}/messages/${snowflake(need('message'), 'message')}`);
+      await deleteMessage(need('channel'), need('message'));
       out = 'deleted';
       break;
     case 'dm': {
