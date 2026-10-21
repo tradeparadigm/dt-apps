@@ -145,6 +145,10 @@ for fn, args in [
     check(f"{fn} refuses an id that is not a Discord id before anything is sent",
           got["sent"] == [] and "must be a Discord id" in got["error"]["message"])
 
+got = call("editMessage", CHANNEL, MESSAGE, "@everyone fixed")
+check("an edit does not ping either",
+      got["sent"][0]["body"] == {"content": "@everyone fixed", "allowed_mentions": {"parse": []}})
+
 got = call("editMessage", CHANNEL, MESSAGE, "x" * 2001)
 check("an edit over 2000 characters is refused before anything is sent",
       got["sent"] == [] and "edit text must be" in got["error"]["message"])
