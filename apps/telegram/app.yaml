@@ -16,6 +16,8 @@ tags:
   - alert me
   - ping me
   - notify me
+  - bot
+  - my bot
 
 # Not versioned: served from the catalogue listing.
 access: read-write

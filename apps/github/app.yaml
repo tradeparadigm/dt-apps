@@ -16,6 +16,9 @@ tags:
   - repo
   - pull request
   - pr
+  - readme
+  - issue
+  - commit
 
 # Not versioned: served from the catalogue listing.
 access: read-write

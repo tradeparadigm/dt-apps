@@ -29,6 +29,7 @@ tags:
   - order book
   - prdx
   - vault
+  - usd perp
 
 # What this app is for, on two axes that do not imply each other:
 # whether its credentials can write, and whether it has been exercised

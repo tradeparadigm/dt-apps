@@ -37,6 +37,10 @@ tags:
   - vol surface
   - biggest print
   - block flow
+  - recap
+  - print
+  - tape
+  - flow
 
 # Read-write: the RFQ surface creates and cancels quotes. Beta: nothing on
 # Paradigm has been through the credential proxy before this.
