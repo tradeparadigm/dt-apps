@@ -1088,6 +1088,7 @@ class TestTags(unittest.TestCase):
         for name, value, want in (
             ("empty", "''", "lowercase words"),
             ("upper case", "Block Trades", "lowercase words"),
+            ("one capitalised word", "Paradex", "lowercase words"),
             ("punctuation", "rfq!", "lowercase words"),
             ("an underscore", "options_flow", "lowercase words"),
             ("two spaces", "'block  trades'", "lowercase words"),
