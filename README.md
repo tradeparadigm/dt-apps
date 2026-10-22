@@ -155,6 +155,13 @@ that made the mistake:
   an absent value so apps written before these fields existed keep working,
   but the default is the permissive pair, so an author who left them out here
   would publish a writable, stable-looking app without having said so;
+- `tags`, when present, are at most 32 phrases, each one to four lowercase
+  words of letters and digits joined by single spaces or hyphens, at most 40
+  bytes, none repeated. They are the phrases a user would type when asking
+  for what the app does, and DIME Terminal will match prompts against them to
+  point the agent at the app. Write each word singular: a word also matches
+  with a trailing `s`. Tags are not versioned: changing them needs no
+  `version:` bump;
 - a credential type narrows itself to no more endpoints than the API accepts;
 - every key is one the consumer knows, because its decoder runs with
   `KnownFields` and an unknown key refuses the whole app rather than being
@@ -245,9 +252,10 @@ accepted here and refused there, a whitespace class wider in Python than in
 Go, an empty field read as absent on one side only, and a signing scheme the
 server had learned and this had not.
 
-One divergence is deliberate and is marked as such in both places: `access`
-and `maturity` are required here and optional there. Everything else should
-agree.
+Two divergences are deliberate. `access` and `maturity` are required here and
+optional there, which both places say. A tag must be a YAML string here, where
+the server also reads a bare `123` or `true` as one, which only this
+repository says. Everything else should agree.
 
 Drift in either direction costs something. Laxer here and an app merges and
 then goes missing from the catalogue, because the server drops what it cannot

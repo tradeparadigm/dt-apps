@@ -23,6 +23,21 @@ version: 1.4.0
 name: Paradigm
 blurb: Trade institutional blocks and analyse the tape, with keys your agent never sees.
 
+# What a user would type when asking for what this app does.
+tags:
+  - paradigm
+  - block trade
+  - block
+  - rfq
+  - drfq
+  - block tape
+  - trade tape
+  - options flow
+  - options recap
+  - vol surface
+  - biggest print
+  - block flow
+
 # Read-write: the RFQ surface creates and cancels quotes. Beta: nothing on
 # Paradigm has been through the credential proxy before this.
 access: read-write

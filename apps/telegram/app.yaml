@@ -8,6 +8,15 @@ version: 1.0.0
 name: Telegram
 blurb: Send messages to your Telegram chats from a bot whose token your agent never holds.
 
+# What a user would type when asking for what this app does.
+tags:
+  - telegram
+  - telegram bot
+  - message me
+  - alert me
+  - ping me
+  - notify me
+
 # Not versioned: served from the catalogue listing.
 access: read-write
 maturity: beta

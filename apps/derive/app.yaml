@@ -26,6 +26,14 @@ version: 1.0.3
 name: Derive
 blurb: Trade onchain options and perps on Derive with a wallet key your agent never holds.
 
+# What a user would type when asking for what this app does.
+tags:
+  - derive
+  - lyra
+  - onchain option
+  - option
+  - perp
+
 # What this app is for, on two axes that do not imply each other:
 # whether its credentials can write, and whether it has been exercised
 # enough to sit alongside the rest.
