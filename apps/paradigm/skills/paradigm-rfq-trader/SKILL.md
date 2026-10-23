@@ -10,10 +10,12 @@ description: >
   and DBT (Deribit). Adding more DRFQv2 venues is a references/venues.md
   edit, not a skill-body change. Covers takers (build, benchmark,
   cross) and makers (poll, price, manage). Every state-changing action
-  goes through an explicit confirmation gate. Use when the user asks
+  goes through an explicit confirmation gate. Needs both Paradigm
+  credentials enrolled. Use when the user asks
   to "send a Paradigm block RFQ", "block-trade X BTC", "send a BTC
   straddle on Paradex / Deribit", "quote rfq_X", "hit the best bid",
-  "cancel rfq_X". Does NOT cover small central-order-book trades,
+  "cancel rfq_X". Does NOT cover pricing legs without trading
+  (paradigm-api's `price_legs`), small central-order-book trades,
   post-trade analysis (paradigm-block-analyst),
   historical tape (paradigm-data-discovery).
 compatibility: >

@@ -7,9 +7,12 @@ description: >
   and crosses, cancels, your trades, leg pricing and the maker
   circuit-breaker. The tools are `paradigm__*` MCP tools, called by exact name,
   and need the user's Paradigm credentials enrolled. Use for ANY request to
-  Paradigm's REST API, including "recent block trades", "is my Paradigm key
-  working", "list my Paradigm RFQs" or "cancel rfq_...". Without credentials,
-  the block tape is paradigm-data-discovery's. The RFQ workflow and its
+  Paradigm's REST API, including "recent block trades", "what would this
+  spread price at" (pricing legs without sending an RFQ), "is my Paradigm key
+  working", "list my Paradigm RFQs" or "cancel rfq_...". The tape here is the
+  latest prints only: volumes over time, comparisons across days and whether a
+  structure traded before are paradigm-data-discovery's, and so is the block
+  tape without credentials. The RFQ workflow and its
   confirmation gate are paradigm-rfq-trader.
 metadata:
   author: tradeparadigm

@@ -15,7 +15,8 @@ description: >
   or asks to analyze, benchmark, or get market color on a Paradigm RFQ
   execution. Covers outright calls/puts (CL/PL), strangles (SN), straddles (ST),
   butterflies (BF), condors (CO), calendars (CA), risk reversals (RR), covered
-  calls, and custom multi-leg combos (CM). Also handles perp combos.
+  calls, and custom multi-leg combos (CM). Also handles perp combos. Reads
+  the Paradigm trade tape from S3 with the pod's AWS access.
 compatibility: Resolves the rfq_id against the Paradigm execution tape's daily
   partitions through the paradigm-data-discovery skill's shared reader — see
   references/rfq-lookup.md; falls back to injected block-trade context or the

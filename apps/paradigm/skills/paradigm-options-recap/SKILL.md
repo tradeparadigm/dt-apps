@@ -5,11 +5,14 @@ description: >
   Parses "/recap [asset] [options] [window]" (e.g. "/recap btc options 8h")
   and builds the fixed four-section recap — Snapshot, Biggest Print, Block
   Flow, Vol Surface — from bounded raw exchange venue files and source tapes,
-  never from Dime hot files. Use when the user types /recap or asks for a
-  market recap, an options flow summary, "what happened in BTC options",
-  "last Xh of flow", or what the vol surface looks like. Dataset inventory,
-  schema and historical lookups belong to paradigm-data-discovery. The output format
-  is fixed — always the same four sections in the same order.
+  never from Dime hot files, read with the pod's AWS access. Use when the user
+  types /recap or asks for a market recap, an options flow summary, "what
+  happened in BTC options" or "last Xh of flow". A single question is not a
+  recap: the biggest print is on the block tape (paradigm-api with Paradigm
+  credentials, else paradigm-data-discovery), and the vol surface, one IV or
+  one venue's data is paradigm-data-discovery's, as are dataset inventory,
+  schema and historical lookups. The output format is fixed — always the same
+  four sections in the same order.
 compatibility: >
   Requires uv (the scripts are PEP 723 single-file programs), S3 read access to
   dt-exchange-venue-data resolved through the AWS credential chain (IRSA in the
