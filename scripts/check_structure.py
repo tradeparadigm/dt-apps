@@ -372,6 +372,13 @@ def check_credential_types(man: str, types: object, failures: list[str]) -> set[
                     f"{man}: {where}.routes[{j}].path {path!r} is not a path the API accepts — "
                     "it starts with / and carries no query string"
                 )
+            elif path.endswith("/*") and "*" in path[:-2]:
+                # The proxy reads a trailing /* as a literal prefix, so a * before
+                # it never matches and the route covers nothing.
+                failures.append(
+                    f"{man}: {where}.routes[{j}].path {path!r} ends in /* after another *, "
+                    "which the proxy reads literally; end it in /** to match one segment"
+                )
             methods = r.get("methods") or []
             if not isinstance(methods, list):
                 failures.append(f"{man}: {where}.routes[{j}].methods is not a list")

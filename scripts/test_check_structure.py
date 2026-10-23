@@ -1067,5 +1067,23 @@ class TestDatafeedSuggestions(unittest.TestCase):
         self.assertIn("example/ticks is already suggested", out)
 
 
+class TestRoutePath(unittest.TestCase):
+    def route(self, path):
+        return lambda src: src.replace("path: /v1/orders", f"path: {path}")
+
+    def test_a_star_before_a_trailing_slash_star_is_refused(self):
+        code, out = check(self.route("/v1/*/orders/*"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("end it in /**", out)
+
+    def test_a_plain_prefix_is_accepted(self):
+        code, out = check(self.route("/v1/*"))
+        self.assertEqual(code, 0, out)
+
+    def test_a_double_star_segment_is_accepted(self):
+        code, out = check(self.route("/v1/*/orders/**"))
+        self.assertEqual(code, 0, out)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
