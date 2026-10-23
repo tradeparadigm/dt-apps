@@ -20,6 +20,18 @@ version: 1.4.1
 name: Paradex
 blurb: Trade perpetual futures on Paradex with a key your agent never holds.
 
+# What a user would type when asking for what this app does.
+tags:
+  - paradex
+  - perp
+  - perpetual future
+  - funding rate
+  - order book
+  - prdx
+  - vault
+  - usd perp
+  - option monitor
+
 # What this app is for, on two axes that do not imply each other:
 # whether its credentials can write, and whether it has been exercised
 # enough to sit alongside the rest.

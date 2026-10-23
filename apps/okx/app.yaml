@@ -30,6 +30,15 @@ version: 1.1.0
 name: OKX
 blurb: Trade spot, perpetuals and options on OKX without your agent seeing any of the three secrets.
 
+# What a user would type when asking for what this app does.
+tags:
+  - okx
+  - spot
+  - perp
+  - swap
+  - option
+  - future
+
 # What this app is for, on two axes that do not imply each other:
 # whether its credentials can write, and whether it has been exercised
 # enough to sit alongside the rest.

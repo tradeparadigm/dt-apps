@@ -17,7 +17,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from check_structure import MAX_SKILLS, MCP_RESERVED_ENV  # noqa: E402
+from check_structure import MAX_SKILLS, MAX_TAG_BYTES, MAX_TAGS, MCP_RESERVED_ENV  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURE = ROOT / "scripts" / "testdata" / "apps"
@@ -1066,6 +1066,67 @@ class TestDatafeedSuggestions(unittest.TestCase):
         self.assertNotEqual(code, 0, out)
         self.assertIn("example/ticks is already suggested", out)
 
+
+class TestTags(unittest.TestCase):
+    def test_absent_and_empty_are_accepted(self):
+        for value in ("", "tags:\n", "tags: []\n"):
+            with self.subTest(value=value):
+                code, out = check(append(value))
+                self.assertEqual(code, 0, out)
+
+    def test_a_list_of_phrases_is_accepted(self):
+        code, out = check(append("tags:\n  - block trades\n  - rfq\n  - options-flow\n  - btc eth sol spot\n"))
+        self.assertEqual(code, 0, out)
+
+    def test_the_limits_are_inclusive(self):
+        for tags in (["a" * MAX_TAG_BYTES], [f"tag{i}" for i in range(MAX_TAGS)]):
+            with self.subTest(tags=tags[0]):
+                code, out = check(append("tags:\n" + "".join(f"  - {t}\n" for t in tags)))
+                self.assertEqual(code, 0, out)
+
+    def test_refused(self):
+        for name, value, want in (
+            ("empty", "''", "lowercase words"),
+            ("upper case", "Block Trades", "lowercase words"),
+            ("one capitalised word", "Paradex", "lowercase words"),
+            ("punctuation", "rfq!", "lowercase words"),
+            ("an underscore", "options_flow", "lowercase words"),
+            ("two spaces", "'block  trades'", "lowercase words"),
+            ("a leading space", "' rfq'", "lowercase words"),
+            ("a trailing hyphen", "rfq-", "lowercase words"),
+            ("a trailing newline", '"rfq\\n"', "lowercase words"),
+            ("five words", "one two three four five", "lowercase words"),
+            ("non-ascii", "café", "lowercase words"),
+            ("over the byte cap", "a" * (MAX_TAG_BYTES + 1), "lowercase words"),
+        ):
+            with self.subTest(name):
+                code, out = check(append(f"tags:\n  - {value}\n"))
+                self.assertNotEqual(code, 0, out)
+                self.assertIn(want, out)
+
+    def test_a_duplicate_is_refused(self):
+        code, out = check(append("tags:\n  - rfq\n  - rfq\n"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("listed twice", out)
+
+    def test_too_many_are_refused(self):
+        code, out = check(append("tags:\n" + "".join(f"  - tag{i}\n" for i in range(MAX_TAGS + 1))))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn(f"limit {MAX_TAGS}", out)
+
+    def test_a_mapping_is_refused(self):
+        code, out = check(append("tags:\n  rfq: true\n"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("not a list", out)
+
+    # The divergence: yaml.v3 reads these into string tags and loads the app.
+    # A tag that is a bare number or boolean is not one anyone means.
+    def test_a_bare_scalar_is_refused_here_and_that_is_known(self):
+        for value in ("123", "true"):
+            with self.subTest(value=value):
+                code, out = check(append(f"tags:\n  - {value}\n"))
+                self.assertNotEqual(code, 0, out)
+                self.assertIn("not a string", out)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

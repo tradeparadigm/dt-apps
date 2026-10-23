@@ -8,6 +8,18 @@ version: 1.0.0
 name: GitHub
 blurb: Clone, push and call the GitHub API with a token your agent never holds.
 
+# What a user would type when asking for what this app does.
+tags:
+  - github
+  - gh
+  - git
+  - repo
+  - pull request
+  - pr
+  - readme
+  - issue
+  - commit
+
 # Not versioned: served from the catalogue listing.
 access: read-write
 maturity: beta

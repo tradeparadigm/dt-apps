@@ -181,7 +181,7 @@ MAX_HOSTS = 100
 KNOWN = {
     "manifest": {
         "schema_version", "id", "version", "name", "blurb", "description",
-        "access", "maturity", "default_install",
+        "access", "maturity", "default_install", "tags",
         "environments", "exclusive_credential_types", "credential_types",
         "developer", "developer_url", "tint", "icon", "mcp_server",
     },
@@ -236,6 +236,12 @@ DELIVERY_FIELDS = {
 # does. PyYAML reads bare y and n as strings where yaml.v3 reads booleans, so
 # this is stricter by two values, pinned in the divergence test.
 BOOLEAN_KEYS = ("exclusive_credential_types", "default_install")
+
+# Mirrors pkg/apps: tagPattern, maxTagBytes, maxTags. Matched with fullmatch,
+# because Python's $ also matches before a trailing newline and Go's does not.
+TAG_RE = re.compile(r"[a-z0-9]+(?:[ -][a-z0-9]+){0,3}")
+MAX_TAG_BYTES = 40
+MAX_TAGS = 32
 
 # The manifest format this checker understands, matching the consumer's.
 SCHEMA_VERSION = 1
@@ -740,6 +746,36 @@ def check_presentation(man: str, doc: dict, failures: list[str]) -> None:
         failures.append(f"{man}: icon.view_box {box!r} must be four numbers")
 
 
+def check_tags(man: str, doc: dict, failures: list[str]) -> None:
+    """The phrases a prompt is matched against.
+
+    Stricter than the consumer by one rule: yaml.v3 reads a bare scalar such
+    as 123 or true into a string tag, and this refuses anything PyYAML does
+    not read as a string. Pinned in the divergence test.
+    """
+    tags = doc.get("tags")
+    if tags is None:
+        return
+    if not isinstance(tags, list):
+        failures.append(f"{man}: tags is not a list")
+        return
+    if len(tags) > MAX_TAGS:
+        failures.append(f"{man}: tags has {len(tags)} entries, limit {MAX_TAGS}")
+    seen = set()
+    for i, tag in enumerate(tags):
+        if not isinstance(tag, str):
+            failures.append(f"{man}: tags[{i}] {tag!r} is not a string. Quote it")
+            continue
+        if len(tag.encode()) > MAX_TAG_BYTES or not TAG_RE.fullmatch(tag):
+            failures.append(
+                f"{man}: tags[{i}] {tag!r} must be one to four lowercase words of letters "
+                f"and digits, joined by single spaces or hyphens, at most {MAX_TAG_BYTES} bytes"
+            )
+        elif tag in seen:
+            failures.append(f"{man}: tags[{i}] {tag!r} is listed twice")
+        seen.add(tag)
+
+
 def check_manifest(app: str, text: str, failures: list[str]) -> tuple[str, set[str]]:
     """Check one manifest, and return its version and its delivery modes."""
     man = f"{APPS}/{app}/{MANIFEST}"
@@ -779,6 +815,7 @@ def check_manifest(app: str, text: str, failures: list[str]) -> tuple[str, set[s
 
     check_presentation(man, doc, failures)
     check_scope(man, doc, failures)
+    check_tags(man, doc, failures)
     check_environments(man, doc.get("environments"), failures)
     modes = check_credential_types(man, doc.get("credential_types"), failures)
     check_mcp_server(man, doc, failures)

@@ -11,6 +11,14 @@ version: 1.1.0
 name: Binance
 blurb: Trade Binance spot and USD-M futures without your agent seeing the API key or secret.
 
+# What a user would type when asking for what this app does.
+tags:
+  - binance
+  - spot
+  - usd-m future
+  - future
+  - perp
+
 # What this app is for, on two axes that do not imply each other:
 # whether its credentials can write, and whether it has been exercised
 # enough to sit alongside the rest.
