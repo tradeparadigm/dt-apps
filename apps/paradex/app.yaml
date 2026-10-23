@@ -30,6 +30,7 @@ tags:
   - prdx
   - vault
   - usd perp
+  - option monitor
 
 # What this app is for, on two axes that do not imply each other:
 # whether its credentials can write, and whether it has been exercised
