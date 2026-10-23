@@ -1,13 +1,18 @@
 ---
 name: paradigm-api
 description: >
-  Paradigm's DRFQv2 RFQ API: verifying the credentials, instruments,
-  counterparties, listing and creating RFQs, quotes and crosses, cancels,
-  trades, the block tape, leg pricing and the maker circuit-breaker. The tools
-  are `paradigm__*` MCP tools, called by exact name. Use for ANY request to
-  Paradigm's REST API, including "is my Paradigm key working", "list my
-  Paradigm RFQs" or "cancel rfq_...". The RFQ workflow and its confirmation
-  gate are paradigm-rfq-trader.
+  Paradigm's DRFQv2 RFQ API: recent block trades on the public block tape
+  (`paradigm__paradigm_drfqv2_trades` with `mode: "tape"`), verifying the
+  credentials, instruments, counterparties, listing and creating RFQs, quotes
+  and crosses, cancels, your trades, leg pricing and the maker
+  circuit-breaker. The tools are `paradigm__*` MCP tools, called by exact name,
+  and need the user's Paradigm credentials enrolled. Use for ANY request to
+  Paradigm's REST API, including "recent block trades", "is my Paradigm key
+  working", "list my Paradigm RFQs" or "cancel rfq_...". The tape here is the
+  latest prints only: volumes over time, comparisons across days and whether a
+  structure traded before are paradigm-data-discovery's, and so is the block
+  tape without credentials. The RFQ workflow and its
+  confirmation gate are paradigm-rfq-trader.
 metadata:
   author: tradeparadigm
 ---
