@@ -3,10 +3,12 @@ name: paradigm-data-discovery
 description: >
   Catalog and query launcher for raw market data available to Dime in
   s3://dt-exchange-venue-data, s3://dt-paradigm-data, and
-  s3://dt-paradex-data. Use for data inventory, coverage, schema, historical
-  analysis, or current exchange-market questions. Explains the per-venue raw
-  files and lets the model choose the bounded reads needed for the question.
-  Does not cover account state, positions, vaults, or order placement.
+  s3://dt-paradex-data, read with the pod's AWS access. Use for data
+  inventory, coverage, schema and historical analysis, and for recent block
+  trades when the user has no Paradigm credentials enrolled (with them,
+  paradigm-api reads the live tape). Explains the per-venue raw files and lets
+  the model choose the bounded reads needed for the question. Does not cover
+  account state, positions, vaults, or order placement.
 metadata:
   author: tradeparadigm
   version: "2.0"
