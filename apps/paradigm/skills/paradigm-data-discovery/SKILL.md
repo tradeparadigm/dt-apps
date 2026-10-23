@@ -4,8 +4,10 @@ description: >
   Catalog and query launcher for raw market data available to Dime in
   s3://dt-exchange-venue-data, s3://dt-paradigm-data, and
   s3://dt-paradex-data, read with the pod's AWS access. Use for data
-  inventory, coverage, schema and historical analysis, and for recent block
-  trades when the user has no Paradigm credentials enrolled (with them,
+  inventory, coverage, schema and historical analysis, for current venue
+  market data (marks, IV, greeks, OI, funding, spot) on Deribit, OKX, Bybit
+  and Bullish, and for recent block trades when the user has no Paradigm
+  credentials enrolled (with them,
   paradigm-api reads the live tape). Explains the per-venue raw files and lets
   the model choose the bounded reads needed for the question. Does not cover
   account state, positions, vaults, or order placement.
