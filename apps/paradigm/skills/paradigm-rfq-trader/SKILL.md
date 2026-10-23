@@ -14,8 +14,9 @@ description: >
   credentials enrolled. Use when the user asks
   to "send a Paradigm block RFQ", "block-trade X BTC", "send a BTC
   straddle on Paradex / Deribit", "quote rfq_X", "hit the best bid",
-  "cancel rfq_X". Does NOT cover pricing legs without trading
-  (paradigm-api's `price_legs`), small central-order-book trades,
+  "cancel rfq_X". Does NOT cover pricing a structure without trading
+  (its legs' current marks are paradigm-data-discovery's), small
+  central-order-book trades,
   post-trade analysis (paradigm-block-analyst),
   historical tape (paradigm-data-discovery).
 compatibility: >

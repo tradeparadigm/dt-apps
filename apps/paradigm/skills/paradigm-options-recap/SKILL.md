@@ -8,8 +8,8 @@ description: >
   never from Dime hot files, read with the pod's AWS access. Use when the user
   types /recap or asks for a market recap, an options flow summary, "what
   happened in BTC options" or "last Xh of flow". A single question is not a
-  recap: the biggest print is on the block tape (paradigm-api with Paradigm
-  credentials, else paradigm-data-discovery), and the vol surface, one IV or
+  recap: the biggest print across venues is paradigm-data-discovery's
+  (paradigm-api reads only Paradigm's own tape), and the vol surface, one IV or
   one venue's data is paradigm-data-discovery's, as are dataset inventory,
   schema and historical lookups. The output format is fixed — always the same
   four sections in the same order.
