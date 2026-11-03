@@ -205,10 +205,10 @@ def fake_connection(glob_files):
         def fetchall(self):
             return [(name,) for name in glob_files] if self._glob else [("x", 1)]
 
-        # duckdb 2.0 removed .pl() from the connection; only a relation has it.
-        def sql(self, sql):
-            return types.SimpleNamespace(pl=lambda: pl.DataFrame(
-                {"max_event_at": ["2026-08-30T12:00:00Z"], "price": [1]}))
+        # duckdb 2.0 removed .pl() and .arrow() from the connection.
+        def to_arrow_table(self):
+            return pl.DataFrame(
+                {"max_event_at": ["2026-08-30T12:00:00Z"], "price": [1]}).to_arrow()
 
         def cursor(self):
             return Connection()

@@ -8,7 +8,7 @@ exclude-newer = "2026-10-20T00:00:00Z"
 [manifest]
 requirements = [
     { name = "boto3", specifier = ">=1.35" },
-    { name = "duckdb", specifier = ">=1.3" },
+    { name = "duckdb", specifier = ">=1.5" },
     { name = "obstore", specifier = ">=0.3" },
     { name = "polars", specifier = ">=1.0" },
     { name = "pyarrow", specifier = ">=17" },

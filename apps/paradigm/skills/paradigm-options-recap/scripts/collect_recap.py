@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["duckdb>=1.3", "polars>=1.0", "boto3>=1.35", "obstore>=0.3", "pyarrow>=17"]
+# dependencies = ["duckdb>=1.5", "polars>=1.0", "boto3>=1.35", "obstore>=0.3", "pyarrow>=17"]
 # [tool.uv]
 # exclude-newer = "2026-10-20T00:00:00Z"
 # ///
@@ -391,7 +391,9 @@ def run_query(query: Query) -> tuple[dict[str, Any], list[Any]]:
         # A frame, not dicts: a Python dict per row costs ~3KB against a
         # container limit these windows already strain, and every consumer
         # either aggregates or reads a handful of rows.
-        rows = connection.sql(sql).pl()
+        # Through Arrow: a relation's .pl() (sql()) reads each parquet footer twice.
+        import polars as pl
+        rows = pl.from_arrow(connection.execute(sql).to_arrow_table())
     except Exception as exc:
         # Not just duckdb.Error: the streamed path raises obstore, pyarrow and
         # botocore errors, and an unreadable source is a named gap, never a
