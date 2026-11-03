@@ -389,7 +389,7 @@ def run_query(query: Query) -> tuple[dict[str, Any], list[Any]]:
         # A frame, not dicts: a Python dict per row costs ~3KB against a
         # container limit these windows already strain, and every consumer
         # either aggregates or reads a handful of rows.
-        rows = connection.execute(sql).pl()
+        rows = connection.sql(sql).pl()
     except Exception as exc:
         # Not just duckdb.Error: the streamed path raises obstore, pyarrow and
         # botocore errors, and an unreadable source is a named gap, never a
