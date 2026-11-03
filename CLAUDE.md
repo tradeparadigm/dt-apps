@@ -119,8 +119,13 @@ re-test. Batch fixes rather than shipping a line at a time.
 
 A script with a `# /// script` block that lists dependencies sets
 `[tool.uv] exclude-newer` to a fixed RFC 3339 date at least 14 days in the
-past, and `check_structure.py` fails without one. Moving the date is a skill
-change, so it comes with a version bump and a re-run of the skill's tests.
+past and ships the lock `uv lock --script <script>` writes beside it;
+`check_structure.py` fails without either. Moving the date is a skill change,
+so it comes with a re-lock, a version bump and a re-run of the skill's tests.
+
+An app's `mcp_server` pins third-party packages at least 14 days old, because
+the agent image refuses younger ones. `check_mcp_pin_age.py` fails the PR
+otherwise.
 
 ## Checks
 

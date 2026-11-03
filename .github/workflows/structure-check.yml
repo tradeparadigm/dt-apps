@@ -31,6 +31,9 @@ jobs:
       - name: Test the checker
         run: python3 scripts/test_check_structure.py
 
+      - name: Test the MCP pin age checker
+        run: python3 scripts/test_check_mcp_pin_age.py
+
       - name: Test the version bump checker
         run: python3 scripts/test_check_version_bump.py
 
@@ -89,7 +92,16 @@ jobs:
           uv export --script apps/paradigm/skills/paradigm-options-recap/scripts/collect_recap.py \
             --no-hashes --quiet > "$RUNNER_TEMP/recap-requirements.txt"
           uv pip install --system --quiet --exclude-newer "14 days" \
-            pytest -r "$RUNNER_TEMP/recap-requirements.txt"
+            pytest pyyaml -r "$RUNNER_TEMP/recap-requirements.txt"
+
+      - name: Every script lock matches its header
+        run: |
+          for lock in apps/*/skills/*/scripts/*.py.lock; do
+            uv lock --quiet --check --script "${lock%.lock}"
+          done
+
+      - name: Every MCP server pin is 14 days old
+        run: python scripts/check_mcp_pin_age.py
 
       # BY DIRECTORY, not by grepping for `import pytest`. One of these uses
       # pytest fixtures without importing it, so a grep misses it and running
