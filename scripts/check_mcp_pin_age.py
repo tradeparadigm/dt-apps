@@ -21,8 +21,10 @@ from pathlib import Path
 
 import yaml
 
-MIN_AGE = dt.timedelta(days=14)
-# Ours, published and pinned the same day; the agent image exempts the same three.
+from check_structure import MIN_RELEASE_AGE
+
+# Ours, published and pinned the same day. The agent image exempts the same
+# three, in dime-terminal's infra/openclaw/package-age/uv.toml.
 FIRST_PARTY_PYPI = {"mcp-paradex", "mcp-paradigm", "paradex-py"}
 
 PYPI_PIN_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]*\])?==([^\s;]+)$")
@@ -58,7 +60,7 @@ def published(registry: str, name: str, version: str) -> dt.datetime:
 
 
 def main() -> int:
-    cutoff = dt.datetime.now(dt.timezone.utc) - MIN_AGE
+    cutoff = dt.datetime.now(dt.timezone.utc) - MIN_RELEASE_AGE
     failures, checked = [], 0
     for manifest in sorted(Path("apps").glob("*/app.yaml")):
         server = (yaml.safe_load(manifest.read_text()) or {}).get("mcp_server") or {}
@@ -71,7 +73,7 @@ def main() -> int:
                 continue
             if at > cutoff:
                 failures.append(f"{manifest}: {name} {version} was published {at:%Y-%m-%d}, "
-                                f"under {MIN_AGE.days} days old, so the agent cannot install it")
+                                f"under {MIN_RELEASE_AGE.days} days old, so the agent cannot install it")
     print(f"{checked} MCP server pin(s) checked")
     for line in failures:
         print(f"  {line}", file=sys.stderr)
