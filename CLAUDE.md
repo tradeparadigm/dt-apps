@@ -133,4 +133,7 @@ otherwise.
 python3 -m venv .venv && .venv/bin/pip install pyyaml pytest
 .venv/bin/python scripts/check_structure.py
 .venv/bin/python -m pytest scripts/test_check_structure.py -q
+.venv/bin/python scripts/check_mcp_pin_age.py            # needs the network
+.venv/bin/python -m pytest scripts/test_check_mcp_pin_age.py -q
+for lock in apps/*/skills/*/scripts/*.py.lock; do uv lock --check --script "${lock%.lock}"; done
 ```
