@@ -130,7 +130,7 @@ otherwise.
 ## Checks
 
 ```sh
-python3 -m venv .venv && .venv/bin/pip install pyyaml pytest
+python3.11 -m venv .venv && .venv/bin/pip install pyyaml pytest   # tomllib needs 3.11+
 .venv/bin/python scripts/check_structure.py
 .venv/bin/python -m pytest scripts/test_check_structure.py -q
 .venv/bin/python scripts/check_mcp_pin_age.py            # needs the network
