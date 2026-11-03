@@ -94,9 +94,10 @@ What is checked, in each case because the consumer refuses the app without it:
     agent and the terminal address a suggestion as <app>/<name>.
 
   * A script that declares dependencies (a `# /// script` block) sets
-    `[tool.uv] exclude-newer` to a fixed date at least 14 days old. Without it
-    uv installs whatever was released that morning: a package published by an
-    attacker, or a major version that breaks the script (duckdb 2.0.0).
+    `[tool.uv] exclude-newer` to a fixed date at least 14 days old, and ships
+    the `<script>.lock` uv writes from it. Without them uv installs whatever was
+    released that morning: a package published by an attacker, or a major
+    version that breaks the script (duckdb 2.0.0).
 
 The manifest names NO skills. The directory is the content, the id is the
 join, and there is nothing for two files to disagree about.
@@ -966,7 +967,9 @@ def check_script_deps(files: list, failures: list[str]) -> None:
             continue
         if not meta.get("dependencies"):
             continue
-        cutoff = meta.get("tool", {}).get("uv", {}).get("exclude-newer")
+        tool = meta.get("tool")
+        uv = tool.get("uv") if isinstance(tool, dict) else None
+        cutoff = uv.get("exclude-newer") if isinstance(uv, dict) else None
         try:
             at = dt.datetime.fromisoformat(cutoff) if isinstance(cutoff, str) else None
         except ValueError:
@@ -980,6 +983,11 @@ def check_script_deps(files: list, failures: list[str]) -> None:
             failures.append(
                 f"{f}: exclude-newer {cutoff} is less than {MIN_RELEASE_AGE.days} days old"
             )
+        # uv reuses a script's cached environment while it still satisfies the
+        # specifiers, ignoring a new cutoff; a lock makes every run match it.
+        if not f.with_name(f.name + ".lock").is_file():
+            failures.append(f"{f}: declares dependencies without {f.name}.lock "
+                            f"(uv lock --script {f})")
 
 
 def check_errata_version(app: str, version: str, files: list, failures: list[str]) -> None:

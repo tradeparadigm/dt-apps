@@ -1091,12 +1091,15 @@ class TestScriptDependencies(unittest.TestCase):
 
     PATH = "apps/example/skills/example-api/scripts/run.py"
 
-    def script(self, deps: str, tool: str = "") -> int:
-        code, self.out = check(extra={self.PATH: (
+    def script(self, deps: str, tool: str = "", lock: bool = True) -> int:
+        extra = {self.PATH: (
             "# /// script\n"
             f"# dependencies = {deps}\n"
             f"{tool}"
-            "# ///\nprint(1)\n")})
+            "# ///\nprint(1)\n")}
+        if lock:
+            extra[self.PATH + ".lock"] = "version = 1\n"
+        code, self.out = check(extra=extra)
         return code
 
     def cutoff(self, days_ago: int) -> str:
@@ -1115,6 +1118,19 @@ class TestScriptDependencies(unittest.TestCase):
 
     def test_a_duration_floats_with_the_clock(self):
         tool = '# [tool.uv]\n# exclude-newer = "14 days"\n'
+        self.assertEqual(self.script('["duckdb>=1.3"]', tool), 1)
+        self.assertIn("RFC 3339", self.out)
+
+    def test_dependencies_without_a_lock(self):
+        self.assertEqual(self.script('["duckdb>=1.3"]', self.cutoff(15), lock=False), 1)
+        self.assertIn("without run.py.lock", self.out)
+
+    def test_a_block_that_is_not_toml(self):
+        self.assertEqual(self.script('["duckdb>=1.3"'), 1)
+        self.assertIn("script block is not TOML", self.out)
+
+    def test_a_cutoff_with_no_timezone(self):
+        tool = '# [tool.uv]\n# exclude-newer = "2026-01-01T00:00:00"\n'
         self.assertEqual(self.script('["duckdb>=1.3"]', tool), 1)
         self.assertIn("RFC 3339", self.out)
 
