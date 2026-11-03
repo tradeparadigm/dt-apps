@@ -1,0 +1,6 @@
+# Third-party MCP server pins allowed before they are 14 days old, one per line:
+#   <package> <version> <reason>
+# Only for a fix that cannot wait, such as a security release. The agent image
+# refuses the version too, so pair this with an exclusion there
+# (dime-terminal infra/openclaw/package-age/). Remove the line once the version
+# is 14 days old.

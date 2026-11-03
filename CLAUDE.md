@@ -127,6 +127,18 @@ An app's `mcp_server` pins third-party packages at least 14 days old, because
 the agent image refuses younger ones. `check_mcp_pin_age.py` fails the PR
 otherwise.
 
+Break glass, for a fix that cannot wait:
+
+- A script: add `[tool.uv.exclude-newer-package]` with that package's own
+  date to the script block, say why in a comment beside it, and re-lock.
+  uv honours it and the checker accepts it.
+- An MCP pin: add `<package> <version> <reason>` to
+  `scripts/mcp-pin-age-exceptions.txt`. The check names each pin it skips.
+  The agent image refuses the version too, so the same PR needs an exclusion
+  in dime-terminal's `infra/openclaw/package-age/`.
+
+Remove the exception once the version is 14 days old.
+
 ## Checks
 
 ```sh

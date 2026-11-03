@@ -47,8 +47,10 @@ class TestPins(unittest.TestCase):
 class TestMain(unittest.TestCase):
     """main() over one app pinning @x/server@1.0.0, with the registry stubbed."""
 
-    def run_with(self, published) -> int:
+    def run_with(self, published, allowed: str = "") -> int:
         with tempfile.TemporaryDirectory() as d:
+            exceptions = Path(d, "exceptions.txt")
+            exceptions.write_text(allowed)
             app = Path(d, "apps", "x")
             app.mkdir(parents=True)
             (app / "app.yaml").write_text(
@@ -57,11 +59,13 @@ class TestMain(unittest.TestCase):
             os.chdir(d)
             try:
                 with mock.patch.object(check_mcp_pin_age, "published", published), \
-                        redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()) as err:
+                        mock.patch.object(check_mcp_pin_age, "EXCEPTIONS", exceptions), \
+                        redirect_stdout(io.StringIO()) as out, redirect_stderr(io.StringIO()) as err:
                     code = check_mcp_pin_age.main()
             finally:
                 os.chdir(cwd)
         self.err = err.getvalue()
+        self.out = out.getvalue()
         return code
 
     def test_an_old_pin_passes(self):
@@ -70,6 +74,16 @@ class TestMain(unittest.TestCase):
     def test_a_young_pin_fails(self):
         self.assertEqual(self.run_with(lambda *_: NOW - dt.timedelta(days=3)), 1)
         self.assertIn("@x/server 1.0.0", self.err)
+
+    def test_a_young_pin_with_an_exception_passes_and_is_named(self):
+        code = self.run_with(lambda *_: NOW - dt.timedelta(days=3),
+                             allowed="@x/server 1.0.0 security fix\n")
+        self.assertEqual(code, 0)
+        self.assertIn("excepted", self.out)
+
+    def test_an_exception_without_a_reason_is_refused(self):
+        with self.assertRaises(SystemExit):
+            check_mcp_pin_age.exceptions("@x/server 1.0.0\n")
 
     def test_an_unreadable_pin_fails(self):
         def boom(*_):

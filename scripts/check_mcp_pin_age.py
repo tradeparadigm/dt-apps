@@ -26,6 +26,7 @@ from check_structure import MIN_RELEASE_AGE
 # Ours, published and pinned the same day. The agent image exempts the same
 # three, in dime-terminal's infra/openclaw/package-age/uv.toml.
 FIRST_PARTY_PYPI = {"mcp-paradex", "mcp-paradigm", "paradex-py"}
+EXCEPTIONS = Path(__file__).with_name("mcp-pin-age-exceptions.txt")
 
 PYPI_PIN_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]*\])?==([^\s;]+)$")
 NPM_PIN_RE = re.compile(r"^(@?[^@\s]+)@(\d[^\s]*)$")
@@ -47,6 +48,19 @@ def pins(command: str, args: list[str]) -> list[tuple[str, str, str]]:
     return found
 
 
+def exceptions(text: str) -> set[tuple[str, str]]:
+    """(package, version) pairs from EXCEPTIONS; each line names its reason."""
+    found = set()
+    for n, line in enumerate(text.splitlines(), 1):
+        fields = [] if line.startswith("#") else line.split("#")[0].split(maxsplit=2)
+        if not fields:
+            continue
+        if len(fields) < 3:
+            sys.exit(f"{EXCEPTIONS.name}:{n}: want <package> <version> <reason>")
+        found.add((fields[0], fields[1]))
+    return found
+
+
 def published(registry: str, name: str, version: str) -> dt.datetime:
     if registry == "pypi":
         url = f"https://pypi.org/pypi/{name}/{version}/json"
@@ -62,9 +76,13 @@ def published(registry: str, name: str, version: str) -> dt.datetime:
 def main() -> int:
     cutoff = dt.datetime.now(dt.timezone.utc) - MIN_RELEASE_AGE
     failures, checked = [], 0
+    allowed = exceptions(EXCEPTIONS.read_text()) if EXCEPTIONS.exists() else set()
     for manifest in sorted(Path("apps").glob("*/app.yaml")):
         server = (yaml.safe_load(manifest.read_text()) or {}).get("mcp_server") or {}
         for registry, name, version in pins(server.get("command", ""), server.get("args") or []):
+            if (name, version) in allowed:
+                print(f"  excepted: {manifest}: {name} {version}")
+                continue
             checked += 1
             try:
                 at = published(registry, name, version)

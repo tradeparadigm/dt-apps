@@ -1134,6 +1134,10 @@ class TestScriptDependencies(unittest.TestCase):
         self.assertEqual(self.script('["duckdb>=1.3"]', tool), 1)
         self.assertIn("RFC 3339", self.out)
 
+    def test_a_per_package_override_is_the_break_glass(self):
+        tool = self.cutoff(15) + '# [tool.uv.exclude-newer-package]\n# duckdb = "2026-11-01T00:00:00Z"\n'
+        self.assertEqual(self.script('["duckdb>=1.3"]', tool), 0, self.out)
+
     def test_a_recent_cutoff(self):
         self.assertEqual(self.script('["duckdb>=1.3"]', self.cutoff(3)), 1)
         self.assertIn("less than 14 days old", self.out)
