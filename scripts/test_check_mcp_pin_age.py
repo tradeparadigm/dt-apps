@@ -3,12 +3,22 @@
     python3 scripts/test_check_mcp_pin_age.py
 """
 
+import datetime as dt
+import io
+import json
+import os
 import sys
+import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import check_mcp_pin_age  # noqa: E402
 from check_mcp_pin_age import pins  # noqa: E402
+
+NOW = dt.datetime.now(dt.timezone.utc)
 
 
 class TestPins(unittest.TestCase):
@@ -31,6 +41,51 @@ class TestPins(unittest.TestCase):
 
     def test_a_url_source_is_not_a_registry_pin(self):
         self.assertEqual(pins("uvx", ["--from", "x @ https://example.com/x.tar.gz", "x"]), [])
+
+
+
+class TestMain(unittest.TestCase):
+    """main() over one app pinning @x/server@1.0.0, with the registry stubbed."""
+
+    def run_with(self, published) -> int:
+        with tempfile.TemporaryDirectory() as d:
+            app = Path(d, "apps", "x")
+            app.mkdir(parents=True)
+            (app / "app.yaml").write_text(
+                "mcp_server:\n  command: npx\n  args: [\"-y\", \"@x/server@1.0.0\"]\n")
+            cwd = os.getcwd()
+            os.chdir(d)
+            try:
+                with mock.patch.object(check_mcp_pin_age, "published", published), \
+                        redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()) as err:
+                    code = check_mcp_pin_age.main()
+            finally:
+                os.chdir(cwd)
+        self.err = err.getvalue()
+        return code
+
+    def test_an_old_pin_passes(self):
+        self.assertEqual(self.run_with(lambda *_: NOW - dt.timedelta(days=30)), 0)
+
+    def test_a_young_pin_fails(self):
+        self.assertEqual(self.run_with(lambda *_: NOW - dt.timedelta(days=3)), 1)
+        self.assertIn("@x/server 1.0.0", self.err)
+
+    def test_an_unreadable_pin_fails(self):
+        def boom(*_):
+            raise OSError("registry down")
+        self.assertEqual(self.run_with(boom), 1)
+        self.assertIn("unreadable", self.err)
+
+
+class TestPublished(unittest.TestCase):
+    def test_a_pypi_release_is_dated_by_its_first_file(self):
+        body = json.dumps({"urls": [
+            {"upload_time_iso_8601": "2026-10-02T00:00:00Z"},
+            {"upload_time_iso_8601": "2026-10-01T00:00:00Z"}]}).encode()
+        with mock.patch("urllib.request.urlopen", return_value=io.BytesIO(body)):
+            at = check_mcp_pin_age.published("pypi", "x", "1.0")
+        self.assertEqual(at, dt.datetime(2026, 10, 1, tzinfo=dt.timezone.utc))
 
 
 if __name__ == "__main__":
