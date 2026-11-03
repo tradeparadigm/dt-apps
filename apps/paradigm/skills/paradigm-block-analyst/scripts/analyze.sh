@@ -85,7 +85,7 @@ handoff() {  # <task> <rules> [data file]
 }
 
 err="$OUT/.collect.err"
-deadline "$COLLECT_S" uv run "$DIR/scripts/collect_analysis.py" "$RAW" --out-dir "$OUT" ${FILL_ARGS[@]+"${FILL_ARGS[@]}"} >/dev/null 2>"$err"
+deadline "$COLLECT_S" uv run --no-config "$DIR/scripts/collect_analysis.py" "$RAW" --out-dir "$OUT" ${FILL_ARGS[@]+"${FILL_ARGS[@]}"} >/dev/null 2>"$err"
 status=$?
 note=$(grep '^analyze: ' "$err" 2>/dev/null)
 case "$status" in
