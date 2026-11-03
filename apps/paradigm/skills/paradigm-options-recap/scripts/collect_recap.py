@@ -2,6 +2,8 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = ["duckdb>=1.3", "polars>=1.0", "boto3>=1.35", "obstore>=0.3", "pyarrow>=17"]
+# [tool.uv]
+# exclude-newer = "2026-10-20T00:00:00Z"
 # ///
 """Collect bounded direct exchange evidence without deciding the recap narrative."""
 

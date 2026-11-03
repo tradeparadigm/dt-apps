@@ -115,6 +115,13 @@ So a skill change comes with a `version:` bump in `app.yaml`, every time. Then:
 merge, wait for the refresh window, take the update the app now offers, and
 re-test. Batch fixes rather than shipping a line at a time.
 
+## Third-party packages are at least 14 days old
+
+A script with a `# /// script` block that lists dependencies sets
+`[tool.uv] exclude-newer` to a fixed RFC 3339 date at least 14 days in the
+past, and `check_structure.py` fails without one. Moving the date is a skill
+change, so it comes with a version bump and a re-run of the skill's tests.
+
 ## Checks
 
 ```sh

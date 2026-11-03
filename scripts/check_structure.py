@@ -93,6 +93,11 @@ What is checked, in each case because the consumer refuses the app without it:
     it lists wrong or not at all. Names are unique within an app, because the
     agent and the terminal address a suggestion as <app>/<name>.
 
+  * A script that declares dependencies (a `# /// script` block) sets
+    `[tool.uv] exclude-newer` to a fixed date at least 14 days old. Without it
+    uv installs whatever was released that morning: a package published by an
+    attacker, or a major version that breaks the script (duckdb 2.0.0).
+
 The manifest names NO skills. The directory is the content, the id is the
 join, and there is nothing for two files to disagree about.
 
@@ -101,7 +106,9 @@ Exit 0 = all good, 1 = at least one violation.
 
 from __future__ import annotations
 
+import datetime as dt
 import re
+import tomllib
 from urllib.parse import urlparse
 import sys
 from pathlib import Path
@@ -939,6 +946,42 @@ def check_client_preamble(app: str, files: list, failures: list[str]) -> None:
 ERRATA_RE = re.compile(r"errata-(?P<version>[0-9]+\.[0-9]+\.[0-9]+)\.md")
 
 
+MIN_RELEASE_AGE = dt.timedelta(days=14)
+SCRIPT_BLOCK_RE = re.compile(r"^# /// script$\n(?P<body>(?:^#(?: .*)?$\n)+?)^# ///$", re.M)
+
+
+def check_script_deps(files: list, failures: list[str]) -> None:
+    """A script uv installs packages for names a cutoff date old enough to trust."""
+    for f in files:
+        if f.suffix != ".py":
+            continue
+        block = SCRIPT_BLOCK_RE.search(f.read_text())
+        if not block:
+            continue
+        body = "\n".join(line[2:] for line in block["body"].splitlines())
+        try:
+            meta = tomllib.loads(body)
+        except tomllib.TOMLDecodeError as exc:
+            failures.append(f"{f}: script block is not TOML ({exc})")
+            continue
+        if not meta.get("dependencies"):
+            continue
+        cutoff = meta.get("tool", {}).get("uv", {}).get("exclude-newer")
+        try:
+            at = dt.datetime.fromisoformat(cutoff) if isinstance(cutoff, str) else None
+        except ValueError:
+            at = None
+        if at is None or at.tzinfo is None:
+            failures.append(
+                f"{f}: declares dependencies without [tool.uv] exclude-newer set to an "
+                f"RFC 3339 timestamp (got {cutoff!r})"
+            )
+        elif at > dt.datetime.now(dt.timezone.utc) - MIN_RELEASE_AGE:
+            failures.append(
+                f"{f}: exclude-newer {cutoff} is less than {MIN_RELEASE_AGE.days} days old"
+            )
+
+
 def check_errata_version(app: str, version: str, files: list, failures: list[str]) -> None:
     """An errata filename names the version that ships it, or it never expires."""
     for f in files:
@@ -1047,6 +1090,7 @@ def main() -> int:
                 check_errata_version(app.name, version, files, failures)
                 check_helper_versions(app.name, version, name, files, failures)
             check_datafeeds(app.name, d, suggested, failures)
+            check_script_deps(files, failures)
             if len(files) > MAX_FILES:
                 failures.append(f"{d}: {len(files)} files, limit {MAX_FILES}")
             for f in files:
