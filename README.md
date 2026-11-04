@@ -13,6 +13,8 @@ apps/<id>/skills/<skill-name>/SKILL.md    what the agent is taught
 apps/<id>/skills/<skill-name>/...         anything else that skill reads
 apps/<id>/skills/<skill-name>/datafeeds/<name>/DATAFEED.md
                                           a data feed the app suggests
+apps/<id>/skills/<skill-name>/posman/<name>/POSMAN.md
+                                          a posman adapter: the app's account data, fetched
 ```
 
 **Publishing does not require a release of DIME Terminal.** It reads this
@@ -113,6 +115,48 @@ Names are unique within an app, since a suggestion is addressed as
 `<app>/<name>`. A suggestion's files count toward its skill's 32-file limit,
 and an app carries at most 20 suggestions.
 
+## Posman adapters
+
+DIME Terminal's posman skill keeps a fresh copy of each tracked account's
+positions, open orders and balances on the agent, so it reads one place
+instead of asking each venue every time. An app can ship the **adapter** that
+fetches its venue, one directory per adapter under the skill's `posman/`:
+
+```
+posman/<name>/POSMAN.md     frontmatter the terminal lists it by, and how to read the raw data
+posman/<name>/fetch.mjs     the adapter (or fetch.py, run with `uv run`)
+```
+
+```markdown
+---
+name: account
+title: Paradex account
+description: Positions, open orders, balances and the account summary of one Paradex account.
+credential: paradex-*
+params: ENVIRONMENT?
+---
+```
+
+- **What an adapter does.** It fetches the account once, prints ONE JSON
+  object on stdout and exits: each key a dataset (`positions`, `open_orders`,
+  `balances`, any lowercase name), each value the venue's records as the venue
+  sends them. `_errors` names a dataset it could not fetch this time. Exit 3
+  when the venue or the proxy refused the credential. Logs go to stderr.
+- **What it gets.** `POSMAN_CRED`, the NAME of the variable holding the
+  account's credential placeholder (its public details in `<name>_META`),
+  and `POSMAN_PARAM_<NAME>` for each parameter. posman runs it in place, on
+  the account's interval, in the agent's container; nothing else does.
+- **`credential`** is the credential labels it takes: one label, or a prefix
+  ending in `*` (`paradex-*` matches the app's `paradex-<env>-<type>`
+  labels). **`params`** lists what the user sets per account, comma-separated,
+  `?` for an optional one. `venue` defaults to the app's id.
+- **The body is the agent's reading guide.** posman stores the raw data and
+  points the agent here, so say per dataset where the records are, which field
+  is the instrument, the size's unit and sign, prices and PnL.
+
+Names are unique within an app, since posman addresses an adapter as
+`<app>/<name>`, and the files count toward the skill's 32-file limit.
+
 ## Naming
 
 A skill is named `<venue>-<surface>`: `bybit-api` is Bybit's REST surface.
@@ -212,6 +256,11 @@ that made the mistake:
   `description` and optional `needs`. DIME Terminal's agent reads those lines
   without a YAML parser, so a block scalar or a stray key would be listed wrong
   or not at all. A suggestion's name is unique within its app.
+- every posman adapter's directory is a name posman can address, holds a
+  `POSMAN.md` and a `fetch.mjs` or `fetch.py`, and opens with one-line
+  `name` (matching it) and `title`, with `venue`, `description`, `credential`
+  and `params` as DIME Terminal's sidecar reads them. An adapter's name is
+  unique within its app.
   Nothing in the consumer reads that path, because it is an instruction the
   agent follows rather than a field anything parses. So a bump the filename does
   not follow is invisible: every agent that already wrote a helper keeps the one

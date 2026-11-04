@@ -25,6 +25,15 @@ skill's `feeds.mjs init <name> --from paradex`, then follow
 `datafeeds/GUIDE.md` in this skill's folder. Use these instead of the
 `paradex__` tools: a script cannot call them.
 
+## The user's positions, already fetched
+
+Where the posman skill tracks a Paradex account, its positions, open orders,
+balances and account summary are already on disk, refreshed on an interval:
+read them with `posman.mjs show` (one call, every venue) before calling the
+account tools. Read them fresh before sizing or placing an order. To track an
+account, posman's adapter for Paradex is `paradex/account` (`posman/account/`
+in this skill's folder; its POSMAN.md says how to read each field).
+
 ## Paradex is not Paradigm
 
 Paradex is an exchange with an order book. Paradigm is an institutional RFQ
