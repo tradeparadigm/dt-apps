@@ -1,6 +1,8 @@
 # /// script
 # requires-python = ">=3.10,<3.14"
 # dependencies = ["paradex-py==0.8.2"]
+# [tool.uv]
+# exclude-newer = "2026-10-20T00:00:00Z"
 # ///
 """A posman adapter: one Paradex account, fetched once.
 

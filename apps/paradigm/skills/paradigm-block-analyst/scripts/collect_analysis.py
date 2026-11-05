@@ -2,6 +2,8 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = ["boto3>=1.35", "polars>=1.0", "pyarrow>=17"]
+# [tool.uv]
+# exclude-newer = "2026-10-20T00:00:00Z"
 # ///
 """Resolve one RFQ to the two CSVs analyze.py renders from.
 
