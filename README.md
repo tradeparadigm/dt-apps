@@ -149,6 +149,13 @@ that made the mistake:
   installed for every account without being asked for, so CI accepting it here
   while a deployed build does not know the key would drop the whole app from
   that build's catalogue;
+- `is_exchange` is a key the consumer knows too: the venue holds an account's
+  positions, open orders and balances, so DIME Terminal's Positions pane
+  offers it under "Other venue" when no installed adapter covers it. Like
+  `default_install` it is not versioned (the catalogue serves the store's
+  current value), so setting it needs no `version:` bump, and, for the same
+  reason as `default_install`, it merges only once every deployed web-api
+  knows the key;
 - every app states its scope on two axes — `access` (`read-only` or
   `read-write`) and `maturity` (`stable` or `beta`). **Required here, optional
   in the consumer**, and that difference is deliberate: the consumer defaults

@@ -36,6 +36,7 @@ maturity: stable
 # that never opened the Apps screen would get a command with no skill behind
 # it. Uninstalling keeps it uninstalled.
 default_install: true
+is_exchange: true
 
 # Shown on the app's detail page, above the skill. Markdown.
 description: |

@@ -36,6 +36,7 @@ blurb: Trade onchain options and perps on Derive with a wallet key your agent ne
 # installed app an update that changes no skill text.
 access: read-only
 maturity: stable
+is_exchange: true
 description: |
   Derive is an onchain derivatives exchange — options, perpetuals and spot,
   settled on its own L2.
