@@ -8,6 +8,7 @@ could be deleted and the check would still pass.
     python3 scripts/test_check_structure.py
 """
 
+import datetime as dt
 import re
 import shutil
 import subprocess
@@ -1127,6 +1128,82 @@ class TestTags(unittest.TestCase):
                 code, out = check(append(f"tags:\n  - {value}\n"))
                 self.assertNotEqual(code, 0, out)
                 self.assertIn("not a string", out)
+
+
+class TestRoutePath(unittest.TestCase):
+    def route(self, path):
+        return lambda src: src.replace("path: /v1/orders", f"path: {path}")
+
+    def test_a_star_before_a_trailing_slash_star_is_refused(self):
+        code, out = check(self.route("/v1/*/orders/*"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("end it in /**", out)
+
+    def test_a_plain_prefix_is_accepted(self):
+        code, out = check(self.route("/v1/*"))
+        self.assertEqual(code, 0, out)
+
+    def test_a_double_star_segment_is_accepted(self):
+        code, out = check(self.route("/v1/*/orders/**"))
+        self.assertEqual(code, 0, out)
+
+
+class TestScriptDependencies(unittest.TestCase):
+    """A script uv installs packages for carries a cutoff at least 14 days old."""
+
+    PATH = "apps/example/skills/example-api/scripts/run.py"
+
+    def script(self, deps: str, tool: str = "", lock: bool = True) -> int:
+        extra = {self.PATH: (
+            "# /// script\n"
+            f"# dependencies = {deps}\n"
+            f"{tool}"
+            "# ///\nprint(1)\n")}
+        if lock:
+            extra[self.PATH + ".lock"] = "version = 1\n"
+        code, self.out = check(extra=extra)
+        return code
+
+    def cutoff(self, days_ago: int) -> str:
+        at = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days_ago)
+        return f'# [tool.uv]\n# exclude-newer = "{at:%Y-%m-%dT%H:%M:%SZ}"\n'
+
+    def test_an_old_enough_cutoff_is_accepted(self):
+        self.assertEqual(self.script('["duckdb>=1.3"]', self.cutoff(15)), 0, self.out)
+
+    def test_no_dependencies_needs_no_cutoff(self):
+        self.assertEqual(self.script("[]"), 0, self.out)
+
+    def test_dependencies_without_a_cutoff(self):
+        self.assertEqual(self.script('["duckdb>=1.3"]'), 1)
+        self.assertIn("without [tool.uv] exclude-newer", self.out)
+
+    def test_a_duration_floats_with_the_clock(self):
+        tool = '# [tool.uv]\n# exclude-newer = "14 days"\n'
+        self.assertEqual(self.script('["duckdb>=1.3"]', tool), 1)
+        self.assertIn("RFC 3339", self.out)
+
+    def test_dependencies_without_a_lock(self):
+        self.assertEqual(self.script('["duckdb>=1.3"]', self.cutoff(15), lock=False), 1)
+        self.assertIn("without run.py.lock", self.out)
+
+    def test_a_block_that_is_not_toml(self):
+        self.assertEqual(self.script('["duckdb>=1.3"'), 1)
+        self.assertIn("script block is not TOML", self.out)
+
+    def test_a_cutoff_with_no_timezone(self):
+        tool = '# [tool.uv]\n# exclude-newer = "2026-01-01T00:00:00"\n'
+        self.assertEqual(self.script('["duckdb>=1.3"]', tool), 1)
+        self.assertIn("RFC 3339", self.out)
+
+    def test_a_per_package_override_is_the_break_glass(self):
+        tool = self.cutoff(15) + '# [tool.uv.exclude-newer-package]\n# duckdb = "2026-11-01T00:00:00Z"\n'
+        self.assertEqual(self.script('["duckdb>=1.3"]', tool), 0, self.out)
+
+    def test_a_recent_cutoff(self):
+        self.assertEqual(self.script('["duckdb>=1.3"]', self.cutoff(3)), 1)
+        self.assertIn("less than 14 days old", self.out)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

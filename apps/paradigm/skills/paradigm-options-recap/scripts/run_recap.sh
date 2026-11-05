@@ -53,4 +53,4 @@ fi
 [ -n "${RECAP_PRINT_PLAN:-}" ] && { echo "$ASSET $WINDOW $SPAN direct"; exit 0; }
 
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
-exec uv run "$DIR/scripts/collect_recap.py" --asset "$ASSET" --window "$WINDOW" --render
+exec uv run --no-config "$DIR/scripts/collect_recap.py" --asset "$ASSET" --window "$WINDOW" --render

@@ -115,10 +115,37 @@ So a skill change comes with a `version:` bump in `app.yaml`, every time. Then:
 merge, wait for the refresh window, take the update the app now offers, and
 re-test. Batch fixes rather than shipping a line at a time.
 
+## Third-party packages are at least 14 days old
+
+A script with a `# /// script` block that lists dependencies sets
+`[tool.uv] exclude-newer` to a fixed RFC 3339 date at least 14 days in the
+past and ships the lock `uv lock --script <script>` writes beside it;
+`check_structure.py` fails without either. Moving the date is a skill change,
+so it comes with a re-lock, a version bump and a re-run of the skill's tests.
+
+An app's `mcp_server` pins third-party packages at least 14 days old, because
+the agent image refuses younger ones. `check_mcp_pin_age.py` fails the PR
+otherwise.
+
+Break glass, for a fix that cannot wait:
+
+- A script: add `[tool.uv.exclude-newer-package]` with that package's own
+  date to the script block, say why in a comment beside it, and re-lock.
+  uv honours it and the checker accepts it.
+- An MCP pin: add `<package> <version> <reason>` to
+  `scripts/mcp-pin-age-exceptions.txt`. The check names each pin it skips.
+  The agent image refuses the version too, so the same PR needs an exclusion
+  in dime-terminal's `infra/openclaw/package-age/`.
+
+Remove the exception once the version is 14 days old.
+
 ## Checks
 
 ```sh
-python3 -m venv .venv && .venv/bin/pip install pyyaml pytest
+python3.11 -m venv .venv && .venv/bin/pip install pyyaml pytest   # tomllib needs 3.11+
 .venv/bin/python scripts/check_structure.py
 .venv/bin/python -m pytest scripts/test_check_structure.py -q
+.venv/bin/python scripts/check_mcp_pin_age.py            # needs the network
+.venv/bin/python -m pytest scripts/test_check_mcp_pin_age.py -q
+for lock in apps/*/skills/*/scripts/*.py.lock; do uv lock --check --script "${lock%.lock}"; done
 ```
