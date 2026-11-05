@@ -17,6 +17,39 @@ Either Paradex credential works: the read-only token, or the signing key. The
 environment (mainnet, testnet, nightly) is the one in the credential's name;
 `--param ENVIRONMENT=<env>` overrides it.
 
+**Read posman's rows first** (`posman.mjs show`): the same positions, open
+orders and balances in posman's own schema, whose fields mean the same for
+every venue. The records below are for anything those rows do not carry.
+
+## posman's rows: how Paradex maps to them
+
+- **The instrument** comes from `GET /v1/markets`: `kind` from `asset_kind`
+  (`PERP` perp, `OPTION` and `PERP_OPTION` option, `FUTURE` future),
+  `underlying` from `base_currency`, `quote_asset`, `settle_asset` (USDC),
+  `contract` linear, and an option's `strike`, `option_type` and `expiry`. A
+  perpetual option has no expiry. Without the markets list, positions and
+  orders are not mapped that fetch (`_errors.markets`), so posman keeps their
+  last rows.
+- **`unrealized_pnl` is `unrealized_pnl − unrealized_funding_pnl`**: Paradex's
+  own figure includes the running funding, posman's excludes it.
+- **`funding_pnl` is `realized_positional_funding_pnl + unrealized_funding_pnl`**:
+  everything paid or received since the position opened or flipped (Paradex
+  resets both then), positive when received. In USDC (`pnl_asset`).
+- **`mark_price`, `funding_rate`, `iv` and the greeks** come from
+  `GET /v1/markets/summary`. Paradex's `funding_rate` is per the market's own
+  funding period, so posman's is it divided by `funding_period_hours`; positive
+  means longs pay. An option's greeks are Paradex's raw greeks (delta per unit,
+  gamma per $1 move, vega in USD per 1% of IV, theta in USD per day: Paradex's
+  dated-options guide) times the signed size; a perp's delta is its size and
+  its gamma, vega and theta 0. Without the summaries those fields are null that
+  fetch (`_errors.market_summaries`).
+- **`liquidation_price`** is null when Paradex gives an empty one (no level).
+- **Orders**: `type` from Paradex's (`STOP_LOSS_*` are stops), `status`
+  `untriggered`, `partially_filled` (some of `size` filled) or `open`,
+  `filled_size` as `size − remaining_size`, `reduce_only` from `flags`, `RPI`
+  as `time_in_force` other.
+- **Balances**: `token` and `size`, as Paradex gives them.
+
 ## `positions`: open positions
 
 A list, one record per open position (closed ones are left out).

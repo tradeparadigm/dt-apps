@@ -25,6 +25,13 @@ What it prints: one JSON object, Paradex's records as Paradex sends them:
   account      GET /v1/account (the account summary: value, margin, ...)
 A dataset that fails is named in `_errors` instead, so the others are kept.
 
+And the same records as posman's rows (`_normalized`: positions, open_orders,
+balances; posman's SCHEMA.md), which is what the agent and the terminal read.
+Two public reads fill them in: GET /v1/markets (each instrument's kind,
+currencies, expiry, strike, funding period) and GET /v1/markets/summary
+(mark price, funding rate, IV and per-unit greeks). How each field is mapped
+is in POSMAN.md, "posman's rows".
+
 THE TWO CREDENTIALS. The read-only token's placeholder (`cred-...`) goes in
 `Authorization: Bearer`, and the credential proxy swaps in the token. The
 signing key's (`sign-...`) cannot be sent as a token: the adapter first asks
@@ -49,6 +56,8 @@ import os
 import sys
 import time
 import urllib.parse
+from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 
 EXIT_CONFIG = 2
 EXIT_AUTH = 3
@@ -197,6 +206,207 @@ def open_positions(base: str, auth: dict) -> list:
     return [p for p in pages(base, "/positions", auth) if not (isinstance(p, dict) and p.get("status") == "CLOSED")]
 
 
+# ---- posman's rows (posman's SCHEMA.md) ----
+
+# Paradex settles every market in USDC; the market says so too.
+SETTLEMENT = "USDC"
+KINDS = {"PERP": "perp", "PERP_OPTION": "option", "OPTION": "option", "FUTURE": "future", "SPOT": "spot"}
+# Funding is paid on these; a dated option or future has none of its own.
+FUNDED = {"PERP", "PERP_OPTION"}
+ORDER_TYPES = {
+    "LIMIT": "limit",
+    "MARKET": "market",
+    "STOP_LIMIT": "stop_limit",
+    "STOP_MARKET": "stop_market",
+    "STOP_LOSS_LIMIT": "stop_limit",
+    "STOP_LOSS_MARKET": "stop_market",
+    "TAKE_PROFIT_LIMIT": "take_profit_limit",
+    "TAKE_PROFIT_MARKET": "take_profit_market",
+}
+TIME_IN_FORCE = {"GTC": "gtc", "IOC": "ioc", "POST_ONLY": "post_only"}
+MARGIN_MODES = {"cross": "cross", "isolated": "isolated", "isolated_margin": "isolated"}
+
+
+def dec(v) -> Decimal | None:
+    """A Paradex number (a string), or None for one it did not give."""
+    if v is None or v == "" or isinstance(v, bool):
+        return None
+    try:
+        d = Decimal(str(v))
+    except InvalidOperation:
+        return None
+    return d if d.is_finite() else None
+
+
+def num(d: Decimal | None) -> str | None:
+    """A decimal string as posman's schema writes one: no exponent, no trailing zeros."""
+    return None if d is None else format(d.normalize(), "f")
+
+
+def at(ms) -> str | None:
+    """Paradex's milliseconds as ISO UTC; 0 or none is none."""
+    if not isinstance(ms, int) or isinstance(ms, bool) or ms <= 0:
+        return None
+    return datetime.fromtimestamp(ms / 1000, timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def positive(d: Decimal | None) -> Decimal | None:
+    return d if d is not None and d > 0 else None
+
+
+def by_symbol(body) -> dict:
+    results = body.get("results") if isinstance(body, dict) else None
+    if not isinstance(results, list):
+        raise RuntimeError("no results list")
+    return {r["symbol"]: r for r in results if isinstance(r, dict) and isinstance(r.get("symbol"), str)}
+
+
+def instrument(symbol: str, m: dict | None) -> dict:
+    """The instrument's fields, from its market; a market Paradex did not list is `other`."""
+    m = m or {}
+    kind = KINDS.get(m.get("asset_kind"), "other")
+    option = kind == "option"
+    option_type = m.get("option_type")
+    return {
+        "symbol": symbol,
+        "kind": kind,
+        "underlying": m.get("base_currency") or symbol.split("-")[0],
+        "quote_asset": m.get("quote_currency") or None,
+        "settle_asset": m.get("settlement_currency") or None,
+        "contract": None if kind in ("spot", "other") else "linear",
+        "expiry": at(m.get("expiry_at")),
+        "strike": num(dec(m.get("strike_price"))) if option else None,
+        "option_type": option_type.lower() if option and isinstance(option_type, str) else None,
+    }
+
+
+def position_row(p, m: dict | None, s: dict | None) -> dict | None:
+    """One open position as posman's row, or None for one that is not open."""
+    if not isinstance(p, dict) or not isinstance(p.get("market"), str):
+        return None
+    size = dec(p.get("size"))
+    if size is None or size == 0:
+        return None
+    m, s = m or {}, s or {}
+    row = instrument(p["market"], m)
+    # Paradex's unrealized_pnl includes the running funding; posman's does not.
+    upnl, ufund = dec(p.get("unrealized_pnl")), dec(p.get("unrealized_funding_pnl"))
+    rfund = dec(p.get("realized_positional_funding_pnl"))
+    funding_rate = None
+    period = dec(m.get("funding_period_hours"))
+    if m.get("asset_kind") in FUNDED and period is not None and period > 0:
+        rate = dec(s.get("funding_rate"))
+        funding_rate = None if rate is None else rate / period
+    greeks = s.get("greeks") if isinstance(s.get("greeks"), dict) else {}
+    if row["kind"] in ("perp", "future"):
+        delta, gamma, vega, theta = size, Decimal(0), Decimal(0), Decimal(0)
+    elif row["kind"] == "option":
+        g = {k: dec(greeks.get(k)) for k in ("delta", "gamma", "vega", "theta")}
+        delta, gamma, vega, theta = (None if v is None else v * size for v in g.values())
+    else:
+        delta = gamma = vega = theta = None
+    row.update(
+        {
+            "side": "long" if size > 0 else "short",
+            "size": num(size),
+            "entry_price": num(dec(p.get("average_entry_price"))),
+            "mark_price": num(dec(s.get("mark_price"))),
+            "liquidation_price": num(positive(dec(p.get("liquidation_price")))),
+            "unrealized_pnl": num(upnl - ufund) if upnl is not None and ufund is not None else None,
+            "funding_pnl": num(rfund + ufund) if rfund is not None and ufund is not None else None,
+            "pnl_asset": m.get("settlement_currency") or SETTLEMENT,
+            "margin_mode": MARGIN_MODES.get(m.get("market_kind")),
+            "leverage": num(positive(dec(p.get("leverage")))),
+            "funding_rate": num(funding_rate),
+            "delta": num(delta),
+            "gamma": num(gamma),
+            "vega": num(vega),
+            "theta": num(theta),
+            "iv": num(dec(s.get("mark_iv"))) if row["kind"] == "option" else None,
+            "updated_at": at(p.get("last_updated_at")),
+        }
+    )
+    return row
+
+
+def order_row(o, m: dict | None) -> dict | None:
+    """One resting order as posman's row, or None for one that is not open."""
+    if not isinstance(o, dict) or not isinstance(o.get("market"), str) or o.get("id") in (None, ""):
+        return None
+    size = positive(dec(o.get("size")))
+    if size is None or o.get("status") == "CLOSED":
+        return None
+    remaining = dec(o.get("remaining_size"))
+    venue_type = str(o.get("type") or "")
+    if o.get("status") == "UNTRIGGERED":
+        status = "untriggered"
+    elif remaining is not None and 0 < remaining < size:
+        status = "partially_filled"
+    else:
+        status = "open"
+    flags = o.get("flags") if isinstance(o.get("flags"), list) else []
+    row = instrument(o["market"], m)
+    row.update(
+        {
+            "order_id": str(o["id"]),
+            "client_order_id": o.get("client_id") or None,
+            "side": "buy" if o.get("side") == "BUY" else "sell",
+            "type": ORDER_TYPES.get(venue_type, "other"),
+            "venue_type": venue_type or "UNKNOWN",
+            "status": status,
+            "venue_status": o.get("status") or None,
+            "price": None if venue_type.endswith("MARKET") else num(positive(dec(o.get("price")))),
+            "trigger_price": num(positive(dec(o.get("trigger_price")))),
+            "size": num(size),
+            "filled_size": num(size - remaining) if remaining is not None and remaining <= size else None,
+            "remaining_size": num(remaining),
+            "time_in_force": TIME_IN_FORCE.get(o.get("instruction"), "other" if o.get("instruction") else None),
+            "reduce_only": "REDUCE_ONLY" in flags,
+            "created_at": at(o.get("created_at")),
+        }
+    )
+    return row
+
+
+def balance_row(b) -> dict | None:
+    if not isinstance(b, dict) or not isinstance(b.get("token"), str):
+        return None
+    total = dec(b.get("size"))
+    if total is None:
+        return None
+    return {"asset": b["token"], "total": num(total), "updated_at": at(b.get("last_updated_at"))}
+
+
+def normalize(base: str, out: dict, errors: dict) -> dict:
+    """posman's rows of each dataset fetched. Positions and orders need the
+    markets list for their instruments: without it they are left out this
+    fetch (posman keeps their last rows) and the failure is named."""
+    rows: dict = {}
+    if "balances" in out:
+        rows["balances"] = [r for r in map(balance_row, out["balances"]) if r]
+    if "positions" not in out and "open_orders" not in out:
+        return rows
+    try:
+        markets = by_symbol(request("GET", f"{base}/markets"))
+    except Exception as err:  # noqa: BLE001 - a public read: any failure is its own error
+        errors["markets"] = f"GET /v1/markets: {err}"[:300]
+        return rows
+    summaries: dict = {}
+    if "positions" in out:
+        try:
+            summaries = by_symbol(request("GET", f"{base}/markets/summary?market=ALL"))
+        except Exception as err:  # noqa: BLE001 - mark, funding and greeks stay null this fetch
+            errors["market_summaries"] = f"GET /v1/markets/summary: {err}"[:300]
+        rows["positions"] = [
+            r
+            for p in out["positions"]
+            if (r := position_row(p, markets.get(p.get("market")), summaries.get(p.get("market"))))
+        ]
+    if "open_orders" in out:
+        rows["open_orders"] = [r for o in out["open_orders"] if (r := order_row(o, markets.get(o.get("market"))))]
+    return rows
+
+
 def main(env: dict) -> dict:
     _, placeholder, meta, label = credential(env)
     base = base_url(env, label)
@@ -219,6 +429,7 @@ def main(env: dict) -> dict:
             fail(str(err), EXIT_AUTH)
         except Exception as err:  # noqa: BLE001 - any other failure is that dataset's error
             errors[dataset] = str(err)[:300]
+    out["_normalized"] = normalize(base, out, errors)
     if errors:
         out["_errors"] = errors
     return out
