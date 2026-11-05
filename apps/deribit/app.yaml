@@ -34,6 +34,15 @@ version: 1.0.1
 name: Deribit
 blurb: Trade options and futures on Deribit with a client secret your agent never holds.
 
+# What a user would type when asking for what this app does.
+tags:
+  - deribit
+  - option
+  - btc option
+  - eth option
+  - future
+  - dvol
+
 # What this app is for, on two axes that do not imply each other:
 # whether its credentials can write, and whether it has been exercised
 # enough to sit alongside the rest.

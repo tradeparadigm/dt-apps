@@ -12,6 +12,13 @@ blurb: Post to your Discord channels from a bot whose token your agent never hol
 access: read-write
 maturity: beta
 
+tags:
+  - discord
+  - discord bot
+  - discord server
+  - discord channel
+  - post to discord
+
 description: |
   Discord is a chat app organised into servers and channels. A bot you create
   in Discord's Developer Portal can post into the servers you invite it to.
