@@ -1068,6 +1068,92 @@ class TestDatafeedSuggestions(unittest.TestCase):
         self.assertIn("example/ticks is already suggested", out)
 
 
+ADAPTER = "apps/example/skills/example-api/posman/account/POSMAN.md"
+ADAPTER_ENTRY = "apps/example/skills/example-api/posman/account/fetch.mjs"
+
+
+def adapter_md(name="account", title="Example account", extra=""):
+    return f"---\nname: {name}\ntitle: {title}\n{extra}---\n\nHow to read each dataset.\n"
+
+
+class TestPosmanAdapters(unittest.TestCase):
+    """skills/<skill>/posman/<name>/, as DIME Terminal's sidecar reads it.
+
+    The sidecar drops an adapter whose manifest does not read, and posman runs
+    the first skill's adapter of a name, so each of those is a refusal here
+    rather than an adapter missing from every agent's list.
+    """
+
+    def with_adapter(self, body=None, more=None, entry=True):
+        extra = {ADAPTER: body if body is not None else adapter_md()}
+        if entry:
+            extra[ADAPTER_ENTRY] = "process.stdout.write('{}')\n"
+        extra.update(more or {})
+        return check(extra=extra)
+
+    def test_an_adapter_with_its_script_is_accepted(self):
+        code, out = self.with_adapter(
+            adapter_md(extra="venue: example\ncredential: example-*\nparams: ADDRESS, SUBACCOUNT?\n")
+        )
+        self.assertEqual(code, 0, out)
+        self.assertIn("posman account", out)
+
+    def test_a_python_entry_point_is_accepted(self):
+        code, out = self.with_adapter(
+            entry=False, more={"apps/example/skills/example-api/posman/account/fetch.py": "print('{}')\n"}
+        )
+        self.assertEqual(code, 0, out)
+
+    def test_no_entry_point_is_refused(self):
+        code, out = self.with_adapter(entry=False)
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("no fetch.mjs or fetch.py", out)
+
+    def test_a_name_unlike_the_directory_is_refused(self):
+        code, out = self.with_adapter(adapter_md(name="other"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("name is 'other', directory is 'account'", out)
+
+    def test_no_title_is_refused(self):
+        code, out = self.with_adapter("---\nname: account\n---\n")
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("no title", out)
+
+    def test_an_unknown_key_or_a_block_value_is_refused(self):
+        code, out = self.with_adapter(adapter_md(extra="command: rm -rf /\n"))
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("unknown key 'command'", out)
+        code, out = self.with_adapter(adapter_md(extra="description:\n  two lines\n"))
+        self.assertNotEqual(code, 0, out)
+
+    def test_bad_params_and_credential_are_refused(self):
+        for extra, why in (
+            ("params: address\n", "param 'address'"),
+            ("params: A, A?\n", "listed twice"),
+            ("credential: Example/*\n", "credential 'Example/*'"),
+            ("venue: Example\n", "venue 'Example'"),
+        ):
+            code, out = self.with_adapter(adapter_md(extra=extra))
+            self.assertNotEqual(code, 0, extra)
+            self.assertIn(why, out)
+
+    def test_a_loose_file_in_posman_is_refused(self):
+        code, out = self.with_adapter(more={"apps/example/skills/example-api/posman/notes.md": "x\n"})
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("one directory per adapter", out)
+
+    def test_a_name_is_unique_within_its_app(self):
+        code, out = self.with_adapter(
+            more={
+                "apps/example/skills/example-extra/SKILL.md": skill_md("example-extra"),
+                "apps/example/skills/example-extra/posman/account/POSMAN.md": adapter_md(),
+                "apps/example/skills/example-extra/posman/account/fetch.mjs": "//\n",
+            }
+        )
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("example/account is already an adapter", out)
+
+
 class TestRoutePath(unittest.TestCase):
     def route(self, path):
         return lambda src: src.replace("path: /v1/orders", f"path: {path}")
