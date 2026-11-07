@@ -309,6 +309,11 @@ def empty_frame():
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "paradigm-data-discovery" / "scripts"))
 
 HOUR_IN_KEY = re.compile(r"__rows__(\d{8}T\d{2})")
+
+
+def is_hourly(path: str) -> bool:
+    return "/level=1h/" in path
+
 # The whole read_parquet(...) call, however it is wrapped across lines.
 RAW_READ = re.compile(r"read_parquet\(__PATHS__[^)]*\)")
 
@@ -319,9 +324,9 @@ def prefer_hourly(files: list[str]) -> list[str]:
     The levels hold the same events, so reading both would count each twice.
     The 1h file wins because it is one request where the 5m files are twelve.
     """
-    hourly = {match.group(1) for path in files if "/level=1h/" in path
+    hourly = {match.group(1) for path in files if is_hourly(path)
               and (match := HOUR_IN_KEY.search(path))}
-    return [path for path in files if "/level=1h/" in path
+    return [path for path in files if is_hourly(path)
             or not (match := HOUR_IN_KEY.search(path)) or match.group(1) not in hourly]
 
 
@@ -331,8 +336,8 @@ def bind_paths(sql: str, files: list[str]) -> str:
     DuckDB refuses one hive-partitioned read over 1h and 5m files, whose
     partition columns differ, so a mix is read as two calls and joined by name.
     """
-    hourly = [path for path in files if "/level=1h/" in path]
-    finer = [path for path in files if "/level=1h/" not in path]
+    hourly = [path for path in files if is_hourly(path)]
+    finer = [path for path in files if not is_hourly(path)]
     if not hourly or not finer:
         return sql.replace("__PATHS__", sql_list(files))
 

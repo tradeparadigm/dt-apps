@@ -16,6 +16,9 @@ existing per-instrument aggregates are both available.
   `1h`, except `option_summary`, whose `1h` files hold aggregates only. A `1h`
   rows file holds the events of its hour's `1m` files, and it exists only for
   hours the writer has built, so an hour without one is read from its `5m` files.
+  A hive-partitioned `read_parquet` over both levels fails with "Hive partition
+  mismatch", so read the two levels as separate calls joined with
+  `UNION ALL BY NAME`.
   Existing `1m`/`5m` aggregates can avoid scanning
   every ticker update when the question only needs a per-period observation.
   Choose one level for each interval: overlapping `1m`, `5m`, and `1h` files
