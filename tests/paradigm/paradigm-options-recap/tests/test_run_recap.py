@@ -108,8 +108,9 @@ def test_partition_plan_is_explicit_and_hot_free():
     check("hours are explicit", all("hour=*" not in p for p in paths))
     check("exclusive end covers two UTC hours",
           queries[0].expected_hours == ("20260830T10", "20260830T11"), queries[0].expected_hours)
-    # One listing per day, not per hour: the same objects for 1/24 of the S3 calls.
-    check("one glob per day, not per hour", len(queries[0].paths) == 1, queries[0].paths)
+    # One listing per day and level, not per hour: the same objects for 1/24 of the S3 calls.
+    check("one glob per day and level, not per hour",
+          [p.split("/level=")[1][:2] for p in queries[0].paths] == ["1h", "5m"], queries[0].paths)
     surface_sql = next(query.sql for query in queries if query.name == "option_surface_deribit")
     check("surface samples every expiry and type independently", "PARTITION BY observation, expirationDate, optionType, target_delta" in surface_sql)
 

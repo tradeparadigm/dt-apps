@@ -7,6 +7,7 @@ import re
 import sys
 import types
 
+import duckdb
 import polars as pl
 import pytest
 
@@ -768,3 +769,62 @@ def test_metadata_that_begins_mid_window_is_a_gap():
     assert direct.metadata_gap("Bybit", START - timedelta(days=60), START) is None
     assert direct.metadata_gap("Bybit", START, START) is None
     assert direct.metadata_gap("Bybit", None, START) is None
+
+
+def _layout(root, level, hour, frame):
+    """One rows file in the venue-data layout under a local root."""
+    segment = {"1h": f"level=1h/year=2026/month=09/day=08/hour={hour:02d}",
+               "5m": f"level=5m/year=2026/month=09/day=08/hour={hour:02d}/start_minute=00"}[level]
+    folder = (Path(root) / "raw/exchange=deribit/data_type=option_trade/currency=btc" / segment)
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"raw__deribit__option_trade__btc__{level}__rows__20260908T{hour:02d}0000Z.parquet"
+    frame.write_parquet(path)
+    return str(path)
+
+
+def _blocks(*stamps):
+    return pl.DataFrame({"timestamp": list(stamps), "block_trade_id": ["b"] * len(stamps),
+                         "block_rfq_id": [None] * len(stamps)},
+                        schema={"timestamp": pl.String, "block_trade_id": pl.String,
+                                "block_rfq_id": pl.String})
+
+
+def test_a_closed_hour_with_a_1h_file_is_not_read_from_its_5m_files():
+    files = ["/x/level=1h/y/hour=08/a__rows__20260908T080000Z.parquet",
+             "/x/level=5m/y/hour=08/start_minute=05/a__rows__20260908T080500Z.parquet",
+             "/x/level=5m/y/hour=09/start_minute=00/a__rows__20260908T090000Z.parquet"]
+
+    assert collector.prefer_hourly(files) == [files[0], files[2]]
+
+
+def test_the_read_takes_the_1h_file_and_the_5m_files_of_the_open_hour(monkeypatch, tmp_path):
+    """Hour 08 has its 1h file and its 5m files; hour 09 has only 5m files.
+    Every event is read once, and the 1h and 5m partitions read together."""
+    _layout(tmp_path, "1h", 8, _blocks("2026-09-08T08:10:00Z", "2026-09-08T08:40:00Z"))
+    _layout(tmp_path, "5m", 8, _blocks("2026-09-08T08:10:00Z"))
+    _layout(tmp_path, "5m", 9, _blocks("2026-09-08T09:05:00Z"))
+    monkeypatch.setattr(collector, "BUCKET", str(tmp_path))
+    monkeypatch.setattr(collector, "connect", lambda: duckdb.connect())
+    start, end = datetime(2026, 9, 8, 8, tzinfo=UTC), datetime(2026, 9, 8, 10, tzinfo=UTC)
+    query = next(q for q in build_queries("BTC", start, end) if q.name == "venue_blocks_deribit")
+
+    source, rows = collector.run_query(query)
+
+    assert source["status"] == "ok", source
+    assert sorted(rows["timestamp"].to_list()) == ["2026-09-08T08:10:00Z",
+                                                   "2026-09-08T08:40:00Z",
+                                                   "2026-09-08T09:05:00Z"]
+    assert source["path_plan"]["resolved_file_count"] == 2
+
+
+def test_an_hour_without_a_1h_file_is_read_from_its_5m_files(monkeypatch, tmp_path):
+    _layout(tmp_path, "5m", 8, _blocks("2026-09-08T08:10:00Z"))
+    monkeypatch.setattr(collector, "BUCKET", str(tmp_path))
+    monkeypatch.setattr(collector, "connect", lambda: duckdb.connect())
+    start, end = datetime(2026, 9, 8, 8, tzinfo=UTC), datetime(2026, 9, 8, 9, tzinfo=UTC)
+    query = next(q for q in build_queries("BTC", start, end) if q.name == "venue_blocks_deribit")
+
+    source, rows = collector.run_query(query)
+
+    assert source["status"] == "ok", source
+    assert rows["timestamp"].to_list() == ["2026-09-08T08:10:00Z"]
