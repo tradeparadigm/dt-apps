@@ -12,8 +12,14 @@ existing per-instrument aggregates are both available.
   not establish comparable units across venues.
 - Read only the requested venues, data types, currencies, dates, and levels.
   Do not list or scan the whole bucket to discover data for each request.
-- Use `rows` files for event-level questions. `rows` exist at `1m` and `5m`;
-  `1h` contains aggregates only. Existing `1m`/`5m` aggregates can avoid scanning
+- Use `rows` files for event-level questions. `rows` exist at `1m`, `5m` and
+  `1h`, except `option_summary`, whose `1h` files hold aggregates only. A `1h`
+  rows file holds the events of its hour's `1m` files, and it exists only for
+  hours the writer has built, so an hour without one is read from its `5m` files.
+  A hive-partitioned `read_parquet` over both levels fails with "Hive partition
+  mismatch", so read the two levels as separate calls joined with
+  `UNION ALL BY NAME`.
+  Existing `1m`/`5m` aggregates can avoid scanning
   every ticker update when the question only needs a per-period observation.
   Choose one level for each interval: overlapping `1m`, `5m`, and `1h` files
   represent the same source events and must not be added together.
