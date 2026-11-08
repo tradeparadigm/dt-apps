@@ -73,23 +73,28 @@ def parse_window(value: str) -> dt.timedelta:
 
 def hour_patterns(source: str, venue: str, data_type: str, currency: str,
                   start: dt.datetime, end: dt.datetime) -> tuple[list[str], list[str]]:
-    """Day-level globs, plus the hours they are expected to cover.
+    """Day-level globs at 1h and 5m, plus the hours they are expected to cover.
+
+    A closed hour is read from its 1h file when there is one, and from its 5m
+    files otherwise (resolve_paths drops the 5m files a 1h file already holds).
 
     One listing per day returns exactly the objects that one listing per hour
     does, and every returned key carries its own hour — so coverage is read off
     the result rather than probed for, at 1/24 of the S3 calls. A 30-day window
     was 10,090 listings, which was most of its seven-minute runtime.
     """
-    base = (f"{BUCKET}/{source}/exchange={venue}/data_type={data_type}/"
-            f"currency={currency}/level=5m")
+    bases = [f"{BUCKET}/{source}/exchange={venue}/data_type={data_type}/"
+             f"currency={currency}/level={level}" for level in ("1h", "5m")]
     cursor = start.replace(minute=0, second=0, microsecond=0)
     hours: list[str] = []
     days: list[str] = []
     while cursor < end:
         hours.append(f"{cursor:%Y%m%dT%H}")
-        day = f"{base}/year={cursor:%Y}/month={cursor:%m}/day={cursor:%d}/**/*__rows__*.parquet"
-        if day not in days:
-            days.append(day)
+        for base in bases:
+            day = (f"{base}/year={cursor:%Y}/month={cursor:%m}/day={cursor:%d}"
+                   "/**/*__rows__*.parquet")
+            if day not in days:
+                days.append(day)
         cursor += dt.timedelta(hours=1)
     return days, hours
 
@@ -304,8 +309,44 @@ def empty_frame():
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "paradigm-data-discovery" / "scripts"))
 
 HOUR_IN_KEY = re.compile(r"__rows__(\d{8}T\d{2})")
+
+
+def is_hourly(path: str) -> bool:
+    return "/level=1h/" in path
+
 # The whole read_parquet(...) call, however it is wrapped across lines.
 RAW_READ = re.compile(r"read_parquet\(__PATHS__[^)]*\)")
+
+
+def prefer_hourly(files: list[str]) -> list[str]:
+    """Drop the 5m files of every hour that has a 1h file.
+
+    The levels hold the same events, so reading both would count each twice.
+    The 1h file wins because it is one request where the 5m files are twelve.
+    """
+    hourly = {match.group(1) for path in files if is_hourly(path)
+              and (match := HOUR_IN_KEY.search(path))}
+    return [path for path in files if is_hourly(path)
+            or not (match := HOUR_IN_KEY.search(path)) or match.group(1) not in hourly]
+
+
+def bind_paths(sql: str, files: list[str]) -> str:
+    """Put the objects into the query's read_parquet() calls.
+
+    DuckDB refuses one hive-partitioned read over 1h and 5m files, whose
+    partition columns differ, so a mix is read as two calls and joined by name.
+    """
+    hourly = [path for path in files if is_hourly(path)]
+    finer = [path for path in files if not is_hourly(path)]
+    if not hourly or not finer:
+        return sql.replace("__PATHS__", sql_list(files))
+
+    def both(match: re.Match) -> str:
+        call = match.group(0)
+        return ("(SELECT * FROM " + call.replace("__PATHS__", sql_list(hourly))
+                + " UNION ALL BY NAME SELECT * FROM "
+                + call.replace("__PATHS__", sql_list(finer)) + ")")
+    return RAW_READ.sub(both, sql)
 
 
 def resolve_paths(connection: duckdb.DuckDBPyConnection, patterns: list[str],
@@ -335,7 +376,7 @@ def resolve_paths(connection: duckdb.DuckDBPyConnection, patterns: list[str],
     if expected_hours:
         present = {match.group(1) for path in files
                    if (match := HOUR_IN_KEY.search(path))}
-        return files, [hour for hour in expected_hours if hour not in present]
+        return prefer_hourly(files), [hour for hour in expected_hours if hour not in present]
     missing = []
     for pattern in patterns:
         prefix = pattern.split("*", 1)[0]
@@ -387,7 +428,7 @@ def run_query(query: Query) -> tuple[dict[str, Any], list[Any]]:
             partition_rows = read_objects(files, query.columns or None)  # noqa: F841
             sql = RAW_READ.sub("partition_rows", query.sql)
         else:
-            sql = query.sql.replace("__PATHS__", sql_list(files))
+            sql = bind_paths(query.sql, files)
         # A frame, not dicts: a Python dict per row costs ~3KB against a
         # container limit these windows already strain, and every consumer
         # either aggregates or reads a handful of rows.
