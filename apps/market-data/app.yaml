@@ -1,9 +1,6 @@
 # Market Data. Owns the price and reference data sources an agent reads, and
-# later joins them. /ticker reads CoinGecko's public API, which needs no key.
-#
-# The manifest needs one credential type and /ticker uses none. This one is
-# scoped to CoinGecko's paid host, so an enrolled key never matches the keyless
-# host /ticker calls.
+# later joins them. /ticker reads CoinGecko's public API, keyless unless a Demo
+# key is enrolled.
 
 schema_version: 1
 
@@ -21,29 +18,31 @@ description: |
 
   Type `/ticker btc eth` to get each coin's USD price and 24 hour change.
 
-  `/ticker` reads CoinGecko's public API and needs no key.
+  `/ticker` reads CoinGecko's public API. It works with no key, but keyless
+  calls share a rate limit with everyone on the same network. Add a free
+  CoinGecko Demo key for a limit of your own.
 
 developer: Paradigm
 developer_url: https://www.paradigm.co
 
 environments:
-  - id: coingecko-pro
-    label: CoinGecko Pro
-    host: pro-api.coingecko.com
+  - id: coingecko
+    label: CoinGecko
+    host: api.coingecko.com
 
 exclusive_credential_types: true
 
 credential_types:
-  - id: coingecko-pro
-    label: CoinGecko Pro API key
-    slug: pro
+  - id: demo-key
+    label: CoinGecko Demo API key
+    slug: demo
     secret_label: API key
     routes:
       - path: /api/v3/*
         methods: [GET]
     delivery:
-      mode: replace
-      match_headers: [x-cg-pro-api-key]
+      mode: inject
+      header: x-cg-demo-api-key
     summary: >-
-      For CoinGecko's paid API. The placeholder is swapped for your key in the
-      x-cg-pro-api-key header.
+      A free key from CoinGecko's developer dashboard. Sets the
+      x-cg-demo-api-key header on every request to api.coingecko.com.
