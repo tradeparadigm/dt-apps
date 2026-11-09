@@ -1,0 +1,49 @@
+# Market Data. Owns the price and reference data sources an agent reads, and
+# later joins them. /ticker reads CoinGecko's public API, which needs no key.
+#
+# The manifest needs one credential type and /ticker uses none. This one is
+# scoped to CoinGecko's paid host, so an enrolled key never matches the keyless
+# host /ticker calls.
+
+schema_version: 1
+
+id: market-data
+version: 0.1.0
+name: Market Data
+blurb: Live crypto prices from slash commands, with no model turn.
+
+access: read-only
+maturity: beta
+
+description: |
+  Market Data gives you commands that fetch prices directly and answer in the
+  chat without using your model.
+
+  Type `/ticker btc eth` to get each coin's USD price and 24 hour change.
+
+  `/ticker` reads CoinGecko's public API and needs no key.
+
+developer: Paradigm
+developer_url: https://www.paradigm.co
+
+environments:
+  - id: coingecko-pro
+    label: CoinGecko Pro
+    host: pro-api.coingecko.com
+
+exclusive_credential_types: true
+
+credential_types:
+  - id: coingecko-pro
+    label: CoinGecko Pro API key
+    slug: pro
+    secret_label: API key
+    routes:
+      - path: /api/v3/*
+        methods: [GET]
+    delivery:
+      mode: replace
+      match_headers: [x-cg-pro-api-key]
+    summary: >-
+      For CoinGecko's paid API. The placeholder is swapped for your key in the
+      x-cg-pro-api-key header.
