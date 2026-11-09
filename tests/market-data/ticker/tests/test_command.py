@@ -50,6 +50,9 @@ code, out, _, urls = ticker("BTC, btc $eth", body={"btc": {"usd": 75001, "usd_24
 check("symbols are lowercased, deduped and lose a leading $", len(urls) == 1 and "symbols=btc%2Ceth&" in urls[0])
 check("each symbol prints its price and change", code == 0 and out == ["BTC $75,001 (-1.05% 24h)", "ETH $2,144.62 (+4.10% 24h)"])
 
+code, _, _, urls = ticker("BTC-USD eth/usd SOL-USD-PERP", body={})
+check("a -USD, /USD or -USD-PERP suffix is dropped", len(urls) == 1 and "symbols=btc%2Ceth%2Csol&" in urls[0])
+
 code, out, _, _ = ticker("steth pol", body={"stETH": {"usd": 2107.09}, "POL": {"usd": 0.087607}})
 check("a quote CoinGecko keys in mixed case is found", code == 0 and out == ["STETH $2,107.09", "POL $0.087607"])
 

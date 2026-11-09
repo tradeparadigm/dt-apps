@@ -7,7 +7,7 @@ const symbols = [
     (process.argv[2] ?? "")
       .toLowerCase()
       .split(/[\s,]+/)
-      .map((symbol) => symbol.replace(/^\$/, ""))
+      .map((symbol) => symbol.replace(/^\$/, "").replace(/[-/]usd(-perp)?$/, ""))
       .filter(Boolean),
   ),
 ];
