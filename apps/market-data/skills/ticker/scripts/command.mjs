@@ -7,7 +7,7 @@ const symbols = [
     (process.argv[2] ?? "")
       .toLowerCase()
       .split(/[\s,]+/)
-      .map((symbol) => symbol.replace(/^\$/, "").replace(/[-/]usd(-perp)?$/, ""))
+      .map((symbol) => symbol.replace(/^\$/, ""))
       .filter(Boolean),
   ),
 ];
@@ -16,7 +16,7 @@ if (symbols.length === 0) {
   process.exit(0);
 }
 if (!symbols.every((symbol) => /^[a-z0-9]+$/.test(symbol))) {
-  console.error("A symbol can hold only letters and digits.");
+  console.error("A symbol can hold only letters and digits. Type the coin's symbol, like btc.");
   process.exit(1);
 }
 
@@ -33,6 +33,10 @@ try {
   body = response.ok ? await response.json() : null;
 } catch (error) {
   console.error(`Could not reach CoinGecko: ${error?.cause?.code ?? error?.name ?? error}.`);
+  process.exit(1);
+}
+if (response.status === 401 || response.status === 403) {
+  console.error("CoinGecko refused the Demo key. Replace or remove it in Apps, Market Data.");
   process.exit(1);
 }
 if (!response.ok) {

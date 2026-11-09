@@ -19,7 +19,8 @@ const answer = JSON.parse(process.env.TICKER_ANSWER);
 globalThis.fetch = async (url) => {
   console.error("URL " + url);
   if (answer.throw) throw new TypeError("fetch failed", { cause: { code: answer.throw } });
-  return new Response(JSON.stringify(answer.body ?? {}), { status: answer.status ?? 200 });
+  const body = answer.html ? "<html>Too many requests</html>" : JSON.stringify(answer.body ?? {});
+  return new Response(body, { status: answer.status ?? 200 });
 };
 """
 
@@ -50,8 +51,9 @@ code, out, _, urls = ticker("BTC, btc $eth", body={"btc": {"usd": 75001, "usd_24
 check("symbols are lowercased, deduped and lose a leading $", len(urls) == 1 and "symbols=btc%2Ceth&" in urls[0])
 check("each symbol prints its price and change", code == 0 and out == ["BTC $75,001 (-1.05% 24h)", "ETH $2,144.62 (+4.10% 24h)"])
 
-code, _, _, urls = ticker("BTC-USD eth/usd SOL-USD-PERP", body={})
-check("a -USD, /USD or -USD-PERP suffix is dropped", len(urls) == 1 and "symbols=btc%2Ceth%2Csol&" in urls[0])
+for pair in ["btc-usd", "XAU-USD-PERP", "eth/usdt"]:
+    code, _, errors, urls = ticker(pair)
+    check(f"a market name like {pair} is refused, not priced as a coin", code == 1 and urls == [] and "like btc" in errors[0])
 
 code, out, _, _ = ticker("steth pol", body={"stETH": {"usd": 2107.09}, "POL": {"usd": 0.087607}})
 check("a quote CoinGecko keys in mixed case is found", code == 0 and out == ["STETH $2,107.09", "POL $0.087607"])
@@ -67,6 +69,12 @@ check("a symbol that is not letters and digits is refused", code == 1 and urls =
 
 code, _, errors, _ = ticker("btc", status=429)
 check("a refused request is one line naming the status", code == 1 and errors == ["CoinGecko answered 429."])
+
+code, _, errors, _ = ticker("btc", status=401)
+check("a refused key says which key", code == 1 and errors == ["CoinGecko refused the Demo key. Replace or remove it in Apps, Market Data."])
+
+code, _, errors, _ = ticker("btc", status=429, html=True)
+check("a refusal with a page for a body still names the status", code == 1 and errors == ["CoinGecko answered 429."])
 
 code, _, errors, _ = ticker("btc", throw="ENOTFOUND")
 check("a network failure is one line", code == 1 and errors == ["Could not reach CoinGecko: ENOTFOUND."])
