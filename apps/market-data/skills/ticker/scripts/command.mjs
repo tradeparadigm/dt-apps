@@ -2,7 +2,15 @@
 // The app_command tool passes everything the user typed as one argument.
 const API = "https://api.coingecko.com/api/v3/simple/price";
 
-const symbols = [...new Set((process.argv[2] ?? "").toLowerCase().split(/[\s,]+/).filter(Boolean))];
+const symbols = [
+  ...new Set(
+    (process.argv[2] ?? "")
+      .toLowerCase()
+      .split(/[\s,]+/)
+      .map((symbol) => symbol.replace(/^\$/, ""))
+      .filter(Boolean),
+  ),
+];
 if (symbols.length === 0) {
   console.log("Usage: /ticker <symbol> [symbol ...]");
   process.exit(0);
@@ -18,12 +26,21 @@ const url = `${API}?${new URLSearchParams({
   include_24hr_change: "true",
 })}`;
 
-const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+let response;
+let body;
+try {
+  response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  body = response.ok ? await response.json() : null;
+} catch (error) {
+  console.error(`Could not reach CoinGecko: ${error?.cause?.code ?? error?.name ?? error}.`);
+  process.exit(1);
+}
 if (!response.ok) {
   console.error(`CoinGecko answered ${response.status}.`);
   process.exit(1);
 }
-const prices = await response.json();
+// CoinGecko keys each quote by the symbol as it stores it (POL, stETH).
+const prices = Object.fromEntries(Object.entries(body).map(([key, quote]) => [key.toLowerCase(), quote]));
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumSignificantDigits: 7 });
 for (const symbol of symbols) {
