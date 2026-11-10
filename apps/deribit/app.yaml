@@ -44,6 +44,7 @@ blurb: Trade options and futures on Deribit with a client secret your agent neve
 # installed app an update that changes no skill text.
 access: read-write
 maturity: beta
+is_exchange: true
 
 description: |
   Deribit is a crypto derivatives exchange, best known for BTC and ETH options

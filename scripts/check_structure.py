@@ -195,7 +195,7 @@ MAX_HOSTS = 100
 KNOWN = {
     "manifest": {
         "schema_version", "id", "version", "name", "blurb", "description",
-        "access", "maturity", "default_install",
+        "access", "maturity", "default_install", "is_exchange",
         "environments", "exclusive_credential_types", "credential_types",
         "developer", "developer_url", "tint", "icon", "mcp_server",
     },
@@ -249,7 +249,7 @@ DELIVERY_FIELDS = {
 # A known key whose value is the wrong kind fails the same way an unknown key
 # does. PyYAML reads bare y and n as strings where yaml.v3 reads booleans, so
 # this is stricter by two values, pinned in the divergence test.
-BOOLEAN_KEYS = ("exclusive_credential_types", "default_install")
+BOOLEAN_KEYS = ("exclusive_credential_types", "default_install", "is_exchange")
 
 # The manifest format this checker understands, matching the consumer's.
 SCHEMA_VERSION = 1
