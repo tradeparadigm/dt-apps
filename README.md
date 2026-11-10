@@ -13,6 +13,8 @@ apps/<id>/skills/<skill-name>/SKILL.md    what the agent is taught
 apps/<id>/skills/<skill-name>/...         anything else that skill reads
 apps/<id>/skills/<skill-name>/datafeeds/<name>/DATAFEED.md
                                           a data feed the app suggests
+apps/<id>/skills/<skill-name>/posman/<name>/POSMAN.md
+                                          a posman adapter: the app's account data, fetched
 ```
 
 **Publishing does not require a release of DIME Terminal.** It reads this
@@ -112,6 +114,97 @@ ties it back to the app.
 Names are unique within an app, since a suggestion is addressed as
 `<app>/<name>`. A suggestion's files count toward its skill's 32-file limit,
 and an app carries at most 20 suggestions.
+
+## Posman adapters
+
+DIME Terminal's posman skill keeps a fresh copy of each tracked account's
+positions, open orders and balances on the agent, so it reads one place
+instead of asking each venue every time. An app can ship the **adapter** that
+fetches its venue, one directory per adapter under the skill's `posman/`:
+
+```
+posman/<name>/POSMAN.md     frontmatter the terminal lists it by; how each field maps, and how to read the raw data
+posman/<name>/fetch.mjs     the adapter (or fetch.py, run with `uv run`, and its fetch.py.lock)
+```
+
+```markdown
+---
+name: account
+title: Paradex account
+description: Positions, open orders, balances and the account summary of one Paradex account.
+credential: paradex-*
+params: ENVIRONMENT?
+---
+```
+
+- **What an adapter does.** It fetches the account once, prints ONE JSON
+  object on stdout and exits. Each key is a dataset (`positions`,
+  `open_orders`, `balances`, any lowercase name) holding the venue's records
+  exactly as the venue sends them, and `_normalized` holds the same records
+  as **posman's rows** (below). `_errors` names a dataset it could not fetch
+  this time. Exit 3 when the venue or the proxy refused the credential. Logs
+  go to stderr.
+- **What it gets.** `POSMAN_CRED`, the NAME of the variable holding the
+  account's credential placeholder (its public details in `<name>_META`),
+  and `POSMAN_PARAM_<NAME>` for each parameter. posman runs it in place, on
+  the account's interval, in the agent's container; nothing else does.
+- **`credential`** is the credential labels it takes: one label, or a prefix
+  ending in `*` (`paradex-*` matches the app's `paradex-<env>-<type>`
+  labels). **`params`** lists what the user sets per account, comma-separated,
+  `?` for an optional one. `venue` defaults to the app's id.
+
+Names are unique within an app, since posman addresses an adapter as
+`<app>/<name>`, and the files count toward the skill's 32-file limit.
+
+### posman's rows (`_normalized`)
+
+The agent and the terminal read rows, not the venue's records: one shape for
+every venue's positions, open orders and balances, so an answer across
+accounts needs no venue knowledge. **The schema is
+[`infra/openclaw/posman/skill/SCHEMA.md`](https://github.com/tradeparadigm/dime-terminal/blob/main/infra/openclaw/posman/skill/SCHEMA.md)
+in dime-terminal** (on an agent, `~/.openclaw/skills/posman/SCHEMA.md`); it
+defines every field, and the adapter is the one place the venue's meaning is
+mapped to it.
+
+```json
+{
+  "positions": [ ...the venue's records... ],
+  "_normalized": {
+    "positions": [{"symbol": "BTCUSDT", "kind": "perp", "underlying": "BTC", "side": "long", "size": "0.5", ...}],
+    "open_orders": [],
+    "balances": [{"asset": "USDT", "total": "1023.5"}]
+  }
+}
+```
+
+- **Instruments stay the venue's**: `symbol` is the venue's own; what is
+  shared is what each FIELD means.
+- **The parts that take care**, per SCHEMA.md: decimal STRINGS, ISO UTC
+  times; `size` signed and in units of the underlying (convert contracts or
+  USD with the venue's contract size); `unrealized_pnl` WITHOUT funding (a
+  venue that includes it has it subtracted); `funding_pnl` since the position
+  opened, or null when the venue does not give it on the position; a funding
+  rate per hour; greeks in SCHEMA.md's units, times the signed size; null,
+  never 0, for anything the venue does not give.
+- **A kind left out keeps its last rows** (its fetch failed); `[]` says there
+  are none. The runner checks every row, and a kind with one bad row is not
+  written that fetch: the account reads `partial` with the first problem.
+- **Write `POSMAN.md`'s mapping**: how each field you fill comes from the
+  venue's, so a reviewer can check the arithmetic.
+- **Test it on an agent** with `posman.mjs test --adapter <app>/<name>`: it
+  runs the adapter once, shows a row of each kind beside the raw sample, and
+  names what it would refuse (`normalizeProblems`) or drop
+  (`normalizeWarnings`). Here, test it against a fake venue the way
+  `tests/paradex/paradex-api/tests/test_posman_adapter.py` does, asserting
+  whole rows.
+- **The worked example** is Paradex's (`apps/paradex/skills/paradex-api/posman/account/`):
+  instruments from the venue's market list, PnL with the funding taken out,
+  per-hour funding, option greeks.
+
+An adapter in Python declares its dependencies in the script header with a
+fixed `exclude-newer` at least 14 days old and ships the `fetch.py.lock` uv
+writes (`uv lock --script fetch.py`), like every script here. A lock is a
+skill file too, held to the 512 KiB limit.
 
 ## Naming
 
@@ -219,6 +312,11 @@ that made the mistake:
   `description` and optional `needs`. DIME Terminal's agent reads those lines
   without a YAML parser, so a block scalar or a stray key would be listed wrong
   or not at all. A suggestion's name is unique within its app.
+- every posman adapter's directory is a name posman can address, holds a
+  `POSMAN.md` and a `fetch.mjs` or `fetch.py`, and opens with one-line
+  `name` (matching it) and `title`, with `venue`, `description`, `credential`
+  and `params` as DIME Terminal's sidecar reads them. An adapter's name is
+  unique within its app.
   Nothing in the consumer reads that path, because it is an instruction the
   agent follows rather than a field anything parses. So a bump the filename does
   not follow is invisible: every agent that already wrote a helper keeps the one

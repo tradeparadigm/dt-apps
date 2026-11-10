@@ -93,6 +93,12 @@ What is checked, in each case because the consumer refuses the app without it:
     it lists wrong or not at all. Names are unique within an app, because the
     agent and the terminal address a suggestion as <app>/<name>.
 
+  * A posman adapter, skills/<skill>/posman/<name>/, holds POSMAN.md and a
+    fetch.mjs or fetch.py, its frontmatter one-line keys DIME Terminal's
+    sidecar reads (name equal to the directory, a title; venue, description,
+    credential and params as it takes them). Names are unique within an app:
+    posman addresses an adapter as <app>/<name>.
+
   * A script that declares dependencies (a `# /// script` block) sets
     `[tool.uv] exclude-newer` to a fixed date at least 14 days old, and ships
     the `<script>.lock` uv writes from it. Without them uv installs whatever was
@@ -266,6 +272,19 @@ DATAFEED_LINE_RE = re.compile(r"^(?P<key>[a-z_]+):[ \t]+(?P<value>\S.*)$")
 DATAFEED_FIELDS = {"name": 40, "title": 80, "description": 300, "needs": 200}
 DATAFEED_REQUIRED = ("name", "title", "description")
 MAX_DATAFEEDS = 20
+
+# A posman adapter, skills/<skill>/posman/<name>/: POSMAN.md and the script
+# DIME Terminal's posman runner runs (fetch.mjs, else fetch.py). The sidecar
+# lists it (infra/openclaw/sidecar/posman.go, readPosmanAppAdapter) and drops
+# one whose manifest does not read, so these are its rules.
+POSMAN_DIR = "posman"
+POSMAN_FILE = "POSMAN.md"
+POSMAN_ENTRIES = ("fetch.mjs", "fetch.py")
+POSMAN_FIELDS = {"name": 40, "title": 80, "venue": 64, "description": 500, "credential": 65, "params": 600}
+POSMAN_VENUE_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+POSMAN_CREDENTIAL_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}\*?$")
+POSMAN_PARAM_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,31}\??$")
+MAX_POSMAN_PARAMS = 16
 
 MAX_FILE_BYTES = 512 * 1024
 MAX_FILES = 32
@@ -910,6 +929,82 @@ def check_datafeed_frontmatter(md: Path, name: str, failures: list[str]) -> None
 
 # The lines every shipped client repeats. They are the proxy's protocol, not the
 # venue's, so a copy that drifts is a bug we get to find once per app.
+def check_posman(app: str, skill_dir: Path, seen: dict[str, Path], failures: list[str]) -> None:
+    """Each posman adapter in one skill, and its name unique within the app.
+
+    The agent and the terminal address an adapter as <app>/<name>. The sidecar
+    gives the ref to the first skill, by name, holding one, so a second would
+    never run.
+    """
+    base = skill_dir / POSMAN_DIR
+    if not base.is_dir():
+        return
+    for entry in sorted(base.iterdir()):
+        if not entry.is_dir():
+            failures.append(f"{entry}: {POSMAN_DIR}/ holds one directory per adapter, and nothing else")
+            continue
+        name = entry.name
+        if not DATAFEED_NAME_RE.match(name):
+            failures.append(
+                f"{entry}: {name!r} cannot name a posman adapter: lowercase letters, digits "
+                "and hyphens, 1-40, no hyphen at either end"
+            )
+        if name in seen:
+            failures.append(
+                f"{entry}: {app}/{name} is already an adapter in {seen[name]} — posman "
+                "runs the first skill's, so this one would never run"
+            )
+        seen[name] = entry
+        md = entry / POSMAN_FILE
+        if not md.is_file():
+            failures.append(f"{entry}: no {POSMAN_FILE}")
+            continue
+        if not any((entry / e).is_file() for e in POSMAN_ENTRIES):
+            failures.append(f"{entry}: no {' or '.join(POSMAN_ENTRIES)} for the runner to run")
+        check_posman_frontmatter(md, name, failures)
+
+
+def check_posman_frontmatter(md: Path, name: str, failures: list[str]) -> None:
+    """POSMAN.md's frontmatter, read as the sidecar reads it: one line per key."""
+    lines = md.read_text().replace("\r\n", "\n").split("\n")
+    if not lines or lines[0] != "---" or "---" not in lines[1:]:
+        failures.append(f"{md}: no frontmatter (a --- line, key: value lines, a --- line)")
+        return
+    fields: dict[str, str] = {}
+    for line in lines[1 : lines.index("---", 1)]:
+        m = DATAFEED_LINE_RE.match(line)
+        if not m:
+            failures.append(f"{md}: {line!r} is not one `key: value` line")
+            continue
+        key, value = m.group("key"), m.group("value").strip()
+        if key not in POSMAN_FIELDS:
+            failures.append(f"{md}: unknown key {key!r}; an adapter carries {', '.join(POSMAN_FIELDS)}")
+            continue
+        if len(value) >= 2 and value[0] in "\"'" and value[-1] == value[0]:
+            value = value[1:-1]
+        if len(value) > POSMAN_FIELDS[key]:
+            failures.append(f"{md}: {key} is {len(value)} characters, limit {POSMAN_FIELDS[key]}")
+        fields[key] = value
+    if fields.get("name") != name:
+        failures.append(f"{md}: name is {fields.get('name')!r}, directory is {name!r}")
+    if not fields.get("title"):
+        failures.append(f"{md}: no title; the terminal lists the adapter by it")
+    if "venue" in fields and not POSMAN_VENUE_RE.match(fields["venue"]):
+        failures.append(f"{md}: venue {fields['venue']!r} is not a venue id (an app id)")
+    credential = fields.get("credential")
+    if credential and credential != "none" and not POSMAN_CREDENTIAL_RE.match(credential):
+        failures.append(f"{md}: credential {credential!r} is a credential label, or a label prefix ending in *")
+    params = [p.strip() for p in fields.get("params", "").split(",") if p.strip()]
+    if len(params) > MAX_POSMAN_PARAMS:
+        failures.append(f"{md}: {len(params)} params, limit {MAX_POSMAN_PARAMS}")
+    for p in params:
+        if not POSMAN_PARAM_RE.match(p):
+            failures.append(f"{md}: param {p!r} is upper case, digits and _, with ? for an optional one")
+    names = [p.rstrip("?") for p in params]
+    if len(set(names)) != len(names):
+        failures.append(f"{md}: a param is listed twice")
+
+
 CLIENT_PREAMBLE = """const all = Object.keys(process.env).filter(k => (process.env[k] || '').startsWith('sign-{venue}'));
 const V = process.env.{VENUE}_CRED || all[0];
 if (!V) {{ console.error('no {Venue} sign- credential in the environment'); process.exit(2); }}
@@ -1046,6 +1141,7 @@ def main() -> int:
     claims: dict[str, str] = {}
     for app in apps:
         suggested: dict[str, Path] = {}
+        adapters: dict[str, Path] = {}
         man = app / MANIFEST
         if not man.is_file():
             failures.append(f"{app}: no {MANIFEST}")
@@ -1098,6 +1194,7 @@ def main() -> int:
                 check_errata_version(app.name, version, files, failures)
                 check_helper_versions(app.name, version, name, files, failures)
             check_datafeeds(app.name, d, suggested, failures)
+            check_posman(app.name, d, adapters, failures)
             check_script_deps(files, failures)
             if len(files) > MAX_FILES:
                 failures.append(f"{d}: {len(files)} files, limit {MAX_FILES}")
@@ -1113,6 +1210,8 @@ def main() -> int:
         line = f"{app.name}: {', '.join(on_disk) if on_disk else 'no skills'}"
         if suggested:
             line += f"; datafeeds {', '.join(sorted(suggested))}"
+        if adapters:
+            line += f"; posman {', '.join(sorted(adapters))}"
         print(line)
 
     if failures:
