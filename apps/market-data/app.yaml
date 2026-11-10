@@ -1,0 +1,48 @@
+# Market Data. Owns the price and reference data sources an agent reads, and
+# later joins them. /ticker reads CoinGecko's public API, keyless unless a Demo
+# key is enrolled.
+
+schema_version: 1
+
+id: market-data
+version: 0.1.0
+name: Market Data
+blurb: Live crypto prices from slash commands, with no model turn.
+
+access: read-only
+maturity: beta
+
+description: |
+  Market Data gives you commands that fetch prices directly and answer in the
+  chat without using your model.
+
+  Type `/ticker btc eth` to get each coin's USD price and 24 hour change.
+
+  `/ticker` reads CoinGecko's public API. It works with no key, but keyless
+  calls share a rate limit with everyone on the same network. Add a free
+  CoinGecko Demo key for a limit of your own.
+
+developer: Paradigm
+developer_url: https://www.paradigm.co
+
+environments:
+  - id: coingecko
+    label: CoinGecko
+    host: api.coingecko.com
+
+exclusive_credential_types: true
+
+credential_types:
+  - id: demo-key
+    label: CoinGecko Demo API key
+    slug: demo
+    secret_label: API key
+    routes:
+      - path: /api/v3/*
+        methods: [GET]
+    delivery:
+      mode: inject
+      header: x-cg-demo-api-key
+    summary: >-
+      A free key from CoinGecko's developer dashboard. Sets the
+      x-cg-demo-api-key header on every request to api.coingecko.com.
