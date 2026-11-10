@@ -46,15 +46,16 @@ if (!response.ok) {
 // CoinGecko keys each quote by the symbol as it stores it (POL, stETH).
 const prices = Object.fromEntries(Object.entries(body).map(([key, quote]) => [key.toLowerCase(), quote]));
 
+// The chat renders the reply as markdown, which joins plain lines into one.
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumSignificantDigits: 7 });
 for (const symbol of symbols) {
   const quote = prices[symbol];
   const name = symbol.toUpperCase();
   if (quote?.usd === undefined) {
-    console.log(`${name}: no price found`);
+    console.log(`- ${name}: no price found`);
     continue;
   }
   const change = quote.usd_24h_change;
   const changeText = typeof change === "number" ? ` (${change >= 0 ? "+" : ""}${change.toFixed(2)}% 24h)` : "";
-  console.log(`${name} ${usd.format(quote.usd)}${changeText}`);
+  console.log(`- ${name} ${usd.format(quote.usd)}${changeText}`);
 }

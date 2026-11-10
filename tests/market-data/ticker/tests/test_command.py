@@ -49,17 +49,17 @@ def ticker(args, **answer):
 
 code, out, _, urls = ticker("BTC, btc $eth", body={"btc": {"usd": 75001, "usd_24h_change": -1.05}, "eth": {"usd": 2144.62, "usd_24h_change": 4.1}})
 check("symbols are lowercased, deduped and lose a leading $", len(urls) == 1 and "symbols=btc%2Ceth&" in urls[0])
-check("each symbol prints its price and change", code == 0 and out == ["BTC $75,001 (-1.05% 24h)", "ETH $2,144.62 (+4.10% 24h)"])
+check("each symbol prints its price and change", code == 0 and out == ["- BTC $75,001 (-1.05% 24h)", "- ETH $2,144.62 (+4.10% 24h)"])
 
 for pair in ["btc-usd", "XAU-USD-PERP", "eth/usdt"]:
     code, _, errors, urls = ticker(pair)
     check(f"a market name like {pair} is refused, not priced as a coin", code == 1 and urls == [] and "like btc" in errors[0])
 
 code, out, _, _ = ticker("steth pol", body={"stETH": {"usd": 2107.09}, "POL": {"usd": 0.087607}})
-check("a quote CoinGecko keys in mixed case is found", code == 0 and out == ["STETH $2,107.09", "POL $0.087607"])
+check("a quote CoinGecko keys in mixed case is found", code == 0 and out == ["- STETH $2,107.09", "- POL $0.087607"])
 
 code, out, _, _ = ticker("nosuchcoin", body={})
-check("a symbol with no quote says so", code == 0 and out == ["NOSUCHCOIN: no price found"])
+check("a symbol with no quote says so", code == 0 and out == ["- NOSUCHCOIN: no price found"])
 
 code, out, errors, urls = ticker("")
 check("no symbols prints the usage and calls nothing", code == 0 and out[0].startswith("Usage:") and urls == [])
