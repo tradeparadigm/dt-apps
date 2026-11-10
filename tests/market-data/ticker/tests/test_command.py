@@ -70,8 +70,9 @@ check("a symbol that is not letters and digits is refused", code == 1 and urls =
 code, _, errors, _ = ticker("btc", status=429)
 check("a refused request is one line naming the status", code == 1 and errors == ["CoinGecko answered 429."])
 
-code, _, errors, _ = ticker("btc", status=401)
-check("a refused key says which key", code == 1 and errors == ["CoinGecko refused the Demo key. Replace or remove it in Apps, Market Data."])
+for status in (401, 403):
+    code, _, errors, _ = ticker("btc", status=status)
+    check(f"a refused key ({status}) says which key", code == 1 and errors == ["CoinGecko refused the Demo key. Replace or remove it in Apps, Market Data."])
 
 code, _, errors, _ = ticker("btc", status=429, html=True)
 check("a refusal with a page for a body still names the status", code == 1 and errors == ["CoinGecko answered 429."])
