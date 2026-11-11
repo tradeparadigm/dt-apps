@@ -74,7 +74,7 @@ Read it when a call fails, not before.
 
 ### When this client is wrong
 
-Check `~/.openclaw/workspace/tools/binance/errata-1.1.0.md` before your first
+Check `~/.openclaw/workspace/tools/binance/errata-1.2.0.md` before your first
 call. An earlier chat writes it when this client turns out to be wrong against
 the live venue. The version in the name is this app's version, so a file naming
 any other version is stale: delete it and ignore what it said.
@@ -151,12 +151,19 @@ GET /api/v3/myTrades?symbol=BTCUSDT&timestamp=…
 GET /fapi/v3/balance?timestamp=…                    # futures wallet
 GET /fapi/v3/account?timestamp=…                    # futures account + positions
 GET /fapi/v3/positionRisk?timestamp=…               # open positions
+GET /fapi/v1/openAlgoOrders?timestamp=…             # futures stops, take-profits, trailing stops
 GET /fapi/v1/userTrades?symbol=BTCUSDT&timestamp=…
 GET /fapi/v1/income?timestamp=…                     # funding, realised PnL
 ```
 
 `symbol` is mandatory on the spot per-symbol reads (`myTrades`, `allOrders`);
 omitting it is `-1102`, not an empty list.
+
+Futures stop, take-profit and trailing orders are **not** in
+`/fapi/v1/openOrders`: since 2025-12-09 Binance keeps them in its Algo
+Service, read with `/fapi/v1/openAlgoOrders` (each has an `algoId`). A
+credential enrolled before this app's 1.2.0 cannot read it (`-2014`):
+enrolling the key pair again adds the route.
 
 ## Placing an order
 
