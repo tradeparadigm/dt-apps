@@ -99,6 +99,20 @@ with tempfile.TemporaryDirectory() as cache:
     code, rows, _, urls = lookup("eth/usd", cache)
     check("a word /ticker would refuse searches nothing", code == 0 and rows == [] and urls == [])
 
+    before = json.loads(entry.read_text())["at"]
+    lookup("e", cache)
+    check("a lookup answered from the cache leaves its age alone", json.loads(entry.read_text())["at"] == before)
+
+    old = json.loads(entry.read_text())
+    old["at"] = int(time.time() * 1000) - 6 * 60_000
+    entry.write_text(json.dumps(old))
+    code, rows, _, urls = lookup("et", cache, status=429)
+    check("a refused refresh answers from the old list", code == 0 and len(urls) == 1 and [r["id"] for r in rows] == ["eth"])
+
+    code, rows, _, urls = lookup("eth $", cache)
+    check("a lone $ after a symbol starts the next word", urls == [] and rows[0]["run"] == "/ticker eth btc")
+
+
 
 with tempfile.TemporaryDirectory() as cache:
     code, _, errors, _ = lookup("so", cache, status=429)

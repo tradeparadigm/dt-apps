@@ -4,7 +4,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SYMBOL, symbolWords } from "./symbols.mjs";
+import { SYMBOL, partialWord, symbolWords } from "./symbols.mjs";
 
 // The top 250 coins by market cap, read once and matched locally, so typing
 // makes no call: keyless calls share CoinGecko's per-IP limit with every agent
@@ -26,8 +26,9 @@ const MAJORS = [
 ];
 
 const typed = process.argv[2] ?? "";
+const partial = partialWord(typed);
 const words = symbolWords(typed);
-const partial = /[\s,]$/.test(typed) || words.length === 0 ? "" : words.pop();
+if (partial) words.pop();
 const kept = words.filter((word) => SYMBOL.test(word));
 
 function row(symbol, name, rank) {
@@ -55,10 +56,24 @@ if (!SYMBOL.test(partial)) {
 }
 
 let coins = null;
+let stale = null;
+let fetched = false;
 try {
   const cached = JSON.parse(readFileSync(CACHE_FILE, "utf8"));
-  if (Date.now() - cached.at < CACHE_MS && Array.isArray(cached.coins)) coins = cached.coins;
+  if (Array.isArray(cached.coins)) {
+    if (Date.now() - cached.at < CACHE_MS) coins = cached.coins;
+    else stale = cached.coins;
+  }
 } catch {}
+
+// A refused or failed refresh answers from the list on disk, however old.
+function fail(message) {
+  if (stale == null) {
+    console.error(message);
+    process.exit(1);
+  }
+  return stale;
+}
 
 if (coins == null) {
   try {
@@ -67,20 +82,22 @@ if (coins == null) {
       // the next keystroke.
       signal: AbortSignal.timeout(2_500),
     });
-    if (!response.ok) {
-      console.error(`CoinGecko answered ${response.status}.`);
-      process.exit(1);
+    if (response.ok) {
+      const body = await response.json();
+      coins = (Array.isArray(body) ? body : []).map((c) => ({
+        symbol: String(c.symbol ?? "").toLowerCase(),
+        name: String(c.name ?? ""),
+        rank: Number.isInteger(c.market_cap_rank) ? c.market_cap_rank : null,
+      }));
+      fetched = true;
+    } else {
+      coins = fail(`CoinGecko answered ${response.status}.`);
     }
-    const body = await response.json();
-    coins = (Array.isArray(body) ? body : []).map((c) => ({
-      symbol: String(c.symbol ?? "").toLowerCase(),
-      name: String(c.name ?? ""),
-      rank: Number.isInteger(c.market_cap_rank) ? c.market_cap_rank : null,
-    }));
   } catch (error) {
-    console.error(`Could not reach CoinGecko: ${error?.cause?.code ?? error?.name ?? error}.`);
-    process.exit(1);
+    coins = fail(`Could not reach CoinGecko: ${error?.cause?.code ?? error?.name ?? error}.`);
   }
+}
+if (fetched) {
   try {
     mkdirSync(CACHE_DIR, { recursive: true });
     const temp = `${CACHE_FILE}.${process.pid}`;
