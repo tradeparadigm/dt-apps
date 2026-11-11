@@ -12,3 +12,6 @@ command-arg-mode: raw
 
 `/ticker <symbol> [symbol ...]` prints each coin's USD price and 24 hour change.
 openclaw runs `scripts/command.mjs` directly, with no model turn.
+
+As the user types after `/ticker `, the terminal runs `scripts/lookup.mjs` with
+what they typed and shows the coins it prints as suggestions.

@@ -5,7 +5,7 @@
 schema_version: 1
 
 id: market-data
-version: 0.1.0
+version: 0.2.0
 name: Market Data
 blurb: Live crypto prices from slash commands, with no model turn.
 
@@ -17,6 +17,7 @@ description: |
   chat without using your model.
 
   Type `/ticker btc eth` to get each coin's USD price and 24 hour change.
+  As you type a symbol, the terminal suggests the coins it could be.
 
   `/ticker` reads CoinGecko's public API. It works with no key, but keyless
   calls share a rate limit with everyone on the same network. Add a free
