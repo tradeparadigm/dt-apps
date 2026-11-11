@@ -1,17 +1,19 @@
 // /ticker's suggestions: the coins that complete the last symbol typed.
 // The terminal runs this through app_command.lookup as the user types and shows
 // each row it prints; picking one runs /ticker with that symbol added.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SYMBOL, symbolWords } from "./symbols.mjs";
 
-const API = "https://api.coingecko.com/api/v3/search";
+// The top 250 coins by market cap, read once and matched locally, so typing
+// makes no call: keyless calls share CoinGecko's per-IP limit with every agent
+// behind the same NAT, and /ticker's own price call spends it too.
+const API = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1";
 const MAX_ROWS = 10;
-// Keyless calls share CoinGecko's per-IP limit with every agent behind the same
-// NAT, so one answer serves every keystroke that asks it again for five minutes.
 const CACHE_MS = 5 * 60_000;
 const CACHE_DIR = join(tmpdir(), "market-data-ticker-lookup");
-const SYMBOL = /^[a-z0-9]+$/;
+const CACHE_FILE = join(CACHE_DIR, "markets.json");
 const MAJORS = [
   ["btc", "Bitcoin"],
   ["eth", "Ethereum"],
@@ -23,9 +25,9 @@ const MAJORS = [
   ["ada", "Cardano"],
 ];
 
-const typed = (process.argv[2] ?? "").toLowerCase().replace(/,/g, " ");
-const words = typed.split(/\s+/).filter(Boolean).map((word) => word.replace(/^\$/, ""));
-const partial = /\s$/.test(typed) || words.length === 0 ? "" : words.pop();
+const typed = process.argv[2] ?? "";
+const words = symbolWords(typed);
+const partial = /[\s,]$/.test(typed) || words.length === 0 ? "" : words.pop();
 const kept = words.filter((word) => SYMBOL.test(word));
 
 function row(symbol, name, rank) {
@@ -52,25 +54,25 @@ if (!SYMBOL.test(partial)) {
   process.exit(0);
 }
 
-const cacheFile = join(CACHE_DIR, `${partial}.json`);
 let coins = null;
 try {
-  const cached = JSON.parse(readFileSync(cacheFile, "utf8"));
-  if (Date.now() - cached.at < CACHE_MS) coins = cached.coins;
+  const cached = JSON.parse(readFileSync(CACHE_FILE, "utf8"));
+  if (Date.now() - cached.at < CACHE_MS && Array.isArray(cached.coins)) coins = cached.coins;
 } catch {}
 
 if (coins == null) {
   try {
-    const response = await fetch(`${API}?${new URLSearchParams({ query: partial })}`, {
+    const response = await fetch(API, {
       // Longer than the terminal waits: a slow answer still fills the cache for
-      // the next keystroke that asks the same thing.
+      // the next keystroke.
       signal: AbortSignal.timeout(2_500),
     });
     if (!response.ok) {
       console.error(`CoinGecko answered ${response.status}.`);
       process.exit(1);
     }
-    coins = ((await response.json())?.coins ?? []).map((c) => ({
+    const body = await response.json();
+    coins = (Array.isArray(body) ? body : []).map((c) => ({
       symbol: String(c.symbol ?? "").toLowerCase(),
       name: String(c.name ?? ""),
       rank: Number.isInteger(c.market_cap_rank) ? c.market_cap_rank : null,
@@ -81,19 +83,20 @@ if (coins == null) {
   }
   try {
     mkdirSync(CACHE_DIR, { recursive: true });
-    writeFileSync(cacheFile, JSON.stringify({ at: Date.now(), coins }));
+    const temp = `${CACHE_FILE}.${process.pid}`;
+    writeFileSync(temp, JSON.stringify({ at: Date.now(), coins }));
+    renameSync(temp, CACHE_FILE);
   } catch {}
 }
 
-// A symbol that starts with what was typed first, then a name that does, each
-// in CoinGecko's order (by market cap), then the rest. /ticker prices a coin by
-// its symbol, so one that cannot be typed as one is left out, and so is a
-// second coin with a symbol already listed.
+// A symbol that starts with what was typed, then a name that does, each by
+// market cap. /ticker prices a coin by its symbol, so one that cannot be typed
+// as one is left out, and so is a second coin with a symbol already listed.
 const order = (c) => (c.symbol.startsWith(partial) ? 0 : c.name.toLowerCase().startsWith(partial) ? 1 : 2);
 const seen = new Set();
 const rows = coins
   .map((c, i) => ({ ...c, i }))
-  .filter((c) => SYMBOL.test(c.symbol) && !seen.has(c.symbol) && seen.add(c.symbol))
+  .filter((c) => order(c) < 2 && SYMBOL.test(c.symbol) && !seen.has(c.symbol) && seen.add(c.symbol))
   .sort((a, b) => order(a) - order(b) || a.i - b.i)
   .map((c) => row(c.symbol, c.name, c.rank));
 print(rows);

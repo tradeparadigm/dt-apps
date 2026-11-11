@@ -14,4 +14,5 @@ command-arg-mode: raw
 openclaw runs `scripts/command.mjs` directly, with no model turn.
 
 As the user types after `/ticker `, the terminal runs `scripts/lookup.mjs` with
-what they typed and shows the coins it prints as suggestions.
+what they typed and shows the coins it prints as suggestions. It matches them
+against CoinGecko's top 250 coins by market cap, read at most every five minutes.

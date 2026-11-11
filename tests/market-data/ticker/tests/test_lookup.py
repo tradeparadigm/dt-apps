@@ -27,15 +27,16 @@ globalThis.fetch = async (url) => {
 };
 """
 
-# CoinGecko's /search answer for "et", trimmed: ordered by market cap.
-ET = {"coins": [
-    {"symbol": "USDT", "name": "Tether", "market_cap_rank": 3},
-    {"symbol": "ETH", "name": "Ethereum", "market_cap_rank": 2},
-    {"symbol": "XAUT", "name": "Ethena Gold", "market_cap_rank": 30},
-    {"symbol": "ETC", "name": "Ethereum Classic", "market_cap_rank": 40},
-    {"symbol": "ETH", "name": "Bridged Ether", "market_cap_rank": None},
-    {"symbol": "ET.H", "name": "Dotted", "market_cap_rank": 900},
-]}
+# CoinGecko's /coins/markets answer, trimmed: ordered by market cap.
+MARKETS = [
+    {"symbol": "btc", "name": "Bitcoin", "market_cap_rank": 1},
+    {"symbol": "eth", "name": "Ethereum", "market_cap_rank": 2},
+    {"symbol": "usdt", "name": "Tether", "market_cap_rank": 3},
+    {"symbol": "xaut", "name": "Ethena Gold", "market_cap_rank": 30},
+    {"symbol": "etc", "name": "Ethereum Classic", "market_cap_rank": 40},
+    {"symbol": "eth", "name": "Bridged Ether", "market_cap_rank": 90},
+    {"symbol": "et.h", "name": "Etched", "market_cap_rank": 200},
+]
 
 passed = 0
 failed = []
@@ -68,22 +69,28 @@ with tempfile.TemporaryDirectory() as cache:
     code, rows, _, urls = lookup("btc ", cache)
     check("after a symbol and a space, the majors add to it", urls == [] and rows[0]["run"] == "/ticker btc eth" and all(r["id"] != "btc" for r in rows))
 
-    code, rows, _, urls = lookup("btc et", cache, body=ET)
-    check("the last word is searched", len(urls) == 1 and urls[0].endswith("/search?query=et"))
-    check("a symbol that starts with it comes first, then a name, then the rest",
-          [r["id"] for r in rows] == ["eth", "etc", "xaut", "usdt"])
+    code, rows, _, urls = lookup("btc et", cache, body=MARKETS)
+    check("one call reads the top coins by market cap", len(urls) == 1 and "/coins/markets?" in urls[0] and "per_page=250" in urls[0])
+    check("a symbol that starts with it comes first, then a name, each by market cap",
+          [r["id"] for r in rows] == ["eth", "etc", "xaut"])
     check("a row runs /ticker with the symbols already typed",
           rows[0] == {"id": "eth", "lead": {"text": "ETH", "tone": "accent"}, "main": "Ethereum",
                       "trail": {"text": "#2", "tone": "muted"}, "run": "/ticker btc eth"})
 
-    code, rows, _, urls = lookup("$ET", cache, body={"coins": []})
-    check("the same search within five minutes answers from the cache", urls == [] and [r["id"] for r in rows][:2] == ["eth", "etc"])
+    code, rows, _, urls = lookup("$ET", cache, body=[])
+    check("within five minutes the list answers from the cache", urls == [] and [r["id"] for r in rows][:2] == ["eth", "etc"])
 
-    entry = pathlib.Path(cache, "market-data-ticker-lookup", "et.json")
+    code, rows, _, urls = lookup("u", cache, body=[])
+    check("another word typed makes no call either", urls == [] and [r["id"] for r in rows] == ["usdt"])
+
+    code, rows, _, urls = lookup("btc,et", cache, body=[])
+    check("a comma separates symbols as /ticker reads them", urls == [] and rows[0]["run"] == "/ticker btc eth")
+
+    entry = pathlib.Path(cache, "market-data-ticker-lookup", "markets.json")
     stale = json.loads(entry.read_text())
     stale["at"] = int(time.time() * 1000) - 6 * 60_000
     entry.write_text(json.dumps(stale))
-    code, rows, _, urls = lookup("et", cache, body={"coins": [{"symbol": "ETH", "name": "Ethereum", "market_cap_rank": 2}]})
+    code, rows, _, urls = lookup("et", cache, body=[{"symbol": "eth", "name": "Ethereum", "market_cap_rank": 2}])
     check("a cached answer older than five minutes is asked again", len(urls) == 1 and [r["id"] for r in rows] == ["eth"])
 
     code, rows, _, urls = lookup("eth et", cache)
@@ -92,9 +99,11 @@ with tempfile.TemporaryDirectory() as cache:
     code, rows, _, urls = lookup("eth/usd", cache)
     check("a word /ticker would refuse searches nothing", code == 0 and rows == [] and urls == [])
 
+
+with tempfile.TemporaryDirectory() as cache:
     code, _, errors, _ = lookup("so", cache, status=429)
     check("a refusal is one line and no rows", code == 1 and errors == ["CoinGecko answered 429."])
-    check("a refusal is not cached", not pathlib.Path(cache, "market-data-ticker-lookup", "so.json").exists())
+    check("a refusal is not cached", not pathlib.Path(cache, "market-data-ticker-lookup", "markets.json").exists())
 
     code, _, errors, _ = lookup("so", cache, throw="ENOTFOUND")
     check("a network failure is one line", code == 1 and errors == ["Could not reach CoinGecko: ENOTFOUND."])

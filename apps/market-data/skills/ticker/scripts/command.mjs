@@ -1,21 +1,15 @@
 // /ticker: prints USD price and 24 hour change for each symbol, from CoinGecko.
 // The app_command tool passes everything the user typed as one argument.
+import { SYMBOL, symbolWords } from "./symbols.mjs";
+
 const API = "https://api.coingecko.com/api/v3/simple/price";
 
-const symbols = [
-  ...new Set(
-    (process.argv[2] ?? "")
-      .toLowerCase()
-      .split(/[\s,]+/)
-      .map((symbol) => symbol.replace(/^\$/, ""))
-      .filter(Boolean),
-  ),
-];
+const symbols = [...new Set(symbolWords(process.argv[2]))];
 if (symbols.length === 0) {
   console.log("Usage: /ticker <symbol> [symbol ...]");
   process.exit(0);
 }
-if (!symbols.every((symbol) => /^[a-z0-9]+$/.test(symbol))) {
+if (!symbols.every((symbol) => SYMBOL.test(symbol))) {
   console.error("A symbol can hold only letters and digits. Type the coin's symbol, like btc.");
   process.exit(1);
 }
