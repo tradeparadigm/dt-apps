@@ -549,6 +549,58 @@ class TestSeveralSkills(unittest.TestCase):
         self.assertIn("no skills/", out)
 
 
+class TestCommandNames(unittest.TestCase):
+    """openclaw makes every skill a slash command, so its name must be free."""
+
+    def test_a_builtin_command_name_is_refused(self):
+        code, out = check(extra={"apps/example/skills/status/SKILL.md": skill_md("status")})
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("/status is already a command", out)
+
+    def test_a_name_openclaw_turns_into_a_plugin_command_is_refused(self):
+        code, out = check(
+            extra={"apps/example/skills/paradex-analyze/SKILL.md": skill_md("paradex-analyze")}
+        )
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("/paradex_analyze is already a command", out)
+
+    def test_a_skill_that_is_not_a_command_may_take_the_name(self):
+        md = skill_md("status").replace("---\n\n", "user-invocable: false\n---\n\n")
+        code, out = check(extra={"apps/example/skills/status/SKILL.md": md})
+        self.assertEqual(code, 0, out)
+
+    def test_two_skills_cut_to_the_same_command_are_refused(self):
+        a, b = "example-" + "x" * 24 + "-one", "example-" + "x" * 24 + "-two"
+        code, out = check(
+            extra={f"apps/example/skills/{n}/SKILL.md": skill_md(n) for n in (a, b)}
+        )
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("is also the command of", out)
+
+
+class TestAppCommand(unittest.TestCase):
+    MD = (
+        "---\nname: example-cmd\ndescription: A command.\n"
+        "command-dispatch: tool\ncommand-tool: {tool}\n---\n\nBody.\n"
+    )
+    SKILL = "apps/example/skills/example-cmd/SKILL.md"
+    SCRIPT = "apps/example/skills/example-cmd/scripts/command.mjs"
+
+    def test_a_command_skill_with_its_script_is_accepted(self):
+        code, out = check(extra={self.SKILL: self.MD.format(tool="app_command"), self.SCRIPT: ""})
+        self.assertEqual(code, 0, out)
+
+    def test_a_command_skill_without_its_script_is_refused(self):
+        code, out = check(extra={self.SKILL: self.MD.format(tool="app_command")})
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("ships scripts/command.mjs", out)
+
+    def test_another_tool_is_refused(self):
+        code, out = check(extra={self.SKILL: self.MD.format(tool="exec"), self.SCRIPT: ""})
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("command-tool: app_command", out)
+
+
 class TestDefaultInstall(unittest.TestCase):
     """A key the consumer knows, so the checker has to know it too.
 

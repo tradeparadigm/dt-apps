@@ -85,6 +85,16 @@ What is checked, in each case because the consumer refuses the app without it:
     place this can be settled for everyone is here, in the pull request that
     introduces it.
 
+  * A skill's slash command takes no name openclaw or our plugins already
+    use, and no other skill's. openclaw makes every skill a command unless it
+    sets `user-invocable: false`. It renames a command that meets a built-in
+    (`/status_2`), and a skill's command that meets a plugin's wins over it.
+
+  * A skill that runs its command without the model (`command-dispatch:
+    tool`) names `command-tool: app_command`, the one tool DIME Terminal's
+    agent has for it, and ships scripts/command.mjs, which that tool runs.
+    openclaw answers any other tool with "Tool not available".
+
   * A datafeed suggestion, skills/<skill>/datafeeds/<name>/DATAFEED.md, has a
     name DIME Terminal can give a data feed, and frontmatter of one-line
     `name`, `title`, `description` and optional `needs`, with `name` equal to
@@ -160,6 +170,26 @@ HELPER_RE = re.compile(
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
 DETAIL_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9_]{0,62}[a-z0-9]$|^[a-z0-9]$")
+
+# openclaw 2026.9.6's built-in commands and aliases, as /commands lists them,
+# with the commands of the plugins its image loads (bundled, then ours).
+APP_COMMAND_TOOL = "app_command"
+RESERVED_COMMANDS = frozenset("""
+    acp activation agents allowlist approve btw commands compact context
+    dashboard diagnostics elev elevated exec export export_session
+    export_trajectory fast goal help id learn login loop model models name new
+    openclaw queue reason reasoning reset restart send session side skill status
+    steer stop subagents t tasks tell think thinking tools trace trajectory tts
+    update usage v verbose whoami
+    dreaming pair voice
+    analyze paradex_analyze
+""".split())
+
+
+def command_name(skill: str) -> str:
+    """The slash command openclaw makes of a skill name (sanitizeSkillCommandName)."""
+    return re.sub(r"^_+|_+$", "", re.sub(r"_+", "_", re.sub(r"[^a-z0-9_]+", "_", skill.lower())))[:32] or "skill"
+
 
 # The closed vocabulary, mirrored from pkg/datastore in DIME Terminal. A value
 # outside it is not a feature request: the proxy dispatches on these strings
@@ -832,6 +862,17 @@ def frontmatter(md: str) -> dict[str, str]:
     return got if isinstance(got, dict) else {}
 
 
+def check_app_command(entry: Path, fm: dict, failures: list[str]) -> None:
+    if fm.get("command-dispatch") != "tool" and "command-tool" not in fm:
+        return
+    if fm.get("command-dispatch") != "tool" or fm.get("command-tool") != APP_COMMAND_TOOL:
+        failures.append(
+            f"{entry}: a command skill sets command-dispatch: tool and command-tool: {APP_COMMAND_TOOL}"
+        )
+    if not (entry.parent / "scripts" / "command.mjs").is_file():
+        failures.append(f"{entry}: a command skill ships scripts/command.mjs")
+
+
 def check_datafeeds(app: str, skill_dir: Path, seen: dict[str, Path], failures: list[str]) -> None:
     """Each datafeed suggestion in one skill, and its name unique within the app."""
     base = skill_dir / DATAFEED_DIR
@@ -1139,6 +1180,7 @@ def main() -> int:
         return 1
 
     claims: dict[str, str] = {}
+    commands: dict[str, str] = {}
     for app in apps:
         suggested: dict[str, Path] = {}
         adapters: dict[str, Path] = {}
@@ -1184,8 +1226,19 @@ def main() -> int:
                 failures.append(
                     f"{entry}: frontmatter name is {fm.get('name')!r}, directory is {name!r}"
                 )
+            if str(fm.get("user-invocable", "true")).strip().lower() != "false":
+                cmd = command_name(name)
+                if cmd in RESERVED_COMMANDS:
+                    failures.append(
+                        f"{entry}: /{cmd} is already a command of openclaw or one of our plugins; "
+                        "rename the skill, or set user-invocable: false"
+                    )
+                elif cmd in commands and commands[cmd] != f"{app.name}/{name}":
+                    failures.append(f"{entry}: /{cmd} is also the command of {commands[cmd]}")
+                commands.setdefault(cmd, f"{app.name}/{name}")
             if not str(fm.get("description") or "").strip():
                 failures.append(f"{entry}: frontmatter has no description")
+            check_app_command(entry, fm, failures)
 
             files = [p for p in d.rglob("*") if p.is_file()]
             if "sign" in modes:
