@@ -26,8 +26,8 @@ MANIFEST = "apps/example/app.yaml"
 SKILL = "apps/example/skills/example-api/SKILL.md"
 
 
-def skill_md(name: str) -> str:
-    return f"---\nname: {name}\ndescription: What this skill is for.\n---\n\nBody.\n"
+def skill_md(name: str, extra: str = "") -> str:
+    return f"---\nname: {name}\ndescription: What this skill is for.\n{extra}---\n\nBody.\n"
 
 
 def check(edit=None, skill=None, extra=None, remove=None) -> tuple[int, str]:
@@ -565,24 +565,48 @@ class TestCommandNames(unittest.TestCase):
         self.assertIn("/paradex_analyze is already a command", out)
 
     def test_a_skill_that_is_not_a_command_may_take_the_name(self):
-        md = skill_md("status").replace("---\n\n", "user-invocable: false\n---\n\n")
+        md = skill_md("status", "user-invocable: false\n")
         code, out = check(extra={"apps/example/skills/status/SKILL.md": md})
         self.assertEqual(code, 0, out)
 
+    def test_a_command_openclaw_registers_off_by_default_is_refused(self):
+        code, out = check(extra={"apps/example/skills/mcp/SKILL.md": skill_md("mcp")})
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("/mcp is already a command", out)
+
+    def test_a_trailing_hyphen_does_not_free_a_command(self):
+        code, out = check(extra={"apps/example/skills/status-/SKILL.md": skill_md("status-")})
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("/status is already a command", out)
+
+    def test_a_skill_the_image_ships_is_refused(self):
+        code, out = check(extra={"apps/example/skills/artifacts/SKILL.md": skill_md("artifacts")})
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("a skill the agent image ships", out)
+
+    def test_one_skill_name_in_two_apps_is_one_failure(self):
+        code, out = check(extra={"apps/other/app.yaml": "", "apps/other/skills/example-api/SKILL.md": skill_md("example-api")})
+        self.assertIn("already claimed by", out)
+        self.assertNotIn("is also the command of", out)
+
+    def skills(self, *names):
+        return {f"apps/example/skills/{n}/SKILL.md": skill_md(n) for n in names}
+
     def test_two_skills_cut_to_the_same_command_are_refused(self):
-        a, b = "example-" + "x" * 24 + "-one", "example-" + "x" * 24 + "-two"
-        code, out = check(
-            extra={f"apps/example/skills/{n}/SKILL.md": skill_md(n) for n in (a, b)}
-        )
+        # openclaw keeps 32 characters, so these differ only past the cut.
+        stem = "example-" + "x" * 24
+        code, out = check(extra=self.skills(stem + "a", stem + "b"))
         self.assertNotEqual(code, 0, out)
         self.assertIn("is also the command of", out)
 
+    def test_two_skills_that_differ_inside_the_cut_are_accepted(self):
+        stem = "example-" + "x" * 23
+        code, out = check(extra=self.skills(stem + "a", stem + "b"))
+        self.assertEqual(code, 0, out)
+
 
 class TestAppCommand(unittest.TestCase):
-    MD = (
-        "---\nname: example-cmd\ndescription: A command.\n"
-        "command-dispatch: tool\ncommand-tool: {tool}\n---\n\nBody.\n"
-    )
+    MD = skill_md("example-cmd", "command-dispatch: tool\ncommand-tool: {tool}\n")
     SKILL = "apps/example/skills/example-cmd/SKILL.md"
     SCRIPT = "apps/example/skills/example-cmd/scripts/command.mjs"
 

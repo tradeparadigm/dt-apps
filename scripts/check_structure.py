@@ -171,9 +171,11 @@ NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
 DETAIL_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9_]{0,62}[a-z0-9]$|^[a-z0-9]$")
 
-# openclaw 2026.9.6's built-in commands and aliases, as /commands lists them,
-# with the commands of the plugins its image loads (bundled, then ours).
 APP_COMMAND_TOOL = "app_command"
+
+# openclaw 2026.9.6's built-in commands and aliases, the ones it registers off
+# by default included, with the commands of the plugins its image loads
+# (bundled, then ours).
 RESERVED_COMMANDS = frozenset("""
     acp activation agents allowlist approve btw commands compact context
     dashboard diagnostics elev elevated exec export export_session
@@ -181,9 +183,14 @@ RESERVED_COMMANDS = frozenset("""
     openclaw queue reason reasoning reset restart send session side skill status
     steer stop subagents t tasks tell think thinking tools trace trajectory tts
     update usage v verbose whoami
+    bash config debug mcp plugin plugins
     dreaming pair voice
     analyze paradex_analyze
 """.split())
+
+# Skills DIME Terminal's agent image ships. openclaw loads the image's copy in
+# place of an app skill with the same name.
+IMAGE_SKILLS = frozenset({"artifacts", "notification-feed"})
 
 
 def command_name(skill: str) -> str:
@@ -1213,7 +1220,12 @@ def main() -> int:
                     "openclaw resolves a collision by precedence, so one of them would "
                     "silently never load"
                 )
-            claims[name] = app.name
+            claims.setdefault(name, app.name)
+            if name in IMAGE_SKILLS:
+                failures.append(
+                    f"{app}: skill name {name!r} is a skill the agent image ships, "
+                    "which openclaw loads in its place"
+                )
             if not NAME_RE.match(name):
                 failures.append(f"{app}: {name!r} is not a usable skill name")
             d = skills_dir / name
@@ -1233,7 +1245,7 @@ def main() -> int:
                         f"{entry}: /{cmd} is already a command of openclaw or one of our plugins; "
                         "rename the skill, or set user-invocable: false"
                     )
-                elif cmd in commands and commands[cmd] != f"{app.name}/{name}":
+                elif cmd in commands and claims[name] == app.name:
                     failures.append(f"{entry}: /{cmd} is also the command of {commands[cmd]}")
                 commands.setdefault(cmd, f"{app.name}/{name}")
             if not str(fm.get("description") or "").strip():
