@@ -156,6 +156,16 @@ those is rejected.
 base coin. `ctVal` on the instrument says how much one contract is worth. This
 catches people out — "buy 1 BTC-USDT-SWAP" is one contract, not one bitcoin.
 
+## The user's positions, already fetched
+
+Where the posman skill tracks an OKX account, its positions, open and stop
+orders, balances and account summary are already on disk, refreshed on an
+interval: read them with `posman.mjs show` (one call, every venue) before
+calling the account endpoints below. Read them fresh before sizing or placing
+an order. To track an account, posman's adapter for OKX is `okx/account`
+(`posman/account/` in this skill's folder; its POSMAN.md says how to read
+each field), with the secret key credential.
+
 ## Account state (signed)
 
 ```
