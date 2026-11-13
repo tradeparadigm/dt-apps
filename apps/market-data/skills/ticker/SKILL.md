@@ -21,9 +21,11 @@ is read live on each run.
 - `/ticker btc` shows one coin: price, its change today, market cap and
   volume, 30 days of price, 7d to 1y change, its high over the last year, supply, when it
   launched, a line about it with its links, and for a token its contract
-  check. Where DefiLlama tracks the coin it adds on-chain figures from
-  DefiLlama's free API: for a chain its TVL, stablecoins, DEX volume,
-  fees, revenue and market cap over revenue; for a protocol its TVL, fees, revenue and market cap over revenue;
+  check, and up to five headlines from the last two days from Google News'
+  RSS search for its name and symbol. Where DefiLlama tracks the coin it adds
+  on-chain figures from DefiLlama's free API: for a chain its TVL,
+  stablecoins, DEX volume, fees, revenue and market cap over revenue; for a
+  protocol its TVL, fees, revenue and market cap over revenue;
   for a stablecoin its supply and chains. Which chain, protocol or
   stablecoin a coin is comes from DefiLlama's index, read at most once a
   day.

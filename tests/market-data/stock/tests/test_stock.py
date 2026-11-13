@@ -27,6 +27,10 @@ const now = Date.parse(process.env.NOW);
 Date.now = () => now;
 globalThis.fetch = async (url, init = {}) => {
   const u = new URL(url);
+  if (u.hostname === "news.google.com") {
+    console.error("URL " + JSON.stringify({ key: "news", query: u.searchParams.get("q"), agent: null }));
+    return new Response(process.env.NEWS ?? "", { status: process.env.NEWS ? 200 : 404 });
+  }
   let key = u.hostname + u.pathname;
   if (u.hostname === "api.hyperliquid.xyz") {
     const body = JSON.parse(init.body);
@@ -54,12 +58,12 @@ def check(name, cond):
         failed.append(name)
 
 
-def run(script, typed, refused=(), answers=ANSWERS, cache=None):
+def run(script, typed, refused=(), answers=ANSWERS, cache=None, news=None):
     result = subprocess.run(
         ["node", "--import", "data:text/javascript," + quote(STUB), str(SCRIPTS / script), typed],
         capture_output=True, text=True, timeout=30,
         env={"PATH": "/usr/bin:/bin:/usr/local/bin", "TMPDIR": cache or tempfile.mkdtemp(), "NOW": NOW,
-             "ANSWERS": json.dumps(answers), "REFUSED": json.dumps(list(refused))},
+             "ANSWERS": json.dumps(answers), "REFUSED": json.dumps(list(refused)), **({"NEWS": news} if news else {})},
     )
     calls = [json.loads(line[4:]) for line in result.stderr.splitlines() if line.startswith("URL ")]
     errors = [line for line in result.stderr.splitlines() if not line.startswith("URL ")]
@@ -79,8 +83,11 @@ FULL = sorted([
 # One company in full
 code, out, calls, _ = run("command.mjs", "msft")
 line, spec = split(out)
-check("one company reads its list, its SEC record and figures, Wikidata, the perp, its daily and its hourly closes", keys(calls) == FULL)
-check("every request names the client", all(c["agent"] for c in calls))
+check("one company reads its list, its SEC record and figures, Wikidata, the perp, its daily and its hourly closes, and its news",
+      keys(calls) == sorted(FULL + ["news"]))
+check("every request to the SEC, Wikidata and Hyperliquid names the client", all(c["agent"] for c in calls if c["key"] != "news"))
+check("the news is searched by the company's name as people write it, and its ticker",
+      next(c["query"] for c in calls if c["key"] == "news") == '"Microsoft" MSFT when:2d')
 check("the line reads on a host without components", line == "Microsoft (MSFT) · $517.51 perp · +0.40% Thu · −1.02% since close · CEO Satya Nadella")
 check("the last session is 4pm New York close to close, Wed $520.72 to Thu $522.82, and the perp moves on from Thu's close",
       values(spec, "metric_card") == {"MSFT · perp": "$517.51", "Thu session": "+0.40%", "Since Thu close": "−1.02%",
@@ -106,6 +113,24 @@ check("an insider trade is named as one", any(l.startswith("- [4](") and "Inside
 check("the sources are linked", markdown[2] == "Sources: [SEC filings](https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=789019) · [Wikidata](http://www.wikidata.org/entity/Q2283)")
 check("a listed perp has no banner", by(spec, "alert_banner") == [])
 check("the company's spec is drawable", code == 0 and valid(spec))
+
+FEED = ("<rss><channel><item><title>Microsoft says Teams outage is fixed - Reuters</title>"
+        "<link>https://news.google.com/rss/articles/abc</link><pubDate>Fri, 13 Nov 2026 10:00:00 GMT</pubDate>"
+        "<source url=\"https://www.reuters.com\">Reuters</source></item></channel></rss>")
+_, out, _, _ = run("command.mjs", "msft", news=FEED)
+md = [p["content"] for p in by(split(out)[1], "markdown")]
+check("the company's news follows its board, before its filings",
+      [m[:10] for m in md] == ["**Board**:", "**News** ·", "**Recent f", "Sources: ["]
+      and "- [Microsoft says Teams outage is fixed](https://news.google.com/rss/articles/abc) · Reuters · 2h" in md[1])
+
+names = subprocess.run(["node", "--input-type=module", "-e",
+    f"import {{ plainName }} from {json.dumps((SCRIPTS / 'view.mjs').as_uri())};"
+    "console.log(JSON.stringify(['MICROSOFT CORP', 'Meta Platforms, Inc.', 'ASML HOLDING NV', 'Coinbase Global, Inc.', 'BERKSHIRE HATHAWAY INC /DE/', 'ELI LILLY & Co', 'MERCK & CO., INC.', 'WELLS FARGO & COMPANY/MN', "
+    "'Arthur J. Gallagher & Co.', 'AbbVie Inc.', 'PROCTER & GAMBLE Co', 'Stran & Company, Inc.'].map(plainName)))"],
+    capture_output=True, text=True).stdout
+check("a company's SEC name loses its legal form but keeps \"& Co\", and capitals become a name",
+      json.loads(names) == ["Microsoft", "Meta Platforms", "Asml", "Coinbase Global", "Berkshire Hathaway", "Eli Lilly & Co", "Merck & Co",
+                        "Wells Fargo & Co", "Arthur J. Gallagher & Co", "AbbVie", "Procter & Gamble", "Stran & Co"])
 
 # What the user typed
 code, out, calls, _ = run("command.mjs", "")
