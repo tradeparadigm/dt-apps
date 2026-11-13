@@ -101,6 +101,9 @@ export function stockCard({ company, filed, figures, who, market, history }) {
   if (market === false) {
     children.push({ component: "alert_banner", props: { variant: "info", message: `trade.xyz lists no perp on ${symbol}, so there is no live price.` } });
   }
+  if (market === null) {
+    children.push({ component: "alert_banner", props: { variant: "warning", message: "The live price could not be read from Hyperliquid. Try again in a minute." } });
+  }
 
   const line = joined(
     `${name} (${symbol})`,

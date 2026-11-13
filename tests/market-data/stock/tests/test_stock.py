@@ -142,8 +142,9 @@ check("a stock trade.xyz lists no perp on says so", by(spec, "alert_banner") == 
 
 code, out, _, _ = run("command.mjs", "msft", refused=["api.hyperliquid.xyz/info#metaAndAssetCtxs"])
 line, spec = split(out)
-check("with Hyperliquid unreadable there is no price and no banner claiming no perp",
-      by(spec, "metric_card") == [] and by(spec, "alert_banner") == [] and "Perp volume, 24h" not in values(spec, "labeled_output")
+check("with Hyperliquid unreadable there is no price, and a warning says it could not be read",
+      by(spec, "metric_card") == [] and by(spec, "alert_banner") == [
+          {"variant": "warning", "message": "The live price could not be read from Hyperliquid. Try again in a minute."}] and "Perp volume, 24h" not in values(spec, "labeled_output")
       and values(spec, "labeled_output").get("Revenue, FY2026") == "$332B")
 
 code, out, _, _ = run("command.mjs", "msft", refused=["query.wikidata.org/sparql"])
