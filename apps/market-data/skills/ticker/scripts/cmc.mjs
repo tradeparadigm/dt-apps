@@ -7,9 +7,11 @@ import { readList, writeList } from "./cache.mjs";
 const JEV_ROUTE = /\/api\/jev$/;
 // The coin directory holds names, symbols and ranks, never a price.
 const DIRECTORY_MS = 24 * 3_600_000;
-// A 404 is a sidecar from before the relay, or a LiteLLM with no CoinMarketCap
-// route: nothing to retry.
-let absent = false;
+// The read each view stands on. A 404 there is a sidecar from before the
+// relay, or a LiteLLM with no CoinMarketCap route: nothing to retry.
+export const MARKET_PATH = "v1/global-metrics/quotes/latest";
+export const QUOTES_PATH = "v3/cryptocurrency/quotes/latest";
+const notFound = new Set();
 
 export function relayURL(env, path) {
   const jev = env.TERMINAL_JEV_URL;
@@ -24,16 +26,16 @@ export async function get(env, path, params = {}, timeoutMs = 10_000) {
   const query = new URLSearchParams(params).toString();
   try {
     const response = await fetch(query ? `${base}?${query}` : base, { signal: AbortSignal.timeout(timeoutMs) });
-    if (response.status === 404) absent = true;
+    if (response.status === 404) notFound.add(path);
     return response.ok ? await response.json() : null;
   } catch {
     return null;
   }
 }
 
-/** True when this agent has no relay, or a call through it found no route. */
-export function relayAbsent(env) {
-  return absent || relayURL(env, "") == null;
+/** True when this agent has no relay, or the relay had no route for `path`. */
+export function relayAbsent(env, path) {
+  return relayURL(env, "") == null || notFound.has(path);
 }
 
 /** A quote's USD figures: v3 latest sends a list of conversions, historical a map. */
@@ -47,7 +49,7 @@ export function usd(quote) {
  * lower case, or null when the relay could not answer.
  */
 export async function cmcQuotes(symbols, env) {
-  const body = await get(env, "v3/cryptocurrency/quotes/latest", {
+  const body = await get(env, QUOTES_PATH, {
     symbol: symbols.map((s) => s.toUpperCase()).join(","),
     convert: "USD",
   });

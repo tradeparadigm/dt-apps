@@ -3,7 +3,7 @@
 // performance_chart, markdown, alert_banner), from reads the Basic plan
 // serves. A section whose read fails is left out. Each returns null when its
 // first read fails, for the caller's fallback.
-import { cmcQuotes, get, usd } from "./cmc.mjs";
+import { MARKET_PATH, cmcQuotes, get, usd } from "./cmc.mjs";
 import { count, day, direction, finite, money, pct, price, pts, timeOf } from "./format.mjs";
 
 const ACCENT = "#1bc1cf";
@@ -43,7 +43,7 @@ function season(index) {
 
 export async function market(env) {
   const [global, fear, fearDays, alt, top100, top20] = await Promise.all([
-    get(env, "v1/global-metrics/quotes/latest", { convert: "USD" }),
+    get(env, MARKET_PATH, { convert: "USD" }),
     get(env, "v3/fear-and-greed/latest"),
     get(env, "v3/fear-and-greed/historical", { limit: "30" }),
     get(env, "v1/altcoin-season-index/latest"),

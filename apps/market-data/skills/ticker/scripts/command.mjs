@@ -2,7 +2,7 @@
 // for one, all read live through DIME Terminal's relay. Where the relay cannot
 // answer, prices alone from CoinGecko's public API. The app_command tool
 // passes everything the user typed as one argument.
-import { relayAbsent } from "./cmc.mjs";
+import { MARKET_PATH, QUOTES_PATH, relayAbsent } from "./cmc.mjs";
 import { price as formatPrice, pct } from "./format.mjs";
 import { SYMBOL, symbolWords } from "./symbols.mjs";
 import { coin, coins, market } from "./views.mjs";
@@ -20,7 +20,7 @@ if (view != null) {
   console.log(view);
   process.exit(0);
 }
-const relayed = !relayAbsent(process.env);
+const relayed = !relayAbsent(process.env, symbols.length === 0 ? MARKET_PATH : QUOTES_PATH);
 if (symbols.length === 0) {
   console.error(relayed ? "The market overview could not be read. Try again in a minute." : "The market overview isn't available on this agent. Type /ticker btc for a price.");
   process.exit(1);

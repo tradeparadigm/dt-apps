@@ -17,8 +17,9 @@ STUB = """
 const answers = JSON.parse(process.env.ANSWERS);
 globalThis.fetch = async (url) => {
   console.error("URL " + url);
-  const key = String(url).includes("/api/cmc/") ? "cmc" : "gecko";
-  const answer = answers[key] ?? { status: 404 };
+  const path = String(url).split("/api/cmc/")[1]?.split("?")[0];
+  const key = path === undefined ? "gecko" : "cmc";
+  const answer = answers["cmc:" + path] ?? answers[key] ?? { status: 404 };
   return new Response(JSON.stringify(answer.body ?? {}), { status: answer.status ?? 200 });
 };
 """
@@ -44,7 +45,7 @@ def check(name, cond):
         failed.append(name)
 
 
-def run(script, typed, answers, env_extra=None, tmp=None):
+def run(script, typed, answers, env_extra=None, tmp=None, stderr=False):
     env = {"PATH": "/usr/bin:/bin:/usr/local/bin", "ANSWERS": json.dumps(answers), "TERMINAL_JEV_URL": JEV}
     if tmp:
         env["TMPDIR"] = tmp
@@ -53,6 +54,8 @@ def run(script, typed, answers, env_extra=None, tmp=None):
         ["node", "--import", "data:text/javascript," + STUB, str(SCRIPTS / script), typed],
         capture_output=True, text=True, timeout=30, env=env,
     )
+    if stderr:
+        return result.returncode, result.stdout, result.stderr
     urls = [line[4:] for line in result.stderr.splitlines() if line.startswith("URL ")]
     return result.returncode, result.stdout, urls
 
@@ -67,18 +70,17 @@ for status in (401, 429):
 code, out, urls = run("command.mjs", "btc", {"cmc": {"status": 404}, "gecko": gecko})
 check("a relay 404 falls back to CoinGecko and says more detail isn't available",
       code == 0 and out.splitlines() == ["- BTC $74,000 (+1.00% 24h)", "", "More detail isn't available on this agent."])
-result = subprocess.run(
-    ["node", "--import", "data:text/javascript," + STUB, str(SCRIPTS / "command.mjs"), ""],
-    capture_output=True, text=True, timeout=30,
-    env={"PATH": "/usr/bin:/bin:/usr/local/bin", "ANSWERS": json.dumps({"cmc": {"status": 404}}), "TERMINAL_JEV_URL": JEV},
-)
-check("the market overview on a relay 404 says it isn't available here",
-      result.returncode == 1 and "The market overview isn't available on this agent. Type /ticker btc for a price." in result.stderr)
-code, out, urls = run("command.mjs", "", {"cmc": {"status": 503}})
-check("the market overview on a relay 503 asks to try again", code == 1 and len(urls) > 0)
+UNAVAILABLE = "The market overview isn't available on this agent. Type /ticker btc for a price."
+AGAIN = "The market overview could not be read. Try again in a minute."
+code, _, err = run("command.mjs", "", {"cmc": {"status": 404}}, stderr=True)
+check("the market overview on a relay 404 says it isn't available here", code == 1 and UNAVAILABLE in err)
+code, _, err = run("command.mjs", "", {"cmc": {"status": 503}}, stderr=True)
+check("the market overview on a relay 503 asks to try again", code == 1 and AGAIN in err)
+code, _, err = run("command.mjs", "", {"cmc": {"status": 503}, "cmc:v1/altcoin-season-index/latest": {"status": 404}}, stderr=True)
+check("a 404 on a side read leaves a failed overview a retry", code == 1 and AGAIN in err)
 
 code, out, urls = run("command.mjs", "btc", {"gecko": gecko}, {"TERMINAL_JEV_URL": ""})
-check("no relay URL asks CoinGecko only, and says an update shows more",
+check("no relay URL asks CoinGecko only, and says more detail isn't available",
       code == 0 and len(urls) == 1 and "coingecko" in urls[0] and out.splitlines()[-1] == "More detail isn't available on this agent.")
 
 # Suggestions
