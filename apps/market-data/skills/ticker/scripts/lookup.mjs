@@ -1,9 +1,7 @@
 // /ticker's suggestions: the coins that complete the last symbol typed.
 // The terminal runs this through app_command.lookup as the user types and shows
 // each row it prints; picking one runs /ticker with that symbol added.
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readList, writeList } from "./cache.mjs";
 import { cmcDirectory } from "./cmc.mjs";
 import { SYMBOL, partialWord, symbolWords } from "./symbols.mjs";
 
@@ -13,8 +11,6 @@ import { SYMBOL, partialWord, symbolWords } from "./symbols.mjs";
 const API = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1";
 const MAX_ROWS = 10;
 const CACHE_MS = 5 * 60_000;
-const CACHE_DIR = join(tmpdir(), "market-data-ticker-lookup");
-const CACHE_FILE = join(CACHE_DIR, "markets.json");
 const MAJORS = [
   ["btc", "Bitcoin"],
   ["eth", "Ethereum"],
@@ -79,20 +75,13 @@ if (directory != null) {
   process.exit(0);
 }
 
-let coins = null;
-let stale = null;
+const { fresh, stale } = readList("markets.json", CACHE_MS);
+let coins = fresh ?? null;
 let fetched = false;
-try {
-  const cached = JSON.parse(readFileSync(CACHE_FILE, "utf8"));
-  if (Array.isArray(cached.coins)) {
-    if (Date.now() - cached.at < CACHE_MS) coins = cached.coins;
-    else stale = cached.coins;
-  }
-} catch {}
 
 // A refused or failed refresh answers from the list on disk, however old.
 function fail(message) {
-  if (stale == null) {
+  if (stale === undefined) {
     console.error(message);
     process.exit(1);
   }
@@ -121,13 +110,6 @@ if (coins == null) {
     coins = fail(`Could not reach CoinGecko: ${error?.cause?.code ?? error?.name ?? error}.`);
   }
 }
-if (fetched) {
-  try {
-    mkdirSync(CACHE_DIR, { recursive: true });
-    const temp = `${CACHE_FILE}.${process.pid}`;
-    writeFileSync(temp, JSON.stringify({ at: Date.now(), coins }));
-    renameSync(temp, CACHE_FILE);
-  } catch {}
-}
+if (fetched) writeList("markets.json", coins);
 
 printMatches(coins);

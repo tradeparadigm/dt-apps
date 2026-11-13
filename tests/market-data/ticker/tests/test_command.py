@@ -26,7 +26,7 @@ globalThis.fetch = async (url) => {
 """
 
 # Printed after the prices, apart from the list.
-NOTE = ["", "More detail needs an updated agent."]
+NOTE = ["", "More detail isn't available on this agent."]
 
 passed = 0
 failed = []
@@ -66,7 +66,7 @@ code, out, _, _ = ticker("nosuchcoin", body={})
 check("a symbol with no quote says so", code == 0 and out == ["- NOSUCHCOIN: no price found", *NOTE])
 
 code, out, errors, urls = ticker("")
-check("no symbols asks for an updated agent and calls nothing", code == 1 and urls == [] and errors == ["The market overview needs an updated agent. Type /ticker btc for a price."])
+check("no symbols asks for an updated agent and calls nothing", code == 1 and urls == [] and errors == ["The market overview isn't available on this agent. Type /ticker btc for a price."])
 
 code, _, errors, urls = ticker("btc ../etc")
 check("a symbol that is not letters and digits is refused", code == 1 and urls == [] and len(errors) == 1)

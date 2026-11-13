@@ -2,14 +2,14 @@
 // JEV relay that TERMINAL_JEV_URL names). LiteLLM adds the platform's key, so
 // the agent never holds it. null means the relay could not answer (an older
 // agent, no key, an error). Nothing here is cached but the coin directory.
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readList, writeList } from "./cache.mjs";
 
 const JEV_ROUTE = /\/api\/jev$/;
 // The coin directory holds names, symbols and ranks, never a price.
 const DIRECTORY_MS = 24 * 3_600_000;
-const DIRECTORY_FILE = join(tmpdir(), "market-data-ticker-lookup", "cmc-map.json");
+// A 404 is a sidecar from before the relay, or a LiteLLM with no CoinMarketCap
+// route: nothing to retry.
+let absent = false;
 
 export function relayURL(env, path) {
   const jev = env.TERMINAL_JEV_URL;
@@ -24,10 +24,16 @@ export async function get(env, path, params = {}, timeoutMs = 10_000) {
   const query = new URLSearchParams(params).toString();
   try {
     const response = await fetch(query ? `${base}?${query}` : base, { signal: AbortSignal.timeout(timeoutMs) });
+    if (response.status === 404) absent = true;
     return response.ok ? await response.json() : null;
   } catch {
     return null;
   }
+}
+
+/** True when this agent has no relay, or a call through it found no route. */
+export function relayAbsent(env) {
+  return absent || relayURL(env, "") == null;
 }
 
 /** A quote's USD figures: v3 latest sends a list of conversions, historical a map. */
@@ -62,22 +68,15 @@ export async function cmcQuotes(symbols, env) {
 /** Every active coin, best rank first: `[{symbol, name, rank}]`. */
 export async function cmcDirectory(env) {
   if (relayURL(env, "") == null) return null;
-  try {
-    const cached = JSON.parse(readFileSync(DIRECTORY_FILE, "utf8"));
-    if (Date.now() - cached.at < DIRECTORY_MS && Array.isArray(cached.coins)) return cached.coins;
-  } catch {}
+  const { fresh, stale } = readList("cmc-map.json", DIRECTORY_MS);
+  if (fresh) return fresh;
   // Under the 3 s app_command.lookup gives a script.
   const body = await get(env, "v1/cryptocurrency/map", {}, 2_800);
-  if (!Array.isArray(body?.data)) return null;
+  if (!Array.isArray(body?.data)) return stale ?? null;
   const coins = body.data
     .filter((c) => typeof c?.symbol === "string")
     .map((c) => ({ symbol: c.symbol.toLowerCase(), name: String(c.name ?? ""), rank: Number.isInteger(c.rank) ? c.rank : null }))
     .sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity));
-  try {
-    mkdirSync(join(DIRECTORY_FILE, ".."), { recursive: true });
-    const temp = `${DIRECTORY_FILE}.${process.pid}`;
-    writeFileSync(temp, JSON.stringify({ at: Date.now(), coins }));
-    renameSync(temp, DIRECTORY_FILE);
-  } catch {}
+  writeList("cmc-map.json", coins);
   return coins;
 }

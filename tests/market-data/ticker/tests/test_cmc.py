@@ -59,13 +59,27 @@ def run(script, typed, answers, env_extra=None, tmp=None):
 
 # /ticker: test_views.py reads the relay's answers; here it refuses.
 gecko = {"body": {"btc": {"usd": 74000, "usd_24h_change": 1}}}
-for status in (401, 404, 429):
+for status in (401, 429):
     code, out, urls = run("command.mjs", "btc", {"cmc": {"status": status}, "gecko": gecko})
     check(f"a relay {status} falls back to CoinGecko", code == 0 and out.splitlines() == ["- BTC $74,000 (+1.00% 24h)"] and len(urls) == 2)
 
+# A sidecar from before the relay, or a LiteLLM with no CoinMarketCap route.
+code, out, urls = run("command.mjs", "btc", {"cmc": {"status": 404}, "gecko": gecko})
+check("a relay 404 falls back to CoinGecko and says more detail isn't available",
+      code == 0 and out.splitlines() == ["- BTC $74,000 (+1.00% 24h)", "", "More detail isn't available on this agent."])
+result = subprocess.run(
+    ["node", "--import", "data:text/javascript," + STUB, str(SCRIPTS / "command.mjs"), ""],
+    capture_output=True, text=True, timeout=30,
+    env={"PATH": "/usr/bin:/bin:/usr/local/bin", "ANSWERS": json.dumps({"cmc": {"status": 404}}), "TERMINAL_JEV_URL": JEV},
+)
+check("the market overview on a relay 404 says it isn't available here",
+      result.returncode == 1 and "The market overview isn't available on this agent. Type /ticker btc for a price." in result.stderr)
+code, out, urls = run("command.mjs", "", {"cmc": {"status": 503}})
+check("the market overview on a relay 503 asks to try again", code == 1 and len(urls) > 0)
+
 code, out, urls = run("command.mjs", "btc", {"gecko": gecko}, {"TERMINAL_JEV_URL": ""})
 check("no relay URL asks CoinGecko only, and says an update shows more",
-      code == 0 and len(urls) == 1 and "coingecko" in urls[0] and out.splitlines()[-1] == "More detail needs an updated agent.")
+      code == 0 and len(urls) == 1 and "coingecko" in urls[0] and out.splitlines()[-1] == "More detail isn't available on this agent.")
 
 # Suggestions
 with tempfile.TemporaryDirectory() as tmp:
@@ -78,6 +92,13 @@ with tempfile.TemporaryDirectory() as tmp:
     code, out, urls = run("lookup.mjs", "kai", {}, tmp=tmp)
     check("a coin outside the top 250 is found, from the cached directory with no call",
           urls == [] and [r["id"] for r in json.loads(out)["rows"]] == ["kaito"])
+
+    cache = pathlib.Path(tmp) / "market-data-ticker-lookup" / "cmc-map.json"
+    held = json.loads(cache.read_text())
+    cache.write_text(json.dumps({"at": held["at"] - 2 * 86_400_000, "coins": held["coins"]}))
+    code, out, urls = run("lookup.mjs", "kai", {"cmc": {"status": 503}}, tmp=tmp)
+    check("a failed directory refresh answers from the old directory",
+          code == 0 and [r["id"] for r in json.loads(out)["rows"]] == ["kaito"] and len(urls) == 1 and "/api/cmc/" in urls[0])
 
 with tempfile.TemporaryDirectory() as tmp:
     top = {"body": [{"symbol": "eth", "name": "Ethereum", "market_cap_rank": 2}]}

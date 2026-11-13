@@ -2,13 +2,12 @@
 // for one, all read live through DIME Terminal's relay. Where the relay cannot
 // answer, prices alone from CoinGecko's public API. The app_command tool
 // passes everything the user typed as one argument.
-import { relayURL } from "./cmc.mjs";
+import { relayAbsent } from "./cmc.mjs";
 import { price as formatPrice, pct } from "./format.mjs";
 import { SYMBOL, symbolWords } from "./symbols.mjs";
 import { coin, coins, market } from "./views.mjs";
 
 const API = "https://api.coingecko.com/api/v3/simple/price";
-const relayed = relayURL(process.env, "") != null;
 
 const symbols = [...new Set(symbolWords(process.argv[2]))];
 if (!symbols.every((symbol) => SYMBOL.test(symbol))) {
@@ -21,8 +20,9 @@ if (view != null) {
   console.log(view);
   process.exit(0);
 }
+const relayed = !relayAbsent(process.env);
 if (symbols.length === 0) {
-  console.error(relayed ? "The market overview could not be read. Try again in a minute." : "The market overview needs an updated agent. Type /ticker btc for a price.");
+  console.error(relayed ? "The market overview could not be read. Try again in a minute." : "The market overview isn't available on this agent. Type /ticker btc for a price.");
   process.exit(1);
 }
 
@@ -38,7 +38,7 @@ function print(quotes) {
     const change = pct(quote.change);
     console.log(`- ${name} ${formatPrice(quote.usd)}${change ? ` (${change.replace("−", "-")} 24h)` : ""}`);
   }
-  if (!relayed) console.log("\nMore detail needs an updated agent.");
+  if (!relayed) console.log("\nMore detail isn't available on this agent.");
 }
 
 const url = `${API}?${new URLSearchParams({
