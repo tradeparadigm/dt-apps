@@ -1,7 +1,8 @@
 """/ticker's command script, with fetch stubbed in node.
 
 Each case runs the real script with the arguments a user typed, and records the
-request it makes. Nothing reaches CoinGecko.
+request it makes. Nothing reaches CoinGecko. No relay is set, so every case
+is an agent without DIME Terminal's relay.
 """
 
 import json
@@ -23,6 +24,9 @@ globalThis.fetch = async (url) => {
   return new Response(body, { status: answer.status ?? 200 });
 };
 """
+
+# Printed after the prices, apart from the list.
+NOTE = ["", "More detail isn't available on this agent."]
 
 passed = 0
 failed = []
@@ -49,20 +53,20 @@ def ticker(args, **answer):
 
 code, out, _, urls = ticker("BTC, btc $eth", body={"btc": {"usd": 75001, "usd_24h_change": -1.05}, "eth": {"usd": 2144.62, "usd_24h_change": 4.1}})
 check("symbols are lowercased, deduped and lose a leading $", len(urls) == 1 and "symbols=btc%2Ceth&" in urls[0])
-check("each symbol prints its price and change", code == 0 and out == ["- BTC $75,001 (-1.05% 24h)", "- ETH $2,144.62 (+4.10% 24h)"])
+check("each symbol prints its price and change", code == 0 and out == ["- BTC $75,001 (-1.05% 24h)", "- ETH $2,144.62 (+4.10% 24h)", NOTE[0], NOTE[1]])
 
 for pair in ["btc-usd", "XAU-USD-PERP", "eth/usdt"]:
     code, _, errors, urls = ticker(pair)
     check(f"a market name like {pair} is refused, not priced as a coin", code == 1 and urls == [] and "like btc" in errors[0])
 
 code, out, _, _ = ticker("steth pol", body={"stETH": {"usd": 2107.09}, "POL": {"usd": 0.087607}})
-check("a quote CoinGecko keys in mixed case is found", code == 0 and out == ["- STETH $2,107.09", "- POL $0.087607"])
+check("a quote CoinGecko keys in mixed case is found", code == 0 and out == ["- STETH $2,107.09", "- POL $0.08761", *NOTE])
 
 code, out, _, _ = ticker("nosuchcoin", body={})
-check("a symbol with no quote says so", code == 0 and out == ["- NOSUCHCOIN: no price found"])
+check("a symbol with no quote says so", code == 0 and out == ["- NOSUCHCOIN: no price found", *NOTE])
 
 code, out, errors, urls = ticker("")
-check("no symbols prints the usage and calls nothing", code == 0 and out[0].startswith("Usage:") and urls == [])
+check("no symbols says the overview isn't available and calls nothing", code == 1 and urls == [] and errors == ["The market overview isn't available on this agent. Type /ticker btc for a price."])
 
 code, _, errors, urls = ticker("btc ../etc")
 check("a symbol that is not letters and digits is refused", code == 1 and urls == [] and len(errors) == 1)
