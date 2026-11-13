@@ -4,7 +4,7 @@
 // serves. A section whose read fails is left out. Each returns null when its
 // first read fails, for the caller's fallback.
 import { cmcQuotes, get, usd } from "./cmc.mjs";
-import { count, day, direction, finite, money, pct, price, pts } from "./format.mjs";
+import { count, day, direction, finite, money, pct, price, pts, timeOf } from "./format.mjs";
 
 const ACCENT = "#1bc1cf";
 
@@ -91,7 +91,7 @@ export async function market(env) {
   const fearChart = chart(
     "Fear & Greed, 30 days",
     days
-      .map((d) => ({ at: /^\d+$/.test(String(d?.timestamp)) ? Number(d.timestamp) * 1000 : Date.parse(d?.timestamp), d }))
+      .map((d) => ({ at: timeOf(d?.timestamp), d }))
       .filter((p) => Number.isFinite(p.at))
       .sort((x, y) => x.at - y.at)
       .map(({ d }) => ({ name: day(d.timestamp), value: d.value })),

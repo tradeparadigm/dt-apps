@@ -49,14 +49,16 @@ def check(name, cond):
         failed.append(name)
 
 
-def ticker(typed, refused=()):
+def ticker(typed, refused=(), answers=ANSWERS, stderr=False):
     result = subprocess.run(
         ["node", "--import", "data:text/javascript," + STUB, str(SCRIPT), typed],
         capture_output=True, text=True, timeout=30,
         env={"PATH": "/usr/bin:/bin:/usr/local/bin", "TERMINAL_JEV_URL": JEV,
-             "ANSWERS": json.dumps(ANSWERS), "REFUSED": json.dumps(list(refused))},
+             "ANSWERS": json.dumps(answers), "REFUSED": json.dumps(list(refused))},
     )
     urls = [line[4:] for line in result.stderr.splitlines() if line.startswith("URL ")]
+    if stderr:
+        return result.returncode, result.stdout, result.stderr
     return result.returncode, result.stdout, urls
 
 
@@ -210,6 +212,28 @@ check("a check, history or profile that cannot be read is left out",
 
 code, out, _ = ticker("zzz")
 check("one symbol with no coin says so in a line", code == 0 and out.strip() == "No coin found for `zzz`.")
+
+# Answers with a usable shape but not the fields a view needs.
+import copy
+odd = copy.deepcopy(ANSWERS)
+odd["v1/global-metrics/quotes/latest"]["data"]["quote"] = {"EUR": {}}
+code, out, err = ticker("", answers=odd, stderr=True)
+check("market totals with no USD figures read as unavailable, not a crash",
+      code == 1 and "could not be read" in err and "TypeError" not in err)
+
+linked = copy.deepcopy(ANSWERS)
+linked["v2/cryptocurrency/info"]["data"]["1"]["urls"]["website"] = ["javascript:alert(1)", "http://plain.example", "https://bitcoin.org"]
+code, out, _ = ticker("btc", answers=linked)
+about = " ".join(p["content"] for p in by(split(out)[1], "markdown")) if code == 0 else ""
+check("only an https link reaches the card", "https://bitcoin.org" in about and "javascript:" not in about and "http://plain" not in about)
+
+# Two coins share PEPE: the better-ranked one is the card, in either order.
+for order in ("as listed", "reversed"):
+    shared = copy.deepcopy(ANSWERS)
+    if order == "reversed":
+        shared["v3/cryptocurrency/quotes/latest"]["data"].reverse()
+    code, out, _ = ticker("pepe", answers=shared)
+    check(f"a shared symbol shows its better-ranked coin ({order})", code == 0 and split(out)[0].startswith("Pepe (PEPE)"))
 
 print(f"{passed} passed, {len(failed)} failed")
 for name in failed:

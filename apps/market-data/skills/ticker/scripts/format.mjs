@@ -40,9 +40,14 @@ export function direction(n) {
   return n > 0 ? "up" : "down";
 }
 
+/** Milliseconds for a timestamp in Unix seconds or ISO 8601, else NaN. */
+export function timeOf(timestamp) {
+  return /^\d+$/.test(String(timestamp)) ? Number(timestamp) * 1000 : Date.parse(timestamp);
+}
+
 /** `Nov 13`, a chart point's name. */
 export function day(timestamp) {
-  const ms = /^\d+$/.test(String(timestamp)) ? Number(timestamp) * 1000 : Date.parse(timestamp);
+  const ms = timeOf(timestamp);
   if (!Number.isFinite(ms)) return null;
   return new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
