@@ -145,50 +145,60 @@ table = by(spec, "data_table")[0]
 check("the table has the eight columns", [c["header"] for c in table["columns"]] == [
     "Coin", "Price", "24h", "7d", "30d", "Rank", "Mkt cap", "Volume"])
 check("each row is the highest-ranked coin of its symbol", table["rows"] == [
-    {"coin": "BTC", "price": "$74,018.2", "d1": "−0.97%", "d7": "+3.1%", "d30": "−12.4%", "rank": "#1", "cap": "$1.46T", "volume": "$38.2B"},
+    {"coin": "BTC", "price": "$74,018", "d1": "−0.97%", "d7": "+3.1%", "d30": "−12.4%", "rank": "#1", "cap": "$1.46T", "volume": "$38.2B"},
     {"coin": "PEPE", "price": "$0.0000123", "d1": "+2.00%", "d7": "+5.0%", "d30": "−20.0%", "rank": "#40", "cap": "$5.2B", "volume": "$600M"}])
 check("a symbol with no coin is a warning", by(spec, "alert_banner") == [
     {"variant": "warning", "message": "No coin found for `zzz`. The other 2 are listed above."}])
-check("several coins' line", line == "BTC $74,018.2 · −0.97% · PEPE $0.0000123 · +2.00% · No coin found for zzz")
+check("several coins' line", line == "BTC $74,018 · −0.97% · PEPE $0.0000123 · +2.00% · No coin found for zzz")
 
 # One coin
 code, out, urls = ticker("btc")
 line, spec = split(out)
 paths = sorted(u.split("/api/cmc/")[1].split("?")[0] for u in urls)
-check("one coin reads its quote, then its history, venues and profile", paths == sorted([
-    "v3/cryptocurrency/quotes/latest", "v2/cryptocurrency/price-performance-stats/latest",
-    "v3/cryptocurrency/quotes/historical", "v2/cryptocurrency/market-pairs/latest", "v2/cryptocurrency/info"]))
+check("one coin reads its quote, then a year of history and its profile", paths == sorted([
+    "v3/cryptocurrency/quotes/latest", "v3/cryptocurrency/quotes/historical", "v2/cryptocurrency/info"]))
+check("the history asked for is a year of days", any("quotes/historical?id=1&count=365&interval=1d" in u for u in urls))
 check("a coin with no contract asks for no on-chain check", not any("/dex/" in u for u in urls))
 check("one coin's spec is drawable", code == 0 and valid(spec))
-check("one coin's line", line == "Bitcoin (BTC) $74,018.2 · −0.97% 24h · rank #1")
+check("one coin's line", line == "Bitcoin (BTC) $74,018 · −0.97% 24h · rank #1")
 check("one coin's cards", values(spec, "metric_card") == {
-    "Bitcoin · BTC · #1": "$74,018.2 · −0.97%", "Market cap": "$1.46T · 58.4% of market", "24h volume": "$38.2B · −6.4%"})
+    "Bitcoin · BTC · #1": "$74,018 · −0.97%", "Market cap": "$1.46T · 58.4% of market", "24h volume": "$38.2B · −6.4%"})
 chart = by(spec, "performance_chart")
-check("30 days of price are charted with an axis", len(chart) == 1 and chart[0]["yAxis"] is True
-      and len(chart[0]["series"][0]["values"]) == 30 and chart[0]["series"][0]["values"][0]["value"] == 84000)
-check("performance, high and supply are rows", values(spec, "labeled_output") == {
-    "7d": "+3.1%", "30d": "−12.4%", "90d": "−21.0%", "1y": "+8.7%", "All-time high": "$126,080 · 41% below",
+check("the last 30 days of price are charted with an axis", len(chart) == 1 and chart[0]["yAxis"] is True
+      and [p["value"] for p in chart[0]["series"][0]["values"]][:2] == [84000, 83670] and len(chart[0]["series"][0]["values"]) == 30)
+check("performance, the year's high and supply are rows", values(spec, "labeled_output") == {
+    "7d": "+3.1%", "30d": "−12.4%", "90d": "−21.0%", "1y": "+15.7%", "1-year high": "$126,080 · 41% below",
     "Circulating": "19.9M BTC", "Max supply": "21M BTC", "Launched": "2009"})
-venues = by(spec, "data_table")[0]["rows"]
-check("the top 5 venues, one row each, with their share of volume",
-      [v["venue"] for v in venues] == ["Binance", "Bybit", "Coinbase Exchange", "OKX", "Kraken"]
-      and venues[0] == {"venue": "Binance", "pair": "BTC/USDT", "price": "$74,021", "volume": "$6.81B", "share": "17.8%"})
+check("the rows are two columns", [c for c in spec["children"] if c.get("layout") == "grid" and c.get("columns") == 2] != [])
 check("the profile is the first sentence and its links", by(spec, "markdown") == [{"content":
     "Bitcoin (BTC) is a decentralized digital currency with a fixed supply.\n\n[Website](https://bitcoin.org/) · [Explorer](https://mempool.space/)"}])
 check("a coin with no contract has no on-chain banner", by(spec, "alert_banner") == [])
 
 code, out, urls = ticker("pepe")
 _, spec = split(out)
-check("a token reads its contract's check and liquidity",
-      sum("/dex/" in u for u in urls) == 2 and any("address=0x000000000000000000000000000000000000beef" in u for u in urls))
-check("a token's on-chain check is a banner", by(spec, "alert_banner") == [
-    {"variant": "info", "message": "$4.2M DEX liquidity · no honeypot, mint or rug pull risk found"}])
+check("a token reads its contract's check",
+      sum("/dex/" in u for u in urls) == 1 and any("security/detail?platformName=ethereum&address=0x" in u for u in urls))
+check("a token's check is a banner naming what it flagged", by(spec, "alert_banner") == [
+    {"variant": "info", "message": "Contract check: safe · flagged: Blacklist Restrictions Found · buy tax 0%, sell tax 0%"}])
 
-code, out, _ = ticker("pepe", refused=["v1/dex/security/detail", "v1/dex/token-liquidity/query",
-                                       "v2/cryptocurrency/market-pairs/latest", "v3/cryptocurrency/quotes/historical"])
+year = ANSWERS["v3/cryptocurrency/quotes/historical"]["data"]["1"]["quotes"]
+ANSWERS["v3/cryptocurrency/quotes/historical"]["data"]["1"]["quotes"] = year[-100:]
+code, out, _ = ticker("btc")
 _, spec = split(out)
-check("an on-chain check, venues or history the plan refuses are left out",
-      code == 0 and valid(spec) and by(spec, "alert_banner") == [] and by(spec, "data_table") == [] and by(spec, "performance_chart") == [])
+rows = values(spec, "labeled_output")
+check("a coin with under a year of history has no 1y figures, and still its chart",
+      "1y" not in rows and "1-year high" not in rows and "30d" in rows and len(by(spec, "performance_chart")) == 1)
+ANSWERS["v3/cryptocurrency/quotes/historical"]["data"]["1"]["quotes"] = year
+
+ANSWERS["v1/dex/security/detail"]["data"][0]["securityItems"][2]["isHit"] = True
+code, out, _ = ticker("pepe")
+_, spec = split(out)
+check("a severe flag makes the banner a warning", by(spec, "alert_banner")[0]["variant"] == "warning")
+
+code, out, _ = ticker("pepe", refused=["v1/dex/security/detail", "v3/cryptocurrency/quotes/historical", "v2/cryptocurrency/info"])
+_, spec = split(out)
+check("a check, history or profile that cannot be read is left out",
+      code == 0 and valid(spec) and by(spec, "alert_banner") == [] and by(spec, "performance_chart") == [] and by(spec, "markdown") == [])
 
 code, out, _ = ticker("zzz")
 check("one symbol with no coin says so in a line", code == 0 and out.strip() == "No coin found for `zzz`.")

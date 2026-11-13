@@ -1,7 +1,10 @@
 // How /ticker writes numbers. A missing number is null, and every caller skips it.
 const finite = (n) => typeof n === "number" && Number.isFinite(n);
 
-const priceFormat = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumSignificantDigits: 7 });
+const usd = (options) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", ...options });
+const wholeFormat = usd({ maximumFractionDigits: 0 });
+const centsFormat = usd({ minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const smallFormat = usd({ maximumSignificantDigits: 4 });
 const compactFormat = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -10,7 +13,11 @@ const compactFormat = new Intl.NumberFormat("en-US", {
 });
 const countFormat = new Intl.NumberFormat("en-US", { notation: "compact", maximumSignificantDigits: 3 });
 
-export const price = (n) => (finite(n) ? priceFormat.format(n) : null);
+/** `$74,018`, `$2,066.38`, `$0.000004501`. */
+export function price(n) {
+  if (!finite(n)) return null;
+  return (n >= 10_000 ? wholeFormat : n >= 1 ? centsFormat : smallFormat).format(n);
+}
 export const money = (n) => (finite(n) ? compactFormat.format(n) : null);
 export const count = (n) => (finite(n) ? countFormat.format(n) : null);
 

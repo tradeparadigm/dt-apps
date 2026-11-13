@@ -19,8 +19,8 @@ is read live on each run.
 - `/ticker btc eth sol` shows one table row per coin: price, 24h, 7d and 30d
   change, rank, market cap and volume.
 - `/ticker btc` shows one coin: price, market cap and volume, 30 days of
-  price, 7d to 1y change, all-time high, supply, the top 5 venues, a line
-  about it with its links, and for a token its DEX liquidity and contract
+  price, 7d to 1y change, its high over the last year, supply, when it
+  launched, a line about it with its links, and for a token its contract
   check.
 
 The reply is a plain line, then a component spec the terminal draws (its

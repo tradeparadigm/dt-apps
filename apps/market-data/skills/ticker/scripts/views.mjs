@@ -1,8 +1,8 @@
 // /ticker's three replies, each a plain line and then a spec the terminal
 // draws from its catalog (metric_card, labeled_output, data_table,
-// performance_chart, markdown, alert_banner). A section whose read fails is
-// left out. Each returns null when its first read fails, for the caller's
-// fallback.
+// performance_chart, markdown, alert_banner), from reads the Basic plan
+// serves. A section whose read fails is left out. Each returns null when its
+// first read fails, for the caller's fallback.
 import { cmcQuotes, get, usd } from "./cmc.mjs";
 import { count, day, direction, finite, money, pct, price, pts } from "./format.mjs";
 
@@ -165,52 +165,29 @@ function firstSentence(text) {
 
 const firstURL = (list) => (Array.isArray(list) ? list.find((u) => /^https:\/\//.test(u)) : undefined);
 
-function onChainBanner(security, liquidity) {
-  const s = security?.data;
-  const pools = Array.isArray(liquidity?.data) ? liquidity.data : [];
-  const latest = pools.at(-1)?.liquidityUsd;
-  const parts = [];
-  if (finite(Number(latest))) parts.push(`${money(Number(latest))} DEX liquidity`);
-  const risks = [
-    ["honeypotStatus", "honeypot"],
-    ["mintableStatus", "mintable"],
-    ["rugPullStatus", "rug pull"],
-  ].filter(([key]) => s?.[key] === 1 || s?.[key] === true || s?.[key] === "1");
-  if (s != null) parts.push(risks.length === 0 ? "no honeypot, mint or rug pull risk found" : `risk: ${risks.map(([, name]) => name).join(", ")}`);
-  if (parts.length === 0) return null;
+/** The contract check's verdict and what it flagged, or null with no check. */
+function onChainBanner(security) {
+  const check = Array.isArray(security?.data) ? security.data[0] : null;
+  if (typeof check?.securityLevel !== "string") return null;
+  const items = Array.isArray(check.securityItems) ? check.securityItems : [];
+  const flagged = items.filter((i) => i?.isHit === true && (i.riskyLevel === "r" || i.riskyLevel === "y"));
+  const severe = flagged.some((i) => i.riskyLevel === "r");
+  const tax = [
+    ["buy", check.extra?.buyTax],
+    ["sell", check.extra?.sellTax],
+  ].filter(([, v]) => v != null && v !== "" && finite(Number(v)));
   return {
     component: "alert_banner",
-    props: { variant: risks.length === 0 ? "info" : "warning", message: parts.join(" · ") },
+    props: {
+      variant: severe || check.securityLevel !== "safe" ? "warning" : "info",
+      message: joined(
+        `Contract check: ${check.securityLevel}`,
+        flagged.length > 0 ? `flagged: ${flagged.map((i) => i.code).join(", ")}` : "nothing flagged",
+        tax.length > 0 ? tax.map(([side, v]) => `${side} tax ${Number(v)}%`).join(", ") : null,
+      ),
+    },
   };
 }
-
-function aggregateVenues(pairs, total) {
-  const venues = [];
-  const seen = new Set();
-  for (const pair of Array.isArray(pairs) ? pairs : []) {
-    const name = pair?.exchange?.name;
-    const q = usd(pair?.quote);
-    if (typeof name !== "string" || seen.has(name) || !finite(q?.volume_24h)) continue;
-    seen.add(name);
-    venues.push({
-      venue: name,
-      pair: pair.market_pair ?? null,
-      price: price(q.price),
-      volume: money(q.volume_24h),
-      share: finite(total) && total > 0 ? `${((q.volume_24h / total) * 100).toFixed(1)}%` : null,
-    });
-    if (venues.length === 5) break;
-  }
-  return venues;
-}
-
-const VENUE_COLUMNS = [
-  ["venue", "Venue", "left"],
-  ["pair", "Pair", "left"],
-  ["price", "Price"],
-  ["volume", "24h volume"],
-  ["share", "Share"],
-].map(([key, header, align = "right"]) => ({ key, header, align }));
 
 /** A keyed answer's entry for one coin: `data[id]`, or `data` itself. */
 const entry = (body, id) => body?.data?.[id] ?? body?.data?.[String(id)] ?? body?.data;
@@ -224,13 +201,11 @@ export async function coin(env, symbol) {
   const id = String(c.id);
   const token = c.platform?.token_address;
   const chain = c.platform?.slug;
-  const [perf, history, pairs, info, security, liquidity] = await Promise.all([
-    get(env, "v2/cryptocurrency/price-performance-stats/latest", { id, time_period: "all_time,7d,30d,90d,365d", convert: "USD" }),
-    get(env, "v3/cryptocurrency/quotes/historical", { id, count: "30", interval: "1d", convert: "USD" }),
-    get(env, "v2/cryptocurrency/market-pairs/latest", { id, limit: "20", convert: "USD" }),
+  // A year of daily quotes, the most the plan serves: the chart, the 1y change and the year's high.
+  const [history, info, security] = await Promise.all([
+    get(env, "v3/cryptocurrency/quotes/historical", { id, count: "365", interval: "1d", convert: "USD" }),
     get(env, "v2/cryptocurrency/info", { id }),
     token && chain ? get(env, "v1/dex/security/detail", { platformName: chain, address: token }) : null,
-    token && chain ? get(env, "v1/dex/token-liquidity/query", { platform: chain, address: token, interval: "1d", limit: "1" }) : null,
   ]);
 
   const head = joined(c.name, c.symbol, finite(c.cmc_rank) ? `#${c.cmc_rank}` : null);
@@ -245,30 +220,28 @@ export async function coin(env, symbol) {
   if (vol) cards.push(card("24h volume", joined(vol, pct(q.volume_change_24h, 1)), direction(q.volume_change_24h)));
   const children = [{ layout: "grid", columns: 3, children: cards }];
 
-  const points = (entry(history, id)?.quotes ?? (Array.isArray(history?.data) ? history.data[0]?.quotes : null)) ?? [];
-  const priceChart = chart(
-    "Price, 30 days",
-    (Array.isArray(points) ? points : []).map((p) => ({ name: day(p?.timestamp), value: usd(p?.quote)?.price })),
-    true,
-  );
+  const kept = entry(history, id)?.quotes;
+  const year = (Array.isArray(kept) ? kept : [])
+    .map((p) => ({ name: day(p?.timestamp), value: usd(p?.quote)?.price }))
+    .filter((p) => finite(p.value));
+  const priceChart = chart("Price, 30 days", year.slice(-30), true);
   if (priceChart) children.push(priceChart);
 
-  const periods = entry(perf, id)?.periods ?? {};
-  const change = (key, fallback) => usd(periods[key]?.quote)?.percent_change ?? fallback;
   const rows = [];
-  for (const [label, key, fallback] of [
-    ["7d", "7d", q.percent_change_7d],
-    ["30d", "30d", q.percent_change_30d],
-    ["90d", "90d", q.percent_change_90d],
-    ["1y", "365d"],
+  // A coin listed less than a year ago has no 1y figures.
+  const yearAgo = year.length >= 360 ? year[0].value : null;
+  for (const [label, value] of [
+    ["7d", q.percent_change_7d],
+    ["30d", q.percent_change_30d],
+    ["90d", q.percent_change_90d],
+    ["1y", yearAgo > 0 ? ((q.price - yearAgo) / yearAgo) * 100 : null],
   ]) {
-    const value = change(key, fallback);
     if (finite(value)) rows.push(row(label, pct(value, 1), direction(value)));
   }
-  const high = usd(periods.all_time?.quote)?.high;
-  if (finite(high) && high > 0) {
+  if (yearAgo != null) {
+    const high = Math.max(q.price, ...year.map((p) => p.value));
     const below = ((high - q.price) / high) * 100;
-    rows.push(row("All-time high", joined(price(high), below > 0 ? `${below.toFixed(0)}% below` : "at the high")));
+    rows.push(row("1-year high", joined(price(high), below >= 0.5 ? `${below.toFixed(0)}% below` : "at the high")));
   }
   const unit = (n) => (count(n) ? `${count(n)} ${c.symbol}` : null);
   if (unit(c.circulating_supply)) rows.push(row("Circulating", unit(c.circulating_supply)));
@@ -277,9 +250,6 @@ export async function coin(env, symbol) {
   const launched = String(about?.date_launched ?? "").slice(0, 4);
   if (/^\d{4}$/.test(launched)) rows.push(row("Launched", launched));
   if (rows.length > 0) children.push({ layout: "grid", columns: 2, children: rows });
-
-  const venues = aggregateVenues(entry(pairs, id)?.market_pairs, q.volume_24h);
-  if (venues.length > 0) children.push({ component: "data_table", props: { columns: VENUE_COLUMNS, rows: venues } });
 
   const sentence = firstSentence(about?.description);
   const links = [
@@ -293,8 +263,9 @@ export async function coin(env, symbol) {
   const markdown = [sentence, links].filter(Boolean).join("\n\n");
   if (markdown) children.push({ component: "markdown", props: { content: markdown } });
 
-  const banner = token ? onChainBanner(security, liquidity) : null;
+  const banner = token ? onChainBanner(security) : null;
   if (banner) children.push(banner);
 
-  return reply(joined(`${c.name} (${c.symbol}) ${price(q.price)}`, pct(d1) && `${pct(d1)} 24h`, finite(c.cmc_rank) ? `rank #${c.cmc_rank}` : null), children);
+  const line = joined(`${c.name} (${c.symbol}) ${price(q.price)}`, pct(d1) && `${pct(d1)} 24h`, finite(c.cmc_rank) ? `rank #${c.cmc_rank}` : null);
+  return reply(line, children);
 }
