@@ -26,6 +26,7 @@ const hang = process.env.HANG === "1";
 globalThis.fetch = async (url, init = {}) => {
   console.error("URL " + url);
   const u = new URL(url);
+  if (u.hostname === "news.google.com") return new Response(process.env.NEWS ?? "", { status: process.env.NEWS ? 200 : 404 });
   if (u.hostname.endsWith("llama.fi") && hang) {
     const socket = setInterval(() => {}, 1000);
     return new Promise((_, reject) => init.signal?.addEventListener("abort", () => { clearInterval(socket); reject(init.signal.reason); }));
@@ -66,14 +67,14 @@ def check(name, cond):
         failed.append(name)
 
 
-def ticker(typed, refused=(), answers=ANSWERS, stderr=False, llama=LLAMA, cache=None, hang=False):
+def ticker(typed, refused=(), answers=ANSWERS, stderr=False, llama=LLAMA, cache=None, hang=False, news=None):
     """Each run starts with an empty cache unless it is handed one."""
     result = subprocess.run(
         ["node", "--import", "data:text/javascript," + STUB, str(SCRIPT), typed],
         capture_output=True, text=True, timeout=30,
         env={"PATH": "/usr/bin:/bin:/usr/local/bin", "TERMINAL_JEV_URL": JEV, "TMPDIR": cache or tempfile.mkdtemp(),
              "ANSWERS": json.dumps(answers), "REFUSED": json.dumps(list(refused)), "LLAMA": json.dumps(llama),
-             "HANG": "1" if hang else ""},
+             "HANG": "1" if hang else "", **({"NEWS": news} if news else {})},
     )
     urls = [line[4:] for line in result.stderr.splitlines() if line.startswith("URL ")]
     if stderr:
@@ -250,6 +251,18 @@ code, out, _ = ticker("btc pepe", refused=["v3/cryptocurrency/quotes/historical"
 table = by(split(out)[1], "data_table")[0]
 check("with no daily closes the table heads its day's column 24h", [c["header"] for c in table["columns"]][2] == "24h"
       and table["rows"][0]["d1"] == "−0.97%")
+
+FEED = ("<rss><channel><item><title>Bitcoin slips below $70K - CoinDesk</title>"
+        "<link>https://news.google.com/rss/articles/abc</link><pubDate>Fri, 13 Nov 2026 04:00:00 GMT</pubDate>"
+        "<source url=\"https://www.coindesk.com\">CoinDesk</source></item></channel></rss>")
+code, out, urls = ticker("btc", news=FEED)
+_, spec = split(out)
+md = [p["content"] for p in by(spec, "markdown")]
+check("a coin's card searches its name and symbol and lists the news after its on-chain figures, before its profile",
+      any('q=%22Bitcoin%22+BTC+when%3A2d' in u for u in urls)
+      and [m.split("\n")[0][:9] for m in md] == ["On-chain,", "**News** ", "Bitcoin ("]
+      and "- [Bitcoin slips below $70K](https://news.google.com/rss/articles/abc) · CoinDesk" in md[1])
+check("with no news the card has no section", not any(m.startswith("**News**") for m in [p["content"] for p in by(split(ticker("btc")[1])[1], "markdown")]))
 
 # Answers with a usable shape but not the fields a view needs.
 import copy

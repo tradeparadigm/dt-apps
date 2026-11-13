@@ -3,12 +3,13 @@
 # (the platform's key, held by LiteLLM), else CoinGecko's public API, keyless
 # unless a Demo key is enrolled. A coin's on-chain figures come from
 # DefiLlama's free API, which needs no key. /stock reads SEC EDGAR, Wikidata
-# and trade.xyz's perps on Hyperliquid, all keyless.
+# and trade.xyz's perps on Hyperliquid, all keyless. Both read headlines from
+# Google News' RSS search, keyless.
 
 schema_version: 1
 
 id: market-data
-version: 0.6.0
+version: 0.7.0
 name: Market Data
 blurb: Live crypto and stock market data from slash commands, with no model turn.
 

@@ -6,6 +6,7 @@
 import { MARKET_PATH, cmcQuotes, get, usd } from "./cmc.mjs";
 import { count, day, direction, finite, money, pct, price, pts, timeOf } from "./format.mjs";
 import { fundamentals, llamaIndex, match, slugOf } from "./llama.mjs";
+import { headlines, newsMarkdown } from "./news.mjs";
 
 const ACCENT = "#1bc1cf";
 
@@ -289,11 +290,12 @@ export async function coin(env, symbol) {
   const chain = c.platform?.slug;
   // A year of daily closes, the most the plan serves: the chart, every change and the year's high.
   const profile = get(env, "v2/cryptocurrency/info", { id });
-  const [history, info, security, llama] = await Promise.all([
+  const [history, info, security, llama, news] = await Promise.all([
     get(env, "v3/cryptocurrency/quotes/historical", { id, count: "366", interval: "daily", time_end: lastMidnight(), convert: "USD" }),
     profile,
     token && chain ? get(env, "v1/dex/security/detail", { platformName: chain, address: token }) : null,
     onChain(c, profile),
+    headlines(c.name, c.symbol),
   ]);
 
   const year = dailyCloses(history, id);
@@ -344,6 +346,8 @@ export async function coin(env, symbol) {
   if (/^\d{4}$/.test(launched)) rows.push(row("Launched", launched));
   if (rows.length > 0) children.push({ layout: "grid", columns: 2, children: rows });
   children.push(...onChainSection(llama, q.market_cap));
+  const newsSection = newsMarkdown(news, c.name, c.symbol);
+  if (newsSection) children.push({ component: "markdown", props: { content: newsSection } });
 
   const sentence = firstSentence(about?.description);
   const links = [

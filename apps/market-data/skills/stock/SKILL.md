@@ -25,6 +25,8 @@ is read live on each run.
   income and shares outstanding, from SEC EDGAR.
 - its eight latest annual, quarterly, current and proxy reports and insider
   trades, each linked to the filing.
+- up to five headlines from the last two days, from Google News' RSS
+  search for its name and ticker, one per story, each linked.
 
 The reply is a plain line, then a component spec the terminal draws (its
 `features.generativeUi`). A section whose data cannot be read is left out.
