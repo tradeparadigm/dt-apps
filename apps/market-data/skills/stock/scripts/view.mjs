@@ -2,7 +2,7 @@
 // catalog. A section whose read failed is left out.
 import { change, count, day, direction, finite, money, pct, price } from "../../ticker/scripts/format.mjs";
 import { card, chart, joined, markdown, multiple, reply, row } from "../../ticker/scripts/spec.mjs";
-import { newsMarkdown } from "../../ticker/scripts/news.mjs";
+import { PARTNERS, newsMarkdown } from "../../ticker/scripts/news.mjs";
 import { NET_INCOME, REVENUE, sharesOutstanding, trailing } from "./sources.mjs";
 
 // What a reader calls each form, for the ones worth listing.
@@ -48,11 +48,14 @@ export function plainName(title) {
   let name = String(title).replace(/\/[a-z]{2}\/?$/i, "").trim();
   for (let before = ""; before !== name; ) {
     before = name;
-    // "& Co" stays: it tells Merck & Co from Merck KGaA, and KKR & Co from a cricket team.
-    if (/&\s*co\.?$/i.test(name)) break;
+    // "& Co" stays, written one way: it tells Merck & Co from Merck KGaA, and KKR & Co from a cricket team.
+    if (PARTNERS.test(name)) {
+      name = name.replace(PARTNERS, " & Co");
+      break;
+    }
     name = name.replace(/[,.]?\s+(inc|corp|corporation|co|company|ltd|plc|holdings?|group|n\.?v|s\.?a|ag|se)\.?$/i, "").trim();
   }
-  const letters = name.replace(/&\s*co\.?$/i, "");
+  const letters = name.replace(PARTNERS, "");
   return letters === letters.toUpperCase() ? name.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase()) : name;
 }
 

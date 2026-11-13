@@ -30,6 +30,9 @@ function items(xml) {
   });
 }
 
+/** A partnership's tail, "& Co" or "& Company", which outlets write either way. */
+export const PARTNERS = /\s*&\s*co(mpany)?\.?$/i;
+
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // Two outlets running one wire story differ in the last words, if at all.
 const story = (title) => title.toLowerCase().replace(/[^a-z0-9 ]/g, "").split(/\s+/).slice(0, 6).join(" ");
@@ -41,7 +44,10 @@ const story = (title) => title.toLowerCase().replace(/[^a-z0-9 ]/g, "").split(/\
  * could not be read.
  */
 export async function headlines(name, symbol) {
-  const terms = `"${name}" ${symbol.toUpperCase()}`;
+  // "Merck & Co" tells the company from Merck KGaA, and outlets also write "& Company".
+  const base = name.replace(PARTNERS, "");
+  const quoted = PARTNERS.test(name) ? `("${base} & Co" OR "${base} & Company")` : `"${name}"`;
+  const terms = `${quoted} ${symbol.toUpperCase()}`;
   const url = `${SEARCH}?${new URLSearchParams({ q: `${terms} when:2d`, hl: "en-US", gl: "US", ceid: "US:en" })}`;
   let xml;
   try {
@@ -53,10 +59,9 @@ export async function headlines(name, symbol) {
   }
   // The name in any case; the symbol only as a capitalised word, since "SUI" is news and "sui" is Latin.
   // A company's first word too, for "Meta" in news of Meta Platforms; the quoted search already names it in full.
-  // "Merck & Co" tells the company from Merck KGaA in the search; a headline says "Merck".
-  const short = name.replace(/\s*&\s*co\.?$/i, "");
-  const first = short.split(/\s+/)[0];
-  const byName = new RegExp(first.length >= 4 ? `${escape(short)}|\\b${escape(first)}\\b` : escape(short), "i");
+  // A headline says "Merck".
+  const first = base.split(/\s+/)[0];
+  const byName = new RegExp(first.length >= 4 ? `${escape(base)}|\\b${escape(first)}\\b` : escape(base), "i");
   const bySymbol = new RegExp(`\\b${escape(symbol.toUpperCase())}\\b`);
   const seen = new Set();
   const list = items(xml)

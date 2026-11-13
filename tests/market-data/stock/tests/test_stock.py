@@ -125,10 +125,12 @@ check("the company's news follows its board, before its filings",
 
 names = subprocess.run(["node", "--input-type=module", "-e",
     f"import {{ plainName }} from {json.dumps((SCRIPTS / 'view.mjs').as_uri())};"
-    "console.log(JSON.stringify(['MICROSOFT CORP', 'Meta Platforms, Inc.', 'ASML HOLDING NV', 'Coinbase Global, Inc.', 'BERKSHIRE HATHAWAY INC /DE/', 'ELI LILLY & Co', 'MERCK & CO., INC.'].map(plainName)))"],
+    "console.log(JSON.stringify(['MICROSOFT CORP', 'Meta Platforms, Inc.', 'ASML HOLDING NV', 'Coinbase Global, Inc.', 'BERKSHIRE HATHAWAY INC /DE/', 'ELI LILLY & Co', 'MERCK & CO., INC.', 'WELLS FARGO & COMPANY/MN', "
+    "'Arthur J. Gallagher & Co.', 'AbbVie Inc.', 'PROCTER & GAMBLE Co', 'Stran & Company, Inc.'].map(plainName)))"],
     capture_output=True, text=True).stdout
 check("a company's SEC name loses its legal form but keeps \"& Co\", and capitals become a name",
-      json.loads(names) == ["Microsoft", "Meta Platforms", "Asml", "Coinbase Global", "Berkshire Hathaway", "Eli Lilly & Co", "Merck & Co."])
+      json.loads(names) == ["Microsoft", "Meta Platforms", "Asml", "Coinbase Global", "Berkshire Hathaway", "Eli Lilly & Co", "Merck & Co",
+                        "Wells Fargo & Co", "Arthur J. Gallagher & Co", "AbbVie", "Procter & Gamble", "Stran & Co"])
 
 # What the user typed
 code, out, calls, _ = run("command.mjs", "")

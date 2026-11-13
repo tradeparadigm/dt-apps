@@ -95,10 +95,13 @@ coins = "<rss><channel>" + item("BTC slips below $70K", "CoinDesk", 2) + item("I
 out, _ = news("Bitcoin", "btc", feed=coins)
 check("the symbol counts only in capitals", [i["title"] for i in out["list"]] == ["BTC slips below $70K"])
 
-lilly = "<rss><channel>" + item("Eli Lilly raises its outlook", "Reuters", 2) + "</channel></rss>"
+lilly = "<rss><channel>" + item("Eli Lilly raises its outlook", "Reuters", 2) + item("Eli Manning signs on", "ESPN", 2) + "</channel></rss>"
 out, urls = news("Eli Lilly & Co", "LLY", feed=lilly)
-check("\"& Co\" is in the search and out of the headline match",
-      parse_qs(urlparse(urls[0]).query)["q"] == ['"Eli Lilly & Co" LLY when:2d'] and [i["title"] for i in out["list"]] == ["Eli Lilly raises its outlook"])
+check("a partnership is searched as \"& Co\" or \"& Company\", and matched in a headline by its name alone",
+      parse_qs(urlparse(urls[0]).query)["q"] == ['("Eli Lilly & Co" OR "Eli Lilly & Company") LLY when:2d']
+      and [i["title"] for i in out["list"]] == ["Eli Lilly raises its outlook"])
+out, urls = news("Kkr & Co.", "KKR", feed="<rss><channel>" + item("Kkr closes a fund", "FT", 2) + "</channel></rss>")
+check("a partnership written with a dot reads the same", parse_qs(urlparse(urls[0]).query)["q"] == ['("Kkr & Co" OR "Kkr & Company") KKR when:2d'])
 
 meta = "<rss><channel>" + item("Meta sells $1B of bonds", "Reuters", 2) + item("Platforms are changing", "Wired", 2) + "</channel></rss>"
 out, _ = news("Meta Platforms", "META", feed=meta)
@@ -114,10 +117,12 @@ noise = "<rss><channel>" + "".join(item(t, "Site", 2) for t in [
     "Nvidia Live Price, News, Chart", "Nvidia Live Price and Market Cap", "Nvidia Price Today | Live NVDA Price", "Price of Nvidia today", "Nvidia Price in Euro",
     "Nvidia (NVDA) Stock Quotes, Company News And Chart Analysis", "Convert 1 NVDA to USD", "Nvidia Tokenized Stock (Ondo)",
     "About Nvidia Corp (NVDAx)", "Nvidia Corporation (NVDA) Stock Price, News, Quote & History",
-    "Nvidia ships its next chip", "Nvidia's bet on a prediction market for chips", "Nvidia price today jumps 5% after earnings"]) + "</channel></rss>"
+    "Nvidia ships its next chip", "Nvidia's bet on a prediction market for chips", "Nvidia price today jumps 5% after earnings",
+    "Nvidia cuts its price, analysts react"]) + "</channel></rss>"
 out, _ = news("Nvidia", "NVDA", feed=noise)
 check("forecasts, prediction-market listings, price pages, quote pages, converters and listings are not news; a story about them is",
-      [i["title"] for i in out["list"]] == ["Nvidia ships its next chip", "Nvidia's bet on a prediction market for chips", "Nvidia price today jumps 5% after earnings"])
+      [i["title"] for i in out["list"]] == ["Nvidia ships its next chip", "Nvidia's bet on a prediction market for chips", "Nvidia price today jumps 5% after earnings",
+                                            "Nvidia cuts its price, analysts react"])
 
 old = "<rss><channel>" + item("Nvidia, two days on", "Bloomberg", 48) + "</channel></rss>"
 out, _ = news("Nvidia", "NVDA", feed=old)
