@@ -1,0 +1,421 @@
+{
+ "api.llama.fi/config": {
+  "protocols": [
+   {
+    "name": "Aave V3",
+    "cmcId": null,
+    "gecko_id": null,
+    "parentProtocol": "parent#aave",
+    "category": "Lending",
+    "dimensions": {
+     "fees": {
+      "genuineSpikes": [],
+      "adapter": "x"
+     }
+    }
+   },
+   {
+    "name": "Aave V2",
+    "cmcId": "7278",
+    "gecko_id": null,
+    "parentProtocol": "parent#aave",
+    "category": "Lending",
+    "dimensions": {
+     "fees": {
+      "genuineSpikes": [],
+      "adapter": "x"
+     }
+    }
+   },
+   {
+    "name": "Hyperliquid Perps",
+    "cmcId": null,
+    "gecko_id": null,
+    "parentProtocol": "parent#hyperliquid",
+    "category": "Derivatives",
+    "dimensions": {
+     "fees": "hyperliquid-perp"
+    }
+   },
+   {
+    "name": "Bitcoin",
+    "cmcId": "1",
+    "gecko_id": null,
+    "parentProtocol": null,
+    "category": "Canonical Bridge",
+    "dimensions": null
+   },
+   {
+    "name": "RingFi",
+    "cmcId": "1839",
+    "gecko_id": null,
+    "parentProtocol": null,
+    "category": "Yield",
+    "dimensions": null
+   },
+   {
+    "name": "Arbitrum Nitro",
+    "cmcId": null,
+    "gecko_id": null,
+    "parentProtocol": "parent#arbitrum-foundation",
+    "category": "Foundation",
+    "dimensions": {
+     "fees": {
+      "genuineSpikes": [],
+      "adapter": "x"
+     }
+    }
+   },
+   {
+    "name": "Lets Get HAI",
+    "cmcId": null,
+    "gecko_id": "kite",
+    "symbol": "KITE",
+    "url": "https://www.letsgethai.com",
+    "parentProtocol": null,
+    "category": "CDP",
+    "dimensions": {
+     "fees": {
+      "genuineSpikes": [],
+      "adapter": "x"
+     }
+    }
+   },
+   {
+    "name": "Morpho Blue",
+    "cmcId": null,
+    "gecko_id": null,
+    "parentProtocol": "parent#morpho",
+    "category": "Lending",
+    "dimensions": {
+     "fees": {
+      "genuineSpikes": [],
+      "adapter": "x"
+     }
+    }
+   },
+   {
+    "name": "Lighter",
+    "cmcId": null,
+    "gecko_id": "lighter",
+    "symbol": "LIT",
+    "url": "https://app.lighter.xyz",
+    "parentProtocol": null,
+    "category": "Derivatives",
+    "dimensions": {
+     "fees": {
+      "genuineSpikes": [],
+      "adapter": "x"
+     }
+    }
+   },
+   {
+    "name": "No Site",
+    "cmcId": null,
+    "gecko_id": "nosite",
+    "symbol": "NOS",
+    "url": "",
+    "parentProtocol": null,
+    "category": "Dexs",
+    "dimensions": {
+     "fees": {
+      "genuineSpikes": [],
+      "adapter": "x"
+     }
+    }
+   },
+   {
+    "name": "ZORA Protocol",
+    "cmcId": "35931",
+    "gecko_id": "zora",
+    "symbol": "ZORA",
+    "url": "https://zora.co",
+    "parentProtocol": null,
+    "category": "Launchpad",
+    "dimensions": {
+     "fees": {
+      "genuineSpikes": [],
+      "adapter": "x"
+     }
+    }
+   },
+   {
+    "name": "Twin Site",
+    "cmcId": null,
+    "gecko_id": "twinsite",
+    "symbol": "TWS",
+    "url": "https://twin.site",
+    "parentProtocol": null,
+    "category": "Dexs",
+    "dimensions": {
+     "fees": {
+      "genuineSpikes": [],
+      "adapter": "x"
+     }
+    }
+   }
+  ],
+  "parentProtocols": [
+   {
+    "id": "parent#aave",
+    "name": "Aave",
+    "cmcId": "7278",
+    "gecko_id": "aave"
+   },
+   {
+    "id": "parent#hyperliquid",
+    "name": "Hyperliquid",
+    "cmcId": "32196",
+    "gecko_id": "hyperliquid"
+   },
+   {
+    "id": "parent#arbitrum-foundation",
+    "name": "Arbitrum Foundation",
+    "cmcId": "11841",
+    "gecko_id": "arbitrum"
+   },
+   {
+    "id": "parent#morpho",
+    "name": "Morpho",
+    "cmcId": null,
+    "gecko_id": "morpho",
+    "symbol": "MORPHO",
+    "url": "https://app.morpho.org"
+   }
+  ]
+ },
+ "api.llama.fi/v2/chains": [
+  {
+   "name": "Bitcoin",
+   "cmcId": "1",
+   "gecko_id": "bitcoin",
+   "tokenSymbol": "BTC",
+   "tvl": 3610442994.2
+  },
+  {
+   "name": "Hyperliquid L1",
+   "cmcId": "32196",
+   "gecko_id": "hyperliquid",
+   "tokenSymbol": "HYPE",
+   "tvl": 2298257432.1
+  },
+  {
+   "name": "Binance",
+   "cmcId": "1839",
+   "gecko_id": "binancecoin",
+   "tokenSymbol": "BNB",
+   "tvl": 0
+  },
+  {
+   "name": "BSC",
+   "cmcId": "1839",
+   "gecko_id": "binancecoin",
+   "tokenSymbol": "BNB",
+   "tvl": 4757455795.5
+  },
+  {
+   "name": "Arbitrum",
+   "cmcId": "11841",
+   "gecko_id": "arbitrum",
+   "tokenSymbol": "ARB",
+   "tvl": 1343715442
+  },
+  {
+   "name": "Flare",
+   "cmcId": "4172",
+   "gecko_id": "flare-networks",
+   "tokenSymbol": "FLR",
+   "tvl": 142000000
+  },
+  {
+   "name": "Terra Classic",
+   "cmcId": "4172",
+   "gecko_id": "terra-luna",
+   "tokenSymbol": "LUNC",
+   "tvl": 727000
+  },
+  {
+   "name": "X Layer",
+   "cmcId": null,
+   "gecko_id": "okb",
+   "tokenSymbol": null,
+   "tvl": 211000000,
+   "gasTokenGeckoId": "okb"
+  },
+  {
+   "name": "Fake Chain",
+   "cmcId": null,
+   "gecko_id": "fakecoin",
+   "tokenSymbol": "FAKE",
+   "tvl": 5000000
+  },
+  {
+   "name": "Zora",
+   "cmcId": null,
+   "gecko_id": "zora",
+   "tokenSymbol": null,
+   "gasTokenGeckoId": "ethereum",
+   "tvl": 36700
+  },
+  {
+   "name": "Sym Chain",
+   "cmcId": null,
+   "gecko_id": "symcoin",
+   "tokenSymbol": "SYM",
+   "tvl": 9000000
+  },
+  {
+   "name": "Bare Chain",
+   "cmcId": null,
+   "gecko_id": null,
+   "tokenSymbol": null,
+   "tvl": 100000
+  }
+ ],
+ "stablecoins.llama.fi/stablecoins": {
+  "peggedAssets": [
+   {
+    "id": "1",
+    "name": "Tether",
+    "symbol": "USDT",
+    "gecko_id": "tether",
+    "chains": [
+     "Tron",
+     "Ethereum",
+     "Solana"
+    ],
+    "circulating": {
+     "peggedUSD": 175291799012.4
+    },
+    "circulatingPrevMonth": {
+     "peggedUSD": 183950000000.0
+    }
+   },
+   {
+    "id": "200",
+    "name": "Binance Peg BUSD",
+    "symbol": "BUSD",
+    "gecko_id": null,
+    "chains": [
+     "BSC"
+    ],
+    "circulating": {
+     "peggedUSD": 233000000
+    },
+    "circulatingPrevMonth": {
+     "peggedUSD": 233000000
+    }
+   },
+   {
+    "id": "4",
+    "name": "Binance USD",
+    "symbol": "BUSD",
+    "gecko_id": "binance-usd",
+    "chains": [
+     "Ethereum",
+     "BSC"
+    ],
+    "circulating": {
+     "peggedUSD": 34300000
+    },
+    "circulatingPrevMonth": {
+     "peggedUSD": 34300000
+    }
+   }
+  ]
+ },
+ "stablecoins.llama.fi/stablecoinchains": [
+  {
+   "name": "Hyperliquid L1",
+   "totalCirculatingUSD": {
+    "peggedUSD": 6350144121.0
+   }
+  },
+  {
+   "name": "BSC",
+   "totalCirculatingUSD": {
+    "peggedUSD": 11200000000.0
+   }
+  }
+ ],
+ "api.llama.fi/overview/dexs/Bitcoin": {
+  "total24h": 815461
+ },
+ "api.llama.fi/overview/dexs/Hyperliquid L1": {
+  "total24h": 268853114.7
+ },
+ "api.llama.fi/overview/dexs/BSC": {
+  "total24h": 1020000000
+ },
+ "api.llama.fi/tvl/aave": 15639508702.67,
+ "api.llama.fi/summary/fees/aave?dataType=dailyFees": {
+  "total24h": 1356454,
+  "total30d": 39604624,
+  "total1y": 611349291.3
+ },
+ "api.llama.fi/summary/fees/aave?dataType=dailyRevenue": {
+  "total24h": 171037,
+  "total30d": 5170846,
+  "total1y": 87111182.4
+ },
+ "api.llama.fi/summary/fees/hyperliquid?dataType=dailyFees": {
+  "total24h": 2783362,
+  "total30d": 89608788,
+  "total1y": 894082368.7
+ },
+ "api.llama.fi/summary/fees/hyperliquid?dataType=dailyRevenue": {
+  "total24h": 2034177,
+  "total30d": 68675995,
+  "total1y": 680008987
+ },
+ "api.llama.fi/overview/fees/Bitcoin?dataType=dailyFees": {
+  "total24h": 46906.7,
+  "total30d": 1308371.4
+ },
+ "api.llama.fi/overview/fees/BSC?dataType=dailyFees": {
+  "total30d": 52000000
+ },
+ "api.llama.fi/overview/fees/Hyperliquid L1?dataType=dailyFees": {
+  "total30d": 162304819.4
+ },
+ "api.llama.fi/overview/fees/Bitcoin?dataType=dailyRevenue": {
+  "total30d": 31000,
+  "total1y": 376004
+ },
+ "api.llama.fi/overview/fees/BSC?dataType=dailyRevenue": {
+  "total1y": 180000000
+ },
+ "api.llama.fi/overview/fees/Hyperliquid L1?dataType=dailyRevenue": {
+  "total1y": 723000000
+ },
+ "api.llama.fi/overview/fees/Arbitrum?dataType=dailyFees": {
+  "total30d": 21251390
+ },
+ "api.llama.fi/overview/fees/Arbitrum?dataType=dailyRevenue": {
+  "total1y": 82500000
+ },
+ "api.llama.fi/overview/dexs/Arbitrum": {
+  "total24h": 201000000
+ },
+ "api.llama.fi/overview/fees/Terra Classic?dataType=dailyFees": {
+  "total30d": 489
+ },
+ "api.llama.fi/tvl/morpho": 10600000000,
+ "api.llama.fi/summary/fees/morpho?dataType=dailyFees": {
+  "total30d": 29000000
+ },
+ "api.llama.fi/summary/fees/morpho?dataType=dailyRevenue": {
+  "total1y": 0
+ },
+ "api.llama.fi/overview/dexs/X Layer": {
+  "total24h": 12000000
+ },
+ "api.llama.fi/tvl/lighter": 1200000000,
+ "api.llama.fi/tvl/zora-protocol": 3880000,
+ "api.llama.fi/overview/dexs/Sym Chain": {
+  "total24h": 1000000
+ },
+ "api.llama.fi/overview/dexs/Bare Chain": {
+  "total24h": 5000
+ }
+}

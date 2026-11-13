@@ -1,12 +1,13 @@
 # Market Data. Owns the price and reference data sources an agent reads, and
 # later joins them. /ticker reads CoinMarketCap through DIME Terminal's relay
 # (the platform's key, held by LiteLLM), else CoinGecko's public API, keyless
-# unless a Demo key is enrolled.
+# unless a Demo key is enrolled. A coin's on-chain figures come from
+# DefiLlama's free API, which needs no key.
 
 schema_version: 1
 
 id: market-data
-version: 0.3.0
+version: 0.4.0
 name: Market Data
 blurb: Live crypto market data from slash commands, with no model turn.
 
@@ -18,7 +19,8 @@ description: |
   chat without using your model.
 
   Type `/ticker` for the market, `/ticker btc eth` for a table of coins, or
-  `/ticker btc` for one coin in full. As you type a symbol, the terminal
+  `/ticker btc` for one coin in full, with its TVL, fees and revenue from
+  DefiLlama where it tracks the coin. As you type a symbol, the terminal
   suggests the coins it could be.
 
   `/ticker` reads live data from CoinMarketCap on DIME Terminal's own key.
