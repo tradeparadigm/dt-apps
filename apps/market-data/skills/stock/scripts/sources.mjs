@@ -63,6 +63,38 @@ export function annual(body, tags) {
   return best;
 }
 
+const days = (f) => (Date.parse(f.end) - Date.parse(f.start)) / DAY_MS;
+const near = (a, b, within) => Math.abs(Date.parse(a) - Date.parse(b)) <= within * DAY_MS;
+
+/**
+ * The last twelve months of a figure, `{value, end, months: 12}`: the latest
+ * annual report's year, plus the year to date since, less the same stretch a
+ * year before. With no quarter filed since, the year alone (`fiscal: true`).
+ */
+export function trailing(body, tags) {
+  let best = null;
+  for (const tag of tags) {
+    const usd = body?.facts?.["us-gaap"]?.[tag]?.units?.USD;
+    const facts = (Array.isArray(usd) ? usd : []).filter(
+      (f) => /^(10-K|10-Q|20-F|40-F)/.test(f?.form ?? "") && typeof f.val === "number" && f.start && f.end,
+    );
+    const year = annual(body, [tag]);
+    if (year == null) continue;
+    // The longest stretch from the start of the new fiscal year, as each quarterly report restates it.
+    const sinceYear = facts
+      .filter((f) => near(f.start, new Date(Date.parse(year.end) + DAY_MS).toISOString(), 3))
+      .sort((a, b) => b.end.localeCompare(a.end))[0];
+    const yearBefore = sinceYear && facts.find(
+      (f) => near(f.end, new Date(Date.parse(sinceYear.end) - 365 * DAY_MS).toISOString(), 10) && Math.abs(days(f) - days(sinceYear)) <= 10,
+    );
+    const figure = yearBefore
+      ? { value: year.value + sinceYear.val - yearBefore.val, end: sinceYear.end, fiscal: false }
+      : { ...year, fiscal: true };
+    if (best == null || figure.end > best.end) best = figure;
+  }
+  return best;
+}
+
 export const REVENUE = [
   "RevenueFromContractWithCustomerExcludingAssessedTax",
   "Revenues",

@@ -101,7 +101,7 @@ check("every request names the client", all(c["agent"] for c in calls))
 check("the line reads on a host without components", line == "Microsoft (MSFT) · $517.51 perp · +0.40% Thu · −1.02% since close · CEO Satya Nadella")
 check("the last session is 4pm New York close to close, Wed $520.72 to Thu $522.82, and the perp moves on from Thu's close",
       values(spec, "metric_card") == {"MSFT · perp": "$517.51", "Thu session": "+0.40%", "Since Thu close": "−1.02%",
-                                      "Market cap": "$3.84T", "P/E": "29x"})
+                                      "Market cap": "$3.84T"})
 chart = by(spec, "performance_chart")
 check("the perp's daily closes are charted, at most 30", len(chart) == 1 and 2 <= len(chart[0]["series"][0]["values"]) <= 30)
 rows = values(spec, "labeled_output")
@@ -109,8 +109,9 @@ check("the company's people and facts are rows", {k: rows.get(k) for k in (
     "CEO", "Founded", "Headquarters", "Employees", "Industry", "Exchange", "Fiscal year ends")} == {
     "CEO": "Satya Nadella · since 2014", "Founded": "1975", "Headquarters": "Redmond", "Employees": "228K · 2024",
     "Industry": "Services-Prepackaged Software", "Exchange": "Nasdaq", "Fiscal year ends": "June 30"})
-check("revenue and net income are the latest full year, past an older tag and a later quarter",
-      rows.get("Revenue, FY2026") == "$332B" and rows.get("Net income, FY2026") == "$134B" and rows.get("Shares outstanding") == "7.43B")
+check("revenue, net income and P/E are the last twelve months: FY2026, plus this fiscal year's first quarter, less last year's",
+      rows.get("Revenue, TTM") == "$346B" and rows.get("Net income, TTM") == "$143B" and rows.get("P/E, TTM") == "27x"
+      and rows.get("Shares outstanding") == "7.43B")
 check("the perp's volume, open interest and funding are rows",
       rows.get("Perp volume, 24h") == "$19.8M" and rows.get("Perp open interest") == "$28.8M" and rows.get("Funding, annualized") == "+1.3%")
 markdown = [p["content"] for p in by(spec, "markdown")]
@@ -147,7 +148,7 @@ line, spec = split(out)
 check("with Hyperliquid unreadable there is no price, and a warning says it could not be read",
       by(spec, "metric_card") == [] and by(spec, "alert_banner") == [
           {"variant": "warning", "message": "The live price could not be read from Hyperliquid. Try again in a minute."}] and "Perp volume, 24h" not in values(spec, "labeled_output")
-      and values(spec, "labeled_output").get("Revenue, FY2026") == "$332B")
+      and values(spec, "labeled_output").get("Revenue, TTM") == "$346B")
 
 code, out, _, _ = run("command.mjs", "msft", refused=["query.wikidata.org/sparql"])
 line, spec = split(out)
@@ -163,7 +164,7 @@ check("with no SEC figures there is no market cap or P/E, and the price stays",
 
 code, out, _, _ = run("command.mjs", "msft", refused=["api.hyperliquid.xyz/info#candleSnapshot:1h"])
 check("with the hourly closes unreadable the price stands alone", values(split(out)[1], "metric_card") == {
-    "MSFT · perp": "$517.51", "Market cap": "$3.84T", "P/E": "29x"})
+    "MSFT · perp": "$517.51", "Market cap": "$3.84T"})
 
 weekend = copy.deepcopy(ANSWERS)
 weekend["api.hyperliquid.xyz/info#candleSnapshot:1h"] = [
@@ -205,11 +206,23 @@ check("a share count over a year old is left out, and with it market cap and P/E
 
 # Annual figures
 quarter = copy.deepcopy(ANSWERS)
-income = quarter["data.sec.gov/api/xbrl/companyfacts/CIK0000789019.json"]["facts"]["us-gaap"]["NetIncomeLoss"]["units"]["USD"]
-year_end = max(f["end"] for f in income if f["form"] == "10-K")
-income.insert(0, {"start": "2026-04-01", "end": year_end, "val": 27_000_000_000, "form": "10-K", "accn": "q4"})
+facts = quarter["data.sec.gov/api/xbrl/companyfacts/CIK0000789019.json"]["facts"]["us-gaap"]["NetIncomeLoss"]["units"]
+facts["USD"] = [f for f in facts["USD"] if f["end"] <= "2026-06-30"]
+facts["USD"].insert(0, {"start": "2026-04-01", "end": "2026-06-30", "val": 27_000_000_000, "form": "10-K", "accn": "q4"})
 _, out, _, _ = run("command.mjs", "msft", answers=quarter)
-check("an annual report's fourth quarter is not read as its year", values(split(out)[1], "labeled_output").get("Net income, FY2026") == "$134B")
+rows = values(split(out)[1], "labeled_output")
+check("with no quarter filed since the annual report, the fiscal year stands, never its fourth quarter",
+      rows.get("Net income, FY2026") == "$134B" and rows.get("P/E, FY2026") == "29x")
+
+half = copy.deepcopy(ANSWERS)
+facts = half["data.sec.gov/api/xbrl/companyfacts/CIK0000789019.json"]["facts"]["us-gaap"]["NetIncomeLoss"]["units"]
+three_months = next(f for f in facts["USD"] if f["start"] == "2025-10-01" and f["end"] == "2025-12-31")
+facts["USD"].remove(three_months)
+facts["USD"].insert(0, three_months)
+facts["USD"].append({"start": "2026-07-01", "end": "2026-12-31", "val": 80_000_000_000, "form": "10-Q", "accn": "h1"})
+_, out, _, _ = run("command.mjs", "msft", answers=half)
+check("half a year in, the twelve months take away last year's half, never its second quarter alone",
+      values(split(out)[1], "labeled_output").get("Net income, TTM") == "$148B")
 
 # Filings
 unlisted = copy.deepcopy(ANSWERS)

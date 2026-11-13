@@ -1,7 +1,7 @@
 // /stock's reply: a plain line, then a spec the terminal draws from its
 // catalog. A section whose read failed is left out.
 import { count, day, direction, finite, money, pct, price } from "../../ticker/scripts/format.mjs";
-import { NET_INCOME, REVENUE, annual, sharesOutstanding } from "./sources.mjs";
+import { NET_INCOME, REVENUE, sharesOutstanding, trailing } from "./sources.mjs";
 
 const ACCENT = "#1bc1cf";
 const card = (label, value, dir) => ({ component: "metric_card", props: { label, value, ...(dir ? { direction: dir } : {}) } });
@@ -47,8 +47,8 @@ export function stockCard({ company, filed, figures, who, market, history, sessi
   const symbol = company.ticker.toUpperCase();
   const name = who?.name ?? company.name;
   const shares = sharesOutstanding(figures);
-  const revenue = annual(figures, REVENUE);
-  const income = annual(figures, NET_INCOME);
+  const revenue = trailing(figures, REVENUE);
+  const income = trailing(figures, NET_INCOME);
   const cap = market && shares ? market.price * shares.value : null;
   // The last session close to close, as a quote shows a day's change, then the perp since.
   const sessionMove = session && change(session.close, session.before);
@@ -62,7 +62,6 @@ export function stockCard({ company, filed, figures, who, market, history, sessi
     if (pct(sessionMove)) cards.push(card(`${session.day} session`, pct(sessionMove), direction(sessionMove)));
     if (pct(since)) cards.push(card(`Since ${session.day} close`, pct(since), direction(since)));
     if (money(cap)) cards.push(card("Market cap", money(cap)));
-    if (multiple(cap / income?.value)) cards.push(card("P/E", multiple(cap / income.value)));
     children.push({ layout: "grid", columns: cards.length, children: cards });
     const points = history.slice(-30).map((c) => ({ name: day(new Date(c.at).toISOString()), value: c.value }));
     if (points.length >= 2) {
@@ -85,8 +84,10 @@ export function stockCard({ company, filed, figures, who, market, history, sessi
   add("Exchange", Array.isArray(filed?.exchanges) ? [...new Set(filed.exchanges.filter(Boolean))].join(", ") : null);
   const yearEnd = /^\d{4}$/.test(filed?.fiscalYearEnd ?? "") ? `${MONTHS[Number(filed.fiscalYearEnd.slice(0, 2)) - 1]} ${Number(filed.fiscalYearEnd.slice(2))}` : null;
   add("Fiscal year ends", yearEnd);
-  add(`Revenue, FY${year(revenue?.end)}`, revenue && money(revenue.value));
-  add(`Net income, FY${year(income?.end)}`, income && money(income.value));
+  const period = (f) => (f.fiscal ? `FY${year(f.end)}` : "TTM");
+  add(revenue && `Revenue, ${period(revenue)}`, revenue && money(revenue.value));
+  add(income && `Net income, ${period(income)}`, income && money(income.value));
+  add(income && `P/E, ${period(income)}`, income && multiple(cap / income.value));
   add("Shares outstanding", shares && count(shares.value));
   if (market) {
     add("Perp volume, 24h", money(market.volume));
