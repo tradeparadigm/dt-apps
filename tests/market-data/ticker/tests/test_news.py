@@ -81,7 +81,6 @@ titles = [i["title"] for i in out["list"]]
 check("five headlines at most, in Google's order", titles == [
     "Nvidia Announces CEO Transition", "Retail buyers limit Nvidia stock rout",
     "Chipmakers fall as NVDA leads the Nasdaq lower", 'Nvidia & the "succession" question', "What [Nvidia] means for AI"])
-check("a forecast is not news", not any("Prediction" in t for t in titles))
 check("a second outlet's run of one story is dropped", "Retail buyers limit Nvidia stock rout as shares slide" not in titles)
 check("a headline naming neither the company nor its symbol is dropped", "Apple hits a record high" not in titles)
 check("only an https link is kept", "Nvidia's board names an interim CEO" not in titles)
@@ -96,6 +95,11 @@ coins = "<rss><channel>" + item("BTC slips below $70K", "CoinDesk", 2) + item("I
 out, _ = news("Bitcoin", "btc", feed=coins)
 check("the symbol counts only in capitals", [i["title"] for i in out["list"]] == ["BTC slips below $70K"])
 
+lilly = "<rss><channel>" + item("Eli Lilly raises its outlook", "Reuters", 2) + "</channel></rss>"
+out, urls = news("Eli Lilly & Co", "LLY", feed=lilly)
+check("\"& Co\" is in the search and out of the headline match",
+      parse_qs(urlparse(urls[0]).query)["q"] == ['"Eli Lilly & Co" LLY when:2d'] and [i["title"] for i in out["list"]] == ["Eli Lilly raises its outlook"])
+
 meta = "<rss><channel>" + item("Meta sells $1B of bonds", "Reuters", 2) + item("Platforms are changing", "Wired", 2) + "</channel></rss>"
 out, _ = news("Meta Platforms", "META", feed=meta)
 check("a company's first word names it in a headline", [i["title"] for i in out["list"]] == ["Meta sells $1B of bonds"])
@@ -107,12 +111,13 @@ check("with nothing to show there is no section", out["list"] == [] and out["mar
 
 noise = "<rss><channel>" + "".join(item(t, "Site", 2) for t in [
     "Nvidia Stock Price Prediction 2027", "Will Nvidia beat earnings? Prediction Market", "Nvidia Price Forecast for 2030",
-    "Nvidia Live Price, News, Chart", "Nvidia Price Today | Live NVDA Price", "Price of Nvidia today", "Nvidia Price in Euro",
+    "Nvidia Live Price, News, Chart", "Nvidia Live Price and Market Cap", "Nvidia Price Today | Live NVDA Price", "Price of Nvidia today", "Nvidia Price in Euro",
     "Nvidia (NVDA) Stock Quotes, Company News And Chart Analysis", "Convert 1 NVDA to USD", "Nvidia Tokenized Stock (Ondo)",
-    "About Nvidia Corp (NVDAx)", "Nvidia ships its next chip"]) + "</channel></rss>"
+    "About Nvidia Corp (NVDAx)", "Nvidia Corporation (NVDA) Stock Price, News, Quote & History",
+    "Nvidia ships its next chip", "Nvidia's bet on a prediction market for chips", "Nvidia price today jumps 5% after earnings"]) + "</channel></rss>"
 out, _ = news("Nvidia", "NVDA", feed=noise)
-check("forecasts, prediction markets, price pages, quote pages, converters and listings are not news",
-      [i["title"] for i in out["list"]] == ["Nvidia ships its next chip"])
+check("forecasts, prediction-market listings, price pages, quote pages, converters and listings are not news; a story about them is",
+      [i["title"] for i in out["list"]] == ["Nvidia ships its next chip", "Nvidia's bet on a prediction market for chips", "Nvidia price today jumps 5% after earnings"])
 
 old = "<rss><channel>" + item("Nvidia, two days on", "Bloomberg", 48) + "</channel></rss>"
 out, _ = news("Nvidia", "NVDA", feed=old)

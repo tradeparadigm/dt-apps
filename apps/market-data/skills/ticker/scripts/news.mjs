@@ -5,7 +5,7 @@ const TIMEOUT_MS = 4_000;
 const MAX = 5;
 
 // Listings and forecasts that name a coin without being news about it.
-const NOISE = /price prediction|prediction market|price forecast|live price|price today|price of .+ today|price in [a-z]+$|stock quotes?,|\bconvert \d|tokenized stock|^about /i;
+const NOISE = /price prediction|prediction market$|price forecast|live price|price today \||price, news|price of .+ today|price in [a-z]+$|stock quotes?,|\bconvert \d|tokenized stock|^about /i;
 
 const unescape = (text) =>
   text
@@ -53,8 +53,10 @@ export async function headlines(name, symbol) {
   }
   // The name in any case; the symbol only as a capitalised word, since "SUI" is news and "sui" is Latin.
   // A company's first word too, for "Meta" in news of Meta Platforms; the quoted search already names it in full.
-  const first = name.split(/\s+/)[0];
-  const byName = new RegExp(first.length >= 4 ? `${escape(name)}|\\b${escape(first)}\\b` : escape(name), "i");
+  // "Merck & Co" tells the company from Merck KGaA in the search; a headline says "Merck".
+  const short = name.replace(/\s*&\s*co\.?$/i, "");
+  const first = short.split(/\s+/)[0];
+  const byName = new RegExp(first.length >= 4 ? `${escape(short)}|\\b${escape(first)}\\b` : escape(short), "i");
   const bySymbol = new RegExp(`\\b${escape(symbol.toUpperCase())}\\b`);
   const seen = new Set();
   const list = items(xml)

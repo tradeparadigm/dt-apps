@@ -48,9 +48,12 @@ export function plainName(title) {
   let name = String(title).replace(/\/[a-z]{2}\/?$/i, "").trim();
   for (let before = ""; before !== name; ) {
     before = name;
-    name = name.replace(/[,.]?\s+(inc|corp|corporation|co|company|ltd|plc|holdings?|group|n\.?v|s\.?a|ag|se)\.?$/i, "").replace(/\s*&$/, "").trim();
+    // "& Co" stays: it tells Merck & Co from Merck KGaA, and KKR & Co from a cricket team.
+    if (/&\s*co\.?$/i.test(name)) break;
+    name = name.replace(/[,.]?\s+(inc|corp|corporation|co|company|ltd|plc|holdings?|group|n\.?v|s\.?a|ag|se)\.?$/i, "").trim();
   }
-  return name === name.toUpperCase() ? name.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase()) : name;
+  const letters = name.replace(/&\s*co\.?$/i, "");
+  return letters === letters.toUpperCase() ? name.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase()) : name;
 }
 
 export function stockCard({ company, filed, figures, who, market, history, session, news }) {
