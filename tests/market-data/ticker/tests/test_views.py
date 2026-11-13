@@ -160,17 +160,21 @@ check("with no global figures the market says it could not be read",
 # Several coins
 code, out, urls = ticker("btc pepe zzz")
 line, spec = split(out)
-check("several coins are one read", len(urls) == 1 and "/api/cmc/v3/cryptocurrency/quotes/latest?symbol=BTC%2CPEPE%2CZZZ" in urls[0])
+from datetime import datetime, timezone
+MIDNIGHT = datetime.now(timezone.utc).strftime("%Y-%m-%dT00%%3A00%%3A00.000Z")
+check("several coins are one read of quotes, then one of every coin's month of closes to today's 00:00 UTC",
+      len(urls) == 2 and "/api/cmc/v3/cryptocurrency/quotes/latest?symbol=BTC%2CPEPE%2CZZZ" in urls[0]
+      and f"quotes/historical?id=1%2C24478&count=31&interval=daily&time_end={MIDNIGHT}" in urls[1])
 check("several coins' spec is drawable", code == 0 and valid(spec))
 table = by(spec, "data_table")[0]
-check("the table has the eight columns", [c["header"] for c in table["columns"]] == [
-    "Coin", "Price", "24h", "7d", "30d", "Rank", "Mkt cap", "Volume"])
-check("each row is the highest-ranked coin of its symbol", table["rows"] == [
-    {"coin": "BTC", "price": "$74,018", "d1": "−0.97%", "d7": "+3.1%", "d30": "−12.4%", "rank": "#1", "cap": "$1.46T", "volume": "$38.2B"},
+check("the table has the eight columns, the day's since 00:00 UTC", [c["header"] for c in table["columns"]] == [
+    "Coin", "Price", "Today", "7d", "30d", "Rank", "Mkt cap", "Volume"])
+check("each row is the highest-ranked coin of its symbol, its changes from its daily closes, or CoinMarketCap's rolling ones with none", table["rows"] == [
+    {"coin": "BTC", "price": "$74,018", "d1": "−0.55%", "d7": "−3.5%", "d30": "−38.7%", "rank": "#1", "cap": "$1.46T", "volume": "$38.2B"},
     {"coin": "PEPE", "price": "$0.0000123", "d1": "+2.00%", "d7": "+5.0%", "d30": "−20.0%", "rank": "#40", "cap": "$5.2B", "volume": "$600M"}])
 check("a symbol with no coin is a warning", by(spec, "alert_banner") == [
     {"variant": "warning", "message": "No coin found for `zzz`. The other 2 are listed above."}])
-check("several coins' line", line == "BTC $74,018 · −0.97% · PEPE $0.0000123 · +2.00% · No coin found for zzz")
+check("several coins' line", line == "BTC $74,018 · −0.55% · PEPE $0.0000123 · +2.00% · No coin found for zzz")
 
 # One coin
 code, out, urls = ticker("btc")
@@ -178,17 +182,18 @@ line, spec = split(out)
 paths = sorted(u.split("/api/cmc/")[1].split("?")[0] for u in urls if "/api/cmc/" in u)
 check("one coin reads its quote, then a year of history and its profile", paths == sorted([
     "v3/cryptocurrency/quotes/latest", "v3/cryptocurrency/quotes/historical", "v2/cryptocurrency/info"]))
-check("the history asked for is a year of days", any("quotes/historical?id=1&count=365&interval=1d" in u for u in urls))
+check("the history asked for is a year of daily closes to today's 00:00 UTC",
+      any(f"quotes/historical?id=1&count=366&interval=daily&time_end={MIDNIGHT}" in u for u in urls))
 check("a coin with no contract asks for no on-chain check", not any("/dex/" in u for u in urls))
 check("one coin's spec is drawable", code == 0 and valid(spec))
-check("one coin's line", line == "Bitcoin (BTC) $74,018 · −0.97% 24h · rank #1")
+check("one coin's line", line == "Bitcoin (BTC) $74,018 · −0.55% today · rank #1")
 check("one coin's four cards", spec["children"][0]["columns"] == 4 and values(spec, "metric_card") == {
-    "BTC · #1": "$74,018", "24h": "−0.97%", "Market cap · share": "$1.46T · 58.4%", "24h volume": "$38.2B · −6.4%"})
+    "BTC · #1": "$74,018", "Today": "−0.55%", "Market cap · share": "$1.46T · 58.4%", "24h volume": "$38.2B · −6.4%"})
 chart = by(spec, "performance_chart")
 check("the last 30 days of price are charted with an axis", len(chart) == 1 and chart[0]["yAxis"] is True
       and [p["value"] for p in chart[0]["series"][0]["values"]][:2] == [84000, 83670] and len(chart[0]["series"][0]["values"]) == 30)
 check("performance, the year's high and supply are rows", values(spec, "labeled_output") == {
-    "7d": "+3.1%", "30d": "−12.4%", "90d": "−21.0%", "1y": "+15.7%", "1-year high": "$126,080 · 41% below",
+    "7d": "−3.5%", "30d": "−38.7%", "90d": "−33.1%", "1y": "+15.7%", "1-year high": "$126,080 · 41% below",
     "Circulating": "19.9M BTC", "Max supply": "21M BTC", "Launched": "2009",
     "TVL on Bitcoin": "$3.61B", "DEX volume, 24h": "$815K", "Fees, 30d": "$1.31M", "Revenue, 1y": "$376K",
     "Mkt cap ÷ revenue": "over 1,000x"})
@@ -234,6 +239,17 @@ check("a check, history or profile that cannot be read is left out",
 
 code, out, _ = ticker("zzz")
 check("one symbol with no coin says so in a line", code == 0 and out.strip() == "No coin found for `zzz`.")
+
+code, out, _ = ticker("btc", refused=["v3/cryptocurrency/quotes/historical"])
+line, spec = split(out)
+check("with no daily closes the card shows CoinMarketCap's rolling 24h and periods, labelled so",
+      line == "Bitcoin (BTC) $74,018 · −0.97% 24h · rank #1"
+      and values(spec, "metric_card").get("24h") == "−0.97%" and "Today" not in values(spec, "metric_card")
+      and {k: values(spec, "labeled_output").get(k) for k in ("7d", "30d", "90d")} == {"7d": "+3.1%", "30d": "−12.4%", "90d": "−21.0%"})
+code, out, _ = ticker("btc pepe", refused=["v3/cryptocurrency/quotes/historical"])
+table = by(split(out)[1], "data_table")[0]
+check("with no daily closes the table heads its day's column 24h", [c["header"] for c in table["columns"]][2] == "24h"
+      and table["rows"][0]["d1"] == "−0.97%")
 
 # Answers with a usable shape but not the fields a view needs.
 import copy

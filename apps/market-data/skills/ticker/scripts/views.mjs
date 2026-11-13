@@ -109,20 +109,46 @@ export async function market(env) {
   return reply(line, children);
 }
 
-const COLUMNS = [
-  ["coin", "Coin", "left"],
-  ["price", "Price"],
-  ["d1", "24h"],
-  ["d7", "7d"],
-  ["d30", "30d"],
-  ["rank", "Rank"],
-  ["cap", "Mkt cap"],
-  ["volume", "Volume"],
-].map(([key, header, align = "right"]) => ({ key, header, align }));
+// Crypto's day closes at 00:00 UTC, on CoinMarketCap's daily quotes and on
+// TradingView, so the day's and each period's change run from those closes.
+function lastMidnight() {
+  const day = new Date();
+  day.setUTCHours(0, 0, 0, 0);
+  return day.toISOString();
+}
+const since = (now, then) => (finite(now) && finite(then) && then > 0 ? ((now - then) / then) * 100 : null);
+
+/** Daily closes, oldest first, the last one today's 00:00 UTC: `[{name, value}]`. */
+function dailyCloses(body, id) {
+  const kept = entry(body, id)?.quotes;
+  return (Array.isArray(kept) ? kept : [])
+    .map((p) => ({ name: day(p?.timestamp), value: usd(p?.quote)?.price }))
+    .filter((p) => finite(p.value));
+}
+
+/** The close `n` days before the last one, or null when the list is shorter. */
+const back = (closes, n) => (closes.length > n ? closes[closes.length - 1 - n].value : null);
+
+const COLUMNS = (today) =>
+  [
+    ["coin", "Coin", "left"],
+    ["price", "Price"],
+    ["d1", today ? "Today" : "24h"],
+    ["d7", "7d"],
+    ["d30", "30d"],
+    ["rank", "Rank"],
+    ["cap", "Mkt cap"],
+    ["volume", "Volume"],
+  ].map(([key, header, align = "right"]) => ({ key, header, align }));
 
 export async function coins(env, symbols) {
   const quotes = await cmcQuotes(symbols, env);
   if (quotes == null) return null;
+  const ids = symbols.map((symbol) => quotes.get(symbol)?.coin.id).filter((id) => id != null);
+  // A month of closes for every coin in one read, for the day's, the week's and the month's change.
+  const history = ids.length > 0
+    ? await get(env, "v3/cryptocurrency/quotes/historical", { id: ids.join(","), count: "31", interval: "daily", time_end: lastMidnight(), convert: "USD" })
+    : null;
   const rows = [];
   const lines = [];
   const missing = [];
@@ -133,20 +159,24 @@ export async function coins(env, symbols) {
       continue;
     }
     const { coin, usd: q } = found;
+    // A coin with no closes keeps CoinMarketCap's rolling figures.
+    const closes = history == null ? [] : dailyCloses(history, coin.id);
+    const from = (n, rolling) => (closes.length > 0 ? since(q.price, back(closes, n)) : rolling);
+    const d1 = from(0, q.percent_change_24h);
     rows.push({
       coin: coin.symbol,
       price: price(q.price),
-      d1: pct(q.percent_change_24h),
-      d7: pct(q.percent_change_7d, 1),
-      d30: pct(q.percent_change_30d, 1),
+      d1: pct(d1),
+      d7: pct(from(7, q.percent_change_7d), 1),
+      d30: pct(from(30, q.percent_change_30d), 1),
       rank: finite(coin.cmc_rank) ? `#${coin.cmc_rank}` : null,
       cap: money(q.market_cap),
       volume: money(q.volume_24h),
     });
-    lines.push(joined(`${coin.symbol} ${price(q.price)}`, pct(q.percent_change_24h)));
+    lines.push(joined(`${coin.symbol} ${price(q.price)}`, pct(d1)));
   }
   const children = [];
-  if (rows.length > 0) children.push({ component: "data_table", props: { columns: COLUMNS, rows } });
+  if (rows.length > 0) children.push({ component: "data_table", props: { columns: COLUMNS(history != null), rows } });
   if (missing.length > 0) {
     const others = rows.length === 0 ? "" : rows.length === 1 ? " The other is listed above." : ` The other ${rows.length} are listed above.`;
     const names = missing.map((s) => `\`${s}\``).join(", ");
@@ -257,21 +287,26 @@ export async function coin(env, symbol) {
   const id = String(c.id);
   const token = c.platform?.token_address;
   const chain = c.platform?.slug;
-  // A year of daily quotes, the most the plan serves: the chart, the 1y change and the year's high.
+  // A year of daily closes, the most the plan serves: the chart, every change and the year's high.
   const profile = get(env, "v2/cryptocurrency/info", { id });
   const [history, info, security, llama] = await Promise.all([
-    get(env, "v3/cryptocurrency/quotes/historical", { id, count: "365", interval: "1d", convert: "USD" }),
+    get(env, "v3/cryptocurrency/quotes/historical", { id, count: "366", interval: "daily", time_end: lastMidnight(), convert: "USD" }),
     profile,
     token && chain ? get(env, "v1/dex/security/detail", { platformName: chain, address: token }) : null,
     onChain(c, profile),
   ]);
 
+  const year = dailyCloses(history, id);
+  // With no closes, CoinMarketCap's rolling figures, labelled as such.
+  const closed = year.length > 0;
+  const from = (n, rolling) => (closed ? since(q.price, back(year, n)) : rolling);
+
   // Four short cards, so a small coin's long price still fits its card.
-  const d1 = q.percent_change_24h;
+  const d1 = from(0, q.percent_change_24h);
   const cards = [
     card(joined(c.symbol, finite(c.cmc_rank) ? `#${c.cmc_rank}` : null), price(q.price), direction(d1)),
   ];
-  if (finite(d1)) cards.push(card("24h", pct(d1), direction(d1)));
+  if (finite(d1)) cards.push(card(closed ? "Today" : "24h", pct(d1), direction(d1)));
   const cap = money(q.market_cap);
   if (cap) {
     const share = finite(q.market_cap_dominance) ? `${q.market_cap_dominance.toFixed(1)}%` : null;
@@ -281,22 +316,18 @@ export async function coin(env, symbol) {
   if (vol) cards.push(card("24h volume", joined(vol, pct(q.volume_change_24h, 1)), direction(q.volume_change_24h)));
   const children = [{ layout: "grid", columns: cards.length, children: cards }];
 
-  const kept = entry(history, id)?.quotes;
-  const year = (Array.isArray(kept) ? kept : [])
-    .map((p) => ({ name: day(p?.timestamp), value: usd(p?.quote)?.price }))
-    .filter((p) => finite(p.value));
   // The chart's axis writes dollars to three digits, which a sub-dollar price outgrows.
   const priceChart = chart("Price, 30 days", year.slice(-30), q.price >= 1);
   if (priceChart) children.push(priceChart);
 
   const rows = [];
   // A coin listed less than a year ago has no 1y figures.
-  const yearAgo = year.length >= 360 ? year[0].value : null;
+  const yearAgo = back(year, 365);
   for (const [label, value] of [
-    ["7d", q.percent_change_7d],
-    ["30d", q.percent_change_30d],
-    ["90d", q.percent_change_90d],
-    ["1y", yearAgo > 0 ? ((q.price - yearAgo) / yearAgo) * 100 : null],
+    ["7d", from(7, q.percent_change_7d)],
+    ["30d", from(30, q.percent_change_30d)],
+    ["90d", from(90, q.percent_change_90d)],
+    ["1y", since(q.price, yearAgo)],
   ]) {
     if (finite(value)) rows.push(row(label, pct(value, 1), direction(value)));
   }
@@ -329,6 +360,6 @@ export async function coin(env, symbol) {
   const banner = token ? onChainBanner(security) : null;
   if (banner) children.push(banner);
 
-  const line = joined(`${c.name} (${c.symbol}) ${price(q.price)}`, pct(d1) && `${pct(d1)} 24h`, finite(c.cmc_rank) ? `rank #${c.cmc_rank}` : null);
+  const line = joined(`${c.name} (${c.symbol}) ${price(q.price)}`, pct(d1) && `${pct(d1)} ${closed ? "today" : "24h"}`, finite(c.cmc_rank) ? `rank #${c.cmc_rank}` : null);
   return reply(line, children);
 }

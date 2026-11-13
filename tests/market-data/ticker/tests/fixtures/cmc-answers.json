@@ -288,6 +288,14 @@
     "symbol": "BTC",
     "quotes": [
      {
+      "timestamp": "2024-11-13T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 64000
+       }
+      }
+     },
+     {
       "timestamp": "2024-11-14T00:40:00.000Z",
       "quote": {
        "USD": {
