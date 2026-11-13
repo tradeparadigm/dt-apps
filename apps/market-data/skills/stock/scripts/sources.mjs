@@ -118,7 +118,8 @@ export function sharesOutstanding(body) {
     // Later filings restate the same date; only that one filing's classes count.
     const classes = facts.filter((f) => f.end === latest.end && f.accn === latest.accn);
     const total = classes.reduce((sum, f) => sum + f.val, 0);
-    if (total > 0) return { value: total, end: latest.end };
+    // A foreign filer counts ordinary shares, where the perp trades a depositary share of several.
+    if (total > 0) return { value: total, end: latest.end, foreign: /^(20-F|40-F|6-K)/.test(latest.form ?? "") };
   }
   return null;
 }
@@ -189,29 +190,39 @@ export async function people(cik) {
 }
 
 const HYPERLIQUID = "https://api.hyperliquid.xyz/info";
-// trade.xyz's markets that are no company: commodities, currencies and indexes.
-// Several share a ticker with a listed company (CL is Colgate, GOLD is Gold.com),
-// whose card would otherwise show oil's or gold's price.
-const NOT_A_STOCK = new Set([
-  "GOLD", "SILVER", "COPPER", "PLATINUM", "PALLADIUM", "CL", "BRENTOIL", "NATGAS", "HO",
-  "EUR", "GBP", "JPY", "SP500", "XYZ100", "JP225", "KR200", "NIFTY",
-]);
 const info = (body) =>
   get(HYPERLIQUID, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 /**
+ * Each perp's category as Hyperliquid files it (stocks, commodities, fx,
+ * indices, preipo), read at most once a day: `[[name, category]]`, or null.
+ */
+async function categories() {
+  const { fresh, stale } = readList("perp-categories.json", TICKERS_MS);
+  if (fresh) return fresh;
+  const body = await info({ type: "perpCategories" });
+  if (!Array.isArray(body)) return stale ?? null;
+  const list = body.filter((c) => Array.isArray(c) && typeof c[0] === "string" && typeof c[1] === "string");
+  writeList("perp-categories.json", list);
+  return list;
+}
+
+/**
  * trade.xyz's perp on the stock, `{price, volume, openInterest, funding}`;
- * false when it lists none for the company (a delisted market's price is
- * frozen), null when Hyperliquid could not be read.
+ * false when it lists none for the company, null when Hyperliquid could not
+ * be read. A perp counts only when Hyperliquid files it under stocks, since
+ * commodities share tickers with companies (CL is crude and Colgate, GOLD is
+ * gold and Gold.com), and only while it is listed: a delisted price is frozen.
  */
 export async function perp(ticker) {
-  const body = await info({ type: "metaAndAssetCtxs", dex: "xyz" });
+  const [body, filed] = await Promise.all([info({ type: "metaAndAssetCtxs", dex: "xyz" }), categories()]);
   const universe = body?.[0]?.universe;
   const contexts = body?.[1];
-  if (!Array.isArray(universe) || !Array.isArray(contexts)) return null;
+  if (!Array.isArray(universe) || !Array.isArray(contexts) || filed == null) return null;
   const name = `xyz:${ticker.toUpperCase()}`;
   const i = universe.findIndex((m) => m?.name === name);
-  if (i === -1 || universe[i]?.isDelisted === true || NOT_A_STOCK.has(ticker.toUpperCase())) return false;
+  const stock = filed.some(([n, category]) => n === name && category === "stocks");
+  if (i === -1 || universe[i]?.isDelisted === true || !stock) return false;
   const ctx = contexts[i];
   const price = Number(ctx?.markPx);
   if (!Number.isFinite(price)) return null;

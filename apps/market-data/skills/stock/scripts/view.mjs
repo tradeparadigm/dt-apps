@@ -49,11 +49,13 @@ export function stockCard({ company, filed, figures, who, market, history, sessi
   const shares = sharesOutstanding(figures);
   const revenue = trailing(figures, REVENUE);
   const income = trailing(figures, NET_INCOME);
-  // A split since the share count's date makes price times count wrong by its ratio until the next filing.
+  // Price times count is wrong after a split since the count's date, until the next filing, and
+  // for a foreign filer's ordinary shares; with no closes back to the count's date, a split can't be ruled out.
   const split = shares != null && splitSince(history, shares.end);
-  const cap = market && shares && !split ? market.price * shares.value : null;
+  const counted = shares != null && !shares.foreign && !split && history.length > 0 && history[0].at <= Date.parse(shares.end);
+  const cap = market && counted ? market.price * shares.value : null;
   // The last session close to close, as a quote shows a day's change, then the perp since.
-  const sessionMove = session && change(session.close, session.before);
+  const sessionMove = market && session ? change(session.close, session.before) : null;
   const since = market && session ? change(market.price, session.close) : null;
 
   const children = [];
@@ -85,7 +87,7 @@ export function stockCard({ company, filed, figures, who, market, history, sessi
   add(revenue && `Revenue, ${period(revenue)}`, revenue && money(revenue.value));
   add(income && `Net income, ${period(income)}`, income && money(income.value));
   add(income && `P/E, ${period(income)}`, income && multiple(cap / income.value));
-  add("Shares outstanding", shares && !split && count(shares.value));
+  add("Shares outstanding", shares && !shares.foreign && !split && count(shares.value));
   if (market) {
     add("Perp volume, 24h", money(market.volume));
     add("Perp open interest", money(market.openInterest));

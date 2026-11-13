@@ -6,8 +6,9 @@ import { companies } from "./sources.mjs";
 const MAX_ROWS = 10;
 const POPULAR = ["nvda", "msft", "aapl", "amzn", "googl", "meta", "tsla", "coin"];
 
-// The SEC writes a share class with a dash (BRK-B), as /stock reads a dot.
-const typed = (process.argv[2] ?? "").trim().toLowerCase().replace(/^\$/, "").replace(".", "-");
+const typed = (process.argv[2] ?? "").trim().toLowerCase().replace(/^\$/, "");
+// The SEC writes a share class with a dash (BRK-B), as /stock reads a dot; a name keeps its dots.
+const ticker = typed.replace(".", "-");
 
 // Under the 3 s app_command.lookup gives a script.
 const list = await companies(2_800);
@@ -29,8 +30,8 @@ const seen = new Set();
 const matches = typed === ""
   ? POPULAR.map((t) => list.find((c) => c.ticker === t)).filter(Boolean)
   : [
-      ...list.filter((c) => c.ticker === typed),
-      ...list.filter((c) => c.ticker.startsWith(typed)),
+      ...list.filter((c) => c.ticker === ticker),
+      ...list.filter((c) => c.ticker.startsWith(ticker)),
       ...list.filter((c) => c.name.toLowerCase().startsWith(typed)),
     ].filter((c) => !seen.has(c.ticker) && seen.add(c.ticker));
 process.stdout.write(`${JSON.stringify({ rows: matches.slice(0, MAX_ROWS).map(row) })}\n`);
