@@ -84,7 +84,8 @@ export async function llamaIndex(signal) {
 /**
  * What DefiLlama tracks for a CoinMarketCap coin: `{stable}`, `{chain}` or
  * `{protocol}`, else `{}`. A coin matches by CoinMarketCap id, else by its slug
- * as a CoinGecko id with the same symbol, and for a protocol the same website:
+ * as a CoinGecko id with the same symbol (a chain DefiLlama gives none, X Layer,
+ * passes), and for a protocol the same website:
  * the two sites mostly share slugs, and a slug and symbol alone have named
  * another project. A coin with its own chain is the chain, since DefiLlama
  * files a chain's foundation under the chain's coin.
@@ -96,7 +97,7 @@ export function match(index, coin, website) {
   const site = hostOf(website);
   const is = (e) =>
     e.cmc === id ||
-    (slug != null && e.gecko === slug && e.symbol === symbol && (e.kind === "chain" || (site != null && e.host === site)));
+    (slug != null && e.gecko === slug && (e.kind === "chain" ? e.symbol == null || e.symbol === symbol : e.symbol === symbol && site != null && e.host === site));
   const stablecoin = Array.isArray(coin.tags) && coin.tags.some((t) => (t?.slug ?? t) === "stablecoin");
   if (stablecoin) {
     // Many stablecoins share a symbol; the slug names one.
