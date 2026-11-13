@@ -5,6 +5,7 @@ ones a case refuses. Each reply is a plain line, a blank line, then a spec the
 terminal draws; the checks read the spec the way the terminal's catalog does.
 """
 
+import copy
 import json
 import pathlib
 import subprocess
@@ -18,12 +19,15 @@ from spec import by, components, split, tones, valid, values  # noqa: E402
 SCRIPT = HERE.parents[3] / "apps/market-data/skills/ticker/scripts/command.mjs"
 ANSWERS = json.loads((HERE / "fixtures/cmc-answers.json").read_text())
 LLAMA = json.loads((HERE / "fixtures/llama-answers.json").read_text())
+NOW = "2026-11-13T08:00:00Z"
 
 # A hung read holds an interval open, as a real socket keeps node running.
 STUB = """
 const answers = JSON.parse(process.env.ANSWERS);
 const refused = JSON.parse(process.env.REFUSED);
 const llama = JSON.parse(process.env.LLAMA);
+const now = Date.parse(process.env.NOW);
+Date.now = () => now;
 const hang = process.env.HANG === "1";
 globalThis.fetch = async (url, init = {}) => {
   console.error("URL " + url);
@@ -63,7 +67,7 @@ def ticker(typed, refused=(), answers=ANSWERS, stderr=False, llama=LLAMA, cache=
     result = subprocess.run(
         ["node", "--import", "data:text/javascript," + STUB, str(SCRIPT), typed],
         capture_output=True, text=True, timeout=30,
-        env={"PATH": "/usr/bin:/bin:/usr/local/bin", "TERMINAL_JEV_URL": JEV, "TMPDIR": cache or tempfile.mkdtemp(),
+        env={"PATH": "/usr/bin:/bin:/usr/local/bin", "TERMINAL_JEV_URL": JEV, "TMPDIR": cache or tempfile.mkdtemp(), "NOW": NOW,
              "ANSWERS": json.dumps(answers), "REFUSED": json.dumps(list(refused)), "LLAMA": json.dumps(llama),
              "HANG": "1" if hang else ""},
     )
@@ -112,8 +116,7 @@ check("with no global figures the market says it could not be read",
 # Several coins
 code, out, urls = ticker("btc pepe zzz")
 line, spec = split(out)
-from datetime import datetime, timezone
-MIDNIGHT = datetime.now(timezone.utc).strftime("%Y-%m-%dT00%%3A00%%3A00.000Z")
+MIDNIGHT = "2026-11-13T00%3A00%3A00.000Z"
 check("several coins are one read of quotes, then one of every coin's month of closes to today's 00:00 UTC",
       len(urls) == 2 and "/api/cmc/v3/cryptocurrency/quotes/latest?symbol=BTC%2CPEPE%2CZZZ" in urls[0]
       and f"quotes/historical?id=1%2C24478&count=31&interval=daily&time_end={MIDNIGHT}" in urls[1])
@@ -123,10 +126,10 @@ check("the table has the eight columns, the day's since 00:00 UTC", [c["header"]
     "Coin", "Price", "Today", "7d", "30d", "Rank", "Mkt cap", "Volume"])
 check("each row is the highest-ranked coin of its symbol, its changes from its daily closes, or CoinMarketCap's rolling ones with none", table["rows"] == [
     {"coin": "BTC", "price": "$74,018", "d1": "−0.55%", "d7": "−3.5%", "d30": "−38.7%", "rank": "#1", "cap": "$1.46T", "volume": "$38.2B"},
-    {"coin": "PEPE", "price": "$0.0000123", "d1": "+2.00%", "d7": "+5.0%", "d30": "−20.0%", "rank": "#40", "cap": "$5.2B", "volume": "$600M"}])
+    {"coin": "PEPE", "price": "$0.0000123", "d1": None, "d7": "+5.0%", "d30": "−20.0%", "rank": "#40", "cap": "$5.2B", "volume": "$600M"}])
 check("a symbol with no coin is a warning", by(spec, "alert_banner") == [
     {"variant": "warning", "message": "No coin found for `zzz`. The other 2 are listed above."}])
-check("several coins' line", line == "BTC $74,018 · −0.55% · PEPE $0.0000123 · +2.00% · No coin found for zzz")
+check("several coins' line", line == "BTC $74,018 · −0.55% · PEPE $0.0000123 · No coin found for zzz")
 
 # One coin
 code, out, urls = ticker("btc")
@@ -192,6 +195,31 @@ check("a check, history or profile that cannot be read is left out",
 code, out, _ = ticker("zzz")
 check("one symbol with no coin says so in a line", code == 0 and out.strip() == "No coin found for `zzz`.")
 
+code, out, urls = ticker("zzz yyy")
+check("a table of symbols with no coin reads no history", len(urls) == 1 and "quotes/latest" in urls[0])
+zero = copy.deepcopy(ANSWERS)
+zero["v3/cryptocurrency/quotes/historical"]["data"]["1"]["quotes"][-8]["quote"]["USD"]["price"] = 0
+code, out, _ = ticker("btc", answers=zero)
+check("a close of zero gives no change for its period", "7d" not in values(split(out)[1], "labeled_output"))
+
+late = copy.deepcopy(ANSWERS)
+late["v3/cryptocurrency/quotes/historical"]["data"]["1"]["quotes"].pop()
+code, out, _ = ticker("btc", answers=late)
+line, spec = split(out)
+check("before CoinMarketCap publishes today's 00:00 close, the card shows the rolling 24h and periods, labelled so",
+      line == "Bitcoin (BTC) $74,018 · −0.97% 24h · rank #1"
+      and {k: values(spec, "labeled_output").get(k) for k in ("7d", "30d", "90d")} == {"7d": "+3.1%", "30d": "−12.4%", "90d": "−21.0%"})
+gap = copy.deepcopy(ANSWERS)
+del gap["v3/cryptocurrency/quotes/historical"]["data"]["1"]["quotes"][-8]
+code, out, _ = ticker("btc", answers=gap)
+rows = values(split(out)[1], "labeled_output")
+check("a missing day's close leaves that period out, and never shifts the others onto the wrong day",
+      "7d" not in rows and rows.get("30d") == "−38.7%" and values(split(out)[1], "metric_card").get("Today") == "−0.55%")
+code, out, _ = ticker("btc pepe", answers=late)
+table = by(split(out)[1], "data_table")[0]
+check("with no coin's 00:00 close yet, the table's day column is the rolling 24h",
+      [c["header"] for c in table["columns"]][2] == "24h" and [r["d1"] for r in table["rows"]] == ["−0.97%", "+2.00%"])
+
 code, out, _ = ticker("btc", refused=["v3/cryptocurrency/quotes/historical"])
 line, spec = split(out)
 check("with no daily closes the card shows CoinMarketCap's rolling 24h and periods, labelled so",
@@ -204,7 +232,6 @@ check("with no daily closes the table heads its day's column 24h", [c["header"] 
       and table["rows"][0]["d1"] == "−0.97%")
 
 # Answers with a usable shape but not the fields a view needs.
-import copy
 odd = copy.deepcopy(ANSWERS)
 odd["v1/global-metrics/quotes/latest"]["data"]["quote"] = {"EUR": {}}
 code, out, err = ticker("", answers=odd, stderr=True)
