@@ -1,0 +1,704 @@
+{
+ "v3/cryptocurrency/quotes/latest": {
+  "data": [
+   {
+    "id": 1,
+    "name": "Bitcoin",
+    "symbol": "BTC",
+    "slug": "bitcoin",
+    "platform": null,
+    "cmc_rank": 1,
+    "circulating_supply": 19940000,
+    "max_supply": 21000000,
+    "quote": [
+     {
+      "symbol": "USD",
+      "price": 74018.2,
+      "volume_24h": 38200000000.0,
+      "volume_change_24h": -6.4,
+      "percent_change_24h": -0.97,
+      "percent_change_7d": 3.1,
+      "percent_change_30d": -12.4,
+      "percent_change_90d": -21.0,
+      "market_cap": 1460000000000.0,
+      "market_cap_dominance": 58.4
+     }
+    ]
+   },
+   {
+    "id": 1027,
+    "name": "Ethereum",
+    "symbol": "ETH",
+    "slug": "ethereum",
+    "platform": null,
+    "cmc_rank": 2,
+    "circulating_supply": 120700000.0,
+    "max_supply": null,
+    "quote": [
+     {
+      "symbol": "USD",
+      "price": 2066.38,
+      "volume_24h": 17600000000.0,
+      "percent_change_24h": -2.17,
+      "percent_change_7d": 1.4,
+      "percent_change_30d": -18.0,
+      "market_cap": 249000000000.0
+     }
+    ]
+   },
+   {
+    "id": 99,
+    "name": "Fake Pepe",
+    "symbol": "PEPE",
+    "cmc_rank": 4054,
+    "quote": [
+     {
+      "symbol": "USD",
+      "price": 0.5,
+      "percent_change_24h": 9
+     }
+    ]
+   },
+   {
+    "id": 24478,
+    "name": "Pepe",
+    "symbol": "PEPE",
+    "slug": "pepe",
+    "cmc_rank": 40,
+    "platform": {
+     "id": 1027,
+     "slug": "ethereum",
+     "name": "Ethereum",
+     "symbol": "ETH",
+     "token_address": "0x000000000000000000000000000000000000beef"
+    },
+    "circulating_supply": 420690000000000.0,
+    "max_supply": 420690000000000.0,
+    "quote": [
+     {
+      "symbol": "USD",
+      "price": 1.23e-05,
+      "volume_24h": 600000000.0,
+      "percent_change_24h": 2,
+      "percent_change_7d": 5,
+      "percent_change_30d": -20,
+      "market_cap": 5200000000.0
+     }
+    ]
+   }
+  ]
+ },
+ "v1/global-metrics/quotes/latest": {
+  "data": {
+   "btc_dominance": 58.41,
+   "btc_dominance_yesterday": 58.71,
+   "eth_dominance": 11.92,
+   "eth_dominance_yesterday": 11.72,
+   "quote": {
+    "USD": {
+     "total_market_cap": 2610000000000.0,
+     "total_volume_24h": 98400000000.0,
+     "total_market_cap_yesterday_percentage_change": 1.2,
+     "total_volume_24h_yesterday_percentage_change": -8.1
+    }
+   }
+  }
+ },
+ "v3/fear-and-greed/latest": {
+  "data": {
+   "value": 62,
+   "value_classification": "Greed"
+  }
+ },
+ "v3/fear-and-greed/historical": {
+  "data": [
+   {
+    "timestamp": "1763000000",
+    "value": 62,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762913600",
+    "value": 61,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762827200",
+    "value": 60,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762740800",
+    "value": 59,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762654400",
+    "value": 58,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762568000",
+    "value": 57,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762481600",
+    "value": 56,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762395200",
+    "value": 62,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762308800",
+    "value": 61,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762222400",
+    "value": 60,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762136000",
+    "value": 59,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762049600",
+    "value": 58,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761963200",
+    "value": 57,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761876800",
+    "value": 56,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761790400",
+    "value": 62,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761704000",
+    "value": 61,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761617600",
+    "value": 60,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761531200",
+    "value": 59,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761444800",
+    "value": 58,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761358400",
+    "value": 57,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761272000",
+    "value": 56,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761185600",
+    "value": 62,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761099200",
+    "value": 61,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761012800",
+    "value": 60,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1760926400",
+    "value": 59,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1760840000",
+    "value": 58,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1760753600",
+    "value": 57,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1760667200",
+    "value": 56,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1760580800",
+    "value": 62,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1760494400",
+    "value": 61,
+    "value_classification": "Greed"
+   }
+  ]
+ },
+ "v1/altcoin-season-index/latest": {
+  "data": {
+   "altcoin_index": 34
+  }
+ },
+ "v3/index/cmc100-latest": {
+  "data": {
+   "value": 162.43,
+   "value_24h_percentage_change": 0.9
+  }
+ },
+ "v3/index/cmc20-latest": {
+  "data": {
+   "value": 1288.2,
+   "value_24h_percentage_change": 1.1
+  }
+ },
+ "v2/cryptocurrency/price-performance-stats/latest": {
+  "data": {
+   "1": {
+    "id": 1,
+    "periods": {
+     "all_time": {
+      "quote": {
+       "USD": {
+        "high": 126080,
+        "percent_change": 120000
+       }
+      }
+     },
+     "7d": {
+      "quote": {
+       "USD": {
+        "percent_change": 3.1
+       }
+      }
+     },
+     "30d": {
+      "quote": {
+       "USD": {
+        "percent_change": -12.4
+       }
+      }
+     },
+     "90d": {
+      "quote": {
+       "USD": {
+        "percent_change": -21.0
+       }
+      }
+     },
+     "365d": {
+      "quote": {
+       "USD": {
+        "percent_change": 8.7
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "v3/cryptocurrency/quotes/historical": {
+  "data": [
+   {
+    "id": 1,
+    "symbol": "BTC",
+    "quotes": [
+     {
+      "timestamp": "2025-10-15T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 84000
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-16T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 83670
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-17T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 83340
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-18T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 83010
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-19T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 82680
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-20T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 82350
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-21T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 82020
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-22T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 81690
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-23T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 81360
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-24T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 81030
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-25T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 80700
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-26T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 80370
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-27T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 80040
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-28T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 79710
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-29T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 79380
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-30T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 79050
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-31T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 78720
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-01T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 78390
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-02T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 78060
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-03T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 77730
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-04T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 77400
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-05T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 77070
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-06T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 76740
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-07T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 76410
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-08T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 76080
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-09T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 75750
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-10T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 75420
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-11T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 75090
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-12T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 74760
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-13T00:00:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 74430
+       }
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "v2/cryptocurrency/market-pairs/latest": {
+  "data": {
+   "id": 1,
+   "name": "Bitcoin",
+   "market_pairs": [
+    {
+     "exchange": {
+      "name": "Binance"
+     },
+     "market_pair": "BTC/USDT",
+     "quote": {
+      "USD": {
+       "price": 74021,
+       "volume_24h": 6810000000.0
+      }
+     }
+    },
+    {
+     "exchange": {
+      "name": "Binance"
+     },
+     "market_pair": "BTC/FDUSD",
+     "quote": {
+      "USD": {
+       "price": 74020,
+       "volume_24h": 3100000000.0
+      }
+     }
+    },
+    {
+     "exchange": {
+      "name": "Bybit"
+     },
+     "market_pair": "BTC/USDT",
+     "quote": {
+      "USD": {
+       "price": 74016,
+       "volume_24h": 2940000000.0
+      }
+     }
+    },
+    {
+     "exchange": {
+      "name": "Coinbase Exchange"
+     },
+     "market_pair": "BTC/USD",
+     "quote": {
+      "USD": {
+       "price": 74030,
+       "volume_24h": 2110000000.0
+      }
+     }
+    },
+    {
+     "exchange": {
+      "name": "OKX"
+     },
+     "market_pair": "BTC/USDT",
+     "quote": {
+      "USD": {
+       "price": 74012,
+       "volume_24h": 1860000000.0
+      }
+     }
+    },
+    {
+     "exchange": {
+      "name": "Kraken"
+     },
+     "market_pair": "BTC/USD",
+     "quote": {
+      "USD": {
+       "price": 74026,
+       "volume_24h": 740000000.0
+      }
+     }
+    },
+    {
+     "exchange": {
+      "name": "Bitstamp"
+     },
+     "market_pair": "BTC/USD",
+     "quote": {
+      "USD": {
+       "price": 74026,
+       "volume_24h": 300000000.0
+      }
+     }
+    }
+   ]
+  }
+ },
+ "v2/cryptocurrency/info": {
+  "data": {
+   "1": {
+    "id": 1,
+    "date_launched": "2009-01-03T00:00:00.000Z",
+    "description": "Bitcoin (BTC) is a decentralized digital currency with a fixed supply. It runs on a proof of work network.",
+    "urls": {
+     "website": [
+      "https://bitcoin.org/"
+     ],
+     "twitter": [],
+     "explorer": [
+      "https://mempool.space/"
+     ]
+    }
+   }
+  }
+ },
+ "v1/dex/security/detail": {
+  "data": {
+   "honeypotStatus": 0,
+   "mintableStatus": 0,
+   "rugPullStatus": 0
+  }
+ },
+ "v1/dex/token-liquidity/query": {
+  "data": [
+   {
+    "liquidityUsd": "4200000",
+    "snapshotTime": 1763000000
+   }
+  ]
+ }
+}

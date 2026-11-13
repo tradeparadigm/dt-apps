@@ -1,23 +1,32 @@
-// /ticker: prints USD price and 24 hour change for each symbol, live, from
-// CoinMarketCap through DIME Terminal's relay, else from CoinGecko's public API.
-// The app_command tool passes everything the user typed as one argument.
-import { cmcQuotes } from "./cmc.mjs";
+// /ticker: the market with no symbols, a table for several coins, a full card
+// for one, all read live through DIME Terminal's relay. Where the relay cannot
+// answer, prices alone from CoinGecko's public API. The app_command tool
+// passes everything the user typed as one argument.
+import { relayURL } from "./cmc.mjs";
+import { price as formatPrice, pct } from "./format.mjs";
 import { SYMBOL, symbolWords } from "./symbols.mjs";
+import { coin, coins, market } from "./views.mjs";
 
 const API = "https://api.coingecko.com/api/v3/simple/price";
+const relayed = relayURL(process.env, "") != null;
 
 const symbols = [...new Set(symbolWords(process.argv[2]))];
-if (symbols.length === 0) {
-  console.log("Usage: /ticker <symbol> [symbol ...]");
-  process.exit(0);
-}
 if (!symbols.every((symbol) => SYMBOL.test(symbol))) {
   console.error("A symbol can hold only letters and digits. Type the coin's symbol, like btc.");
   process.exit(1);
 }
 
+const view = symbols.length === 0 ? await market(process.env) : symbols.length === 1 ? await coin(process.env, symbols[0]) : await coins(process.env, symbols);
+if (view != null) {
+  console.log(view);
+  process.exit(0);
+}
+if (symbols.length === 0) {
+  console.error(relayed ? "The market overview could not be read. Try again in a minute." : "The market overview needs an updated agent. Type /ticker btc for a price.");
+  process.exit(1);
+}
+
 // The chat renders the reply as markdown, which joins plain lines into one.
-const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumSignificantDigits: 7 });
 function print(quotes) {
   for (const symbol of symbols) {
     const quote = quotes.get(symbol);
@@ -26,16 +35,10 @@ function print(quotes) {
       console.log(`- ${name}: no price found`);
       continue;
     }
-    const change = quote.change;
-    const changeText = typeof change === "number" ? ` (${change >= 0 ? "+" : ""}${change.toFixed(2)}% 24h)` : "";
-    console.log(`- ${name} ${usd.format(quote.usd)}${changeText}`);
+    const change = pct(quote.change);
+    console.log(`- ${name} ${formatPrice(quote.usd)}${change ? ` (${change.replace("−", "-")} 24h)` : ""}`);
   }
-}
-
-const cmc = await cmcQuotes(symbols, process.env);
-if (cmc != null) {
-  print(cmc);
-  process.exit(0);
+  if (!relayed) console.log("\nMore detail needs an updated agent.");
 }
 
 const url = `${API}?${new URLSearchParams({

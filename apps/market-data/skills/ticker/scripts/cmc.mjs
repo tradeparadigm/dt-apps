@@ -1,7 +1,7 @@
 // CoinMarketCap through DIME Terminal's sidecar relay (/api/cmc, beside the
-// JEV relay that TERMINAL_JEV_URL names). The platform's key is added by
-// LiteLLM, so the agent never holds it. null means the relay could not answer
-// (an older agent, no key, an error): the caller falls back to CoinGecko.
+// JEV relay that TERMINAL_JEV_URL names). LiteLLM adds the platform's key, so
+// the agent never holds it. null means the relay could not answer (an older
+// agent, no key, an error). Nothing here is cached but the coin directory.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,28 +17,44 @@ export function relayURL(env, path) {
   return jev.replace(JEV_ROUTE, `/api/cmc/${path}`);
 }
 
-async function get(env, path, timeoutMs) {
-  const url = relayURL(env, path);
-  if (url == null) return null;
+/** The answer's JSON, or null for anything but a 200 with JSON. */
+export async function get(env, path, params = {}, timeoutMs = 10_000) {
+  const base = relayURL(env, path);
+  if (base == null) return null;
+  const query = new URLSearchParams(params).toString();
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    const response = await fetch(query ? `${base}?${query}` : base, { signal: AbortSignal.timeout(timeoutMs) });
     return response.ok ? await response.json() : null;
   } catch {
     return null;
   }
 }
 
-/** Each symbol's USD price and 24 h change, from its highest-ranked coin. */
+/** A quote's USD figures: v3 latest sends a list of conversions, historical a map. */
+export function usd(quote) {
+  if (Array.isArray(quote)) return quote.find((q) => q?.symbol === "USD") ?? null;
+  return quote?.USD ?? null;
+}
+
+/**
+ * Each symbol's highest-ranked coin with a USD price, keyed by the symbol in
+ * lower case, or null when the relay could not answer.
+ */
 export async function cmcQuotes(symbols, env) {
-  const query = new URLSearchParams({ symbol: symbols.map((s) => s.toUpperCase()).join(","), convert: "USD" });
-  const body = await get(env, `v2/cryptocurrency/quotes/latest?${query}`, 10_000);
-  if (body?.data == null || typeof body.data !== "object") return null;
+  const body = await get(env, "v3/cryptocurrency/quotes/latest", {
+    symbol: symbols.map((s) => s.toUpperCase()).join(","),
+    convert: "USD",
+  });
+  if (!Array.isArray(body?.data)) return null;
   const quotes = new Map();
-  for (const [symbol, coins] of Object.entries(body.data)) {
-    const best = (Array.isArray(coins) ? coins : [coins])
-      .filter((c) => typeof c?.quote?.USD?.price === "number")
-      .sort((a, b) => (a.cmc_rank ?? Infinity) - (b.cmc_rank ?? Infinity))[0];
-    if (best) quotes.set(symbol.toLowerCase(), { usd: best.quote.USD.price, change: best.quote.USD.percent_change_24h });
+  for (const coin of body.data) {
+    const quote = usd(coin?.quote);
+    if (typeof coin?.symbol !== "string" || typeof quote?.price !== "number") continue;
+    const symbol = coin.symbol.toLowerCase();
+    const held = quotes.get(symbol);
+    if (held == null || (coin.cmc_rank ?? Infinity) < (held.coin.cmc_rank ?? Infinity)) {
+      quotes.set(symbol, { coin, usd: quote });
+    }
   }
   return quotes;
 }
@@ -51,7 +67,7 @@ export async function cmcDirectory(env) {
     if (Date.now() - cached.at < DIRECTORY_MS && Array.isArray(cached.coins)) return cached.coins;
   } catch {}
   // Under the 3 s app_command.lookup gives a script.
-  const body = await get(env, "v1/cryptocurrency/map", 2_800);
+  const body = await get(env, "v1/cryptocurrency/map", {}, 2_800);
   if (!Array.isArray(body?.data)) return null;
   const coins = body.data
     .filter((c) => typeof c?.symbol === "string")

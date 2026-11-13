@@ -25,14 +25,6 @@ globalThis.fetch = async (url) => {
 
 JEV = "http://127.0.0.1:8091/api/jev"
 
-QUOTES = {"data": {
-    "BTC": [{"cmc_rank": 1, "quote": {"USD": {"price": 75001, "percent_change_24h": -1.05}}}],
-    "PEPE": [
-        {"cmc_rank": 4054, "quote": {"USD": {"price": 0.5, "percent_change_24h": 9}}},
-        {"cmc_rank": 40, "quote": {"USD": {"price": 0.0000123, "percent_change_24h": 2}}},
-    ],
-}}
-
 MAP = {"data": [
     {"symbol": "ETC", "name": "Ethereum Classic", "rank": 40},
     {"symbol": "KAITO", "name": "KAITO", "rank": 300},
@@ -65,20 +57,15 @@ def run(script, typed, answers, env_extra=None, tmp=None):
     return result.returncode, result.stdout, urls
 
 
-# /ticker
-code, out, urls = run("command.mjs", "btc pepe", {"cmc": {"body": QUOTES}})
-check("prices come from the relay, the highest-ranked coin of a symbol",
-      code == 0 and out.splitlines() == ["- BTC $75,001 (-1.05% 24h)", "- PEPE $0.0000123 (+2.00% 24h)"])
-check("one relay call for every symbol, upper case",
-      len(urls) == 1 and urls[0].startswith("http://127.0.0.1:8091/api/cmc/v2/cryptocurrency/quotes/latest?symbol=BTC%2CPEPE"))
-
+# /ticker: test_views.py reads the relay's answers; here it refuses.
 gecko = {"body": {"btc": {"usd": 74000, "usd_24h_change": 1}}}
 for status in (401, 404, 429):
     code, out, urls = run("command.mjs", "btc", {"cmc": {"status": status}, "gecko": gecko})
     check(f"a relay {status} falls back to CoinGecko", code == 0 and out.splitlines() == ["- BTC $74,000 (+1.00% 24h)"] and len(urls) == 2)
 
 code, out, urls = run("command.mjs", "btc", {"gecko": gecko}, {"TERMINAL_JEV_URL": ""})
-check("no relay URL asks CoinGecko only", code == 0 and len(urls) == 1 and "coingecko" in urls[0])
+check("no relay URL asks CoinGecko only, and says an update shows more",
+      code == 0 and len(urls) == 1 and "coingecko" in urls[0] and out.splitlines()[-1] == "More detail needs an updated agent.")
 
 # Suggestions
 with tempfile.TemporaryDirectory() as tmp:
