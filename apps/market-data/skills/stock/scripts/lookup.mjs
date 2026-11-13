@@ -6,7 +6,8 @@ import { companies } from "./sources.mjs";
 const MAX_ROWS = 10;
 const POPULAR = ["nvda", "msft", "aapl", "amzn", "googl", "meta", "tsla", "coin"];
 
-const typed = (process.argv[2] ?? "").trim().toLowerCase().replace(/^\$/, "");
+// The SEC writes a share class with a dash (BRK-B), as /stock reads a dot.
+const typed = (process.argv[2] ?? "").trim().toLowerCase().replace(/^\$/, "").replace(".", "-");
 
 // Under the 3 s app_command.lookup gives a script.
 const list = await companies(2_800);
