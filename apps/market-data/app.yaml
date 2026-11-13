@@ -29,6 +29,9 @@ description: |
   perp on Hyperliquid, its CEO and board, its latest financials and its SEC
   filings.
 
+  `/stock` and `/ticker` for one coin also show up to five headlines from
+  the last two days, from Google News.
+
   `/ticker` reads live data from CoinMarketCap on DIME Terminal's own key.
   Where that is not available it reads prices alone from CoinGecko's public API, which works
   with no key but shares a rate limit with everyone on the same network. Add

@@ -48,7 +48,7 @@ export function plainName(title) {
   let name = String(title).replace(/\/[a-z]{2}\/?$/i, "").trim();
   for (let before = ""; before !== name; ) {
     before = name;
-    name = name.replace(/[,.]?\s+(inc|corp|corporation|co|company|ltd|plc|holdings?|group|n\.?v|s\.?a|ag|se)\.?$/i, "").trim();
+    name = name.replace(/[,.]?\s+(inc|corp|corporation|co|company|ltd|plc|holdings?|group|n\.?v|s\.?a|ag|se)\.?$/i, "").replace(/\s*&$/, "").trim();
   }
   return name === name.toUpperCase() ? name.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase()) : name;
 }
@@ -105,7 +105,7 @@ export function stockCard({ company, filed, figures, who, market, history, sessi
   if (rows.length > 0) children.push({ layout: "grid", columns: 2, children: rows });
 
   if (who?.board?.length > 0) children.push(markdown(`**Board**: ${who.board.join(", ")}`));
-  const newsSection = newsMarkdown(news, plainName(company.name), company.ticker);
+  const newsSection = newsMarkdown(news);
   if (newsSection) children.push(markdown(newsSection));
   const listed = filings(filed, company.cik);
   if (listed) children.push(markdown(listed));

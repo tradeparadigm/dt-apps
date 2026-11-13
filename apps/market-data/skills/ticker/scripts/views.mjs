@@ -318,7 +318,7 @@ export async function coin(env, symbol) {
   if (/^\d{4}$/.test(launched)) rows.push(row("Launched", launched));
   if (rows.length > 0) children.push({ layout: "grid", columns: 2, children: rows });
   children.push(...onChainSection(llama, q.market_cap));
-  const newsSection = newsMarkdown(news, c.name, c.symbol);
+  const newsSection = newsMarkdown(news);
   if (newsSection) children.push({ component: "markdown", props: { content: newsSection } });
 
   const sentence = firstSentence(about?.description);

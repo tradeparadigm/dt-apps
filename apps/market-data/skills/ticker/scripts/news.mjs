@@ -5,7 +5,7 @@ const TIMEOUT_MS = 4_000;
 const MAX = 5;
 
 // Listings and forecasts that name a coin without being news about it.
-const NOISE = /price prediction|price forecast|live price|price in [a-z]+$|price, news|news, chart|stock quotes?,|company news and|\bconvert \d|tokenized stock|^about /i;
+const NOISE = /price prediction|prediction market|price forecast|live price|price today|price of .+ today|price in [a-z]+$|stock quotes?,|\bconvert \d|tokenized stock|^about /i;
 
 const unescape = (text) =>
   text
@@ -36,12 +36,13 @@ const story = (title) => title.toLowerCase().replace(/[^a-z0-9 ]/g, "").split(/\
 
 /**
  * Up to five headlines from the last two days that name `name` or `symbol`,
- * in Google's order, one per story: `[{title, source, link, at}]`, or null
- * when Google News could not be read.
+ * in Google's order, one per story, and the same search on Google News:
+ * `{list: [{title, source, link, at}], search}`, or null when Google News
+ * could not be read.
  */
 export async function headlines(name, symbol) {
-  const query = `"${name}" ${symbol.toUpperCase()} when:2d`;
-  const url = `${SEARCH}?${new URLSearchParams({ q: query, hl: "en-US", gl: "US", ceid: "US:en" })}`;
+  const terms = `"${name}" ${symbol.toUpperCase()}`;
+  const url = `${SEARCH}?${new URLSearchParams({ q: `${terms} when:2d`, hl: "en-US", gl: "US", ceid: "US:en" })}`;
   let xml;
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
@@ -56,12 +57,13 @@ export async function headlines(name, symbol) {
   const byName = new RegExp(first.length >= 4 ? `${escape(name)}|\\b${escape(first)}\\b` : escape(name), "i");
   const bySymbol = new RegExp(`\\b${escape(symbol.toUpperCase())}\\b`);
   const seen = new Set();
-  return items(xml)
+  const list = items(xml)
     .filter((i) => i.title && /^https:\/\//.test(i.link) && Number.isFinite(i.at))
     .filter((i) => byName.test(i.title) || bySymbol.test(i.title))
     .filter((i) => !NOISE.test(i.title))
     .filter((i) => !seen.has(story(i.title)) && seen.add(story(i.title)))
     .slice(0, MAX);
+  return { list, search: `https://news.google.com/search?${new URLSearchParams({ q: terms })}` };
 }
 
 /** `3h`, `2d`: how long ago. */
@@ -71,9 +73,9 @@ function age(at, now) {
 }
 
 /** The section: a heading linking the search, then one line per headline. */
-export function newsMarkdown(list, name, symbol, now = Date.now()) {
+export function newsMarkdown(news, now = Date.now()) {
+  const { list, search } = news ?? {};
   if (!Array.isArray(list) || list.length === 0) return null;
-  const search = `https://news.google.com/search?${new URLSearchParams({ q: `"${name}" ${symbol.toUpperCase()}` })}`;
   const line = (i) => `- [${i.title.replace(/[[\]]/g, "")}](${i.link}) · ${[i.source, age(i.at, now)].filter(Boolean).join(" · ")}`;
   return `**News** · from [Google News](${search})\n\n${list.map(line).join("\n")}`;
 }

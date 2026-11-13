@@ -125,10 +125,10 @@ check("the company's news follows its board, before its filings",
 
 names = subprocess.run(["node", "--input-type=module", "-e",
     f"import {{ plainName }} from {json.dumps((SCRIPTS / 'view.mjs').as_uri())};"
-    "console.log(JSON.stringify(['MICROSOFT CORP', 'Meta Platforms, Inc.', 'ASML HOLDING NV', 'Coinbase Global, Inc.', 'BERKSHIRE HATHAWAY INC /DE/'].map(plainName)))"],
+    "console.log(JSON.stringify(['MICROSOFT CORP', 'Meta Platforms, Inc.', 'ASML HOLDING NV', 'Coinbase Global, Inc.', 'BERKSHIRE HATHAWAY INC /DE/', 'ELI LILLY & Co'].map(plainName)))"],
     capture_output=True, text=True).stdout
 check("a company's SEC name loses its legal form, and capitals become a name",
-      json.loads(names) == ["Microsoft", "Meta Platforms", "Asml", "Coinbase Global", "Berkshire Hathaway"])
+      json.loads(names) == ["Microsoft", "Meta Platforms", "Asml", "Coinbase Global", "Berkshire Hathaway", "Eli Lilly"])
 
 # What the user typed
 code, out, calls, _ = run("command.mjs", "")

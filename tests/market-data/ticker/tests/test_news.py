@@ -61,8 +61,8 @@ def check(name, cond):
 def news(name, symbol, feed=FEED, refuse=False):
     script = f"""
 import {{ headlines, newsMarkdown }} from {json.dumps(NEWS.as_uri())};
-const list = await headlines({json.dumps(name)}, {json.dumps(symbol)});
-console.log(JSON.stringify({{ list, markdown: newsMarkdown(list, {json.dumps(name)}, {json.dumps(symbol)}) }}));
+const news = await headlines({json.dumps(name)}, {json.dumps(symbol)});
+console.log(JSON.stringify({{ list: news?.list ?? null, search: news?.search ?? null, markdown: newsMarkdown(news) }}));
 """
     result = subprocess.run(
         ["node", "--import", "data:text/javascript," + quote(STUB), "--input-type=module", "-e", script],
@@ -101,9 +101,18 @@ out, _ = news("Meta Platforms", "META", feed=meta)
 check("a company's first word names it in a headline", [i["title"] for i in out["list"]] == ["Meta sells $1B of bonds"])
 
 out, _ = news("Nvidia", "NVDA", refuse=True)
-check("with Google News unreadable there is no section", out == {"list": None, "markdown": None})
+check("with Google News unreadable there is no section", out == {"list": None, "search": None, "markdown": None})
 out, _ = news("Nvidia", "NVDA", feed="<rss><channel></channel></rss>")
 check("with nothing to show there is no section", out["list"] == [] and out["markdown"] is None)
+
+noise = "<rss><channel>" + "".join(item(t, "Site", 2) for t in [
+    "Nvidia Stock Price Prediction 2027", "Will Nvidia beat earnings? Prediction Market", "Nvidia Price Forecast for 2030",
+    "Nvidia Live Price, News, Chart", "Nvidia Price Today | Live NVDA Price", "Price of Nvidia today", "Nvidia Price in Euro",
+    "Nvidia (NVDA) Stock Quotes, Company News And Chart Analysis", "Convert 1 NVDA to USD", "Nvidia Tokenized Stock (Ondo)",
+    "About Nvidia Corp (NVDAx)", "Nvidia ships its next chip"]) + "</channel></rss>"
+out, _ = news("Nvidia", "NVDA", feed=noise)
+check("forecasts, prediction markets, price pages, quote pages, converters and listings are not news",
+      [i["title"] for i in out["list"]] == ["Nvidia ships its next chip"])
 
 old = "<rss><channel>" + item("Nvidia, two days on", "Bloomberg", 48) + "</channel></rss>"
 out, _ = news("Nvidia", "NVDA", feed=old)
