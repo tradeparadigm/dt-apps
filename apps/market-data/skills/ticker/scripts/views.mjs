@@ -4,34 +4,10 @@
 // serves. A section whose read fails is left out. Each returns null when its
 // first read fails, for the caller's fallback.
 import { MARKET_PATH, cmcQuotes, get, usd } from "./cmc.mjs";
-import { count, day, direction, finite, money, pct, price, pts, timeOf } from "./format.mjs";
+import { change, count, day, direction, finite, money, pct, price, pts, timeOf } from "./format.mjs";
 import { fundamentals, llamaIndex, match, slugOf } from "./llama.mjs";
 import { headlines, newsMarkdown } from "./news.mjs";
-
-const ACCENT = "#1bc1cf";
-
-const card = (label, value, dir) => ({
-  component: "metric_card",
-  props: { label, value, ...(dir ? { direction: dir } : {}) },
-});
-const row = (label, value, dir) => ({
-  component: "labeled_output",
-  props: { label, value, ...(dir ? { direction: dir } : {}) },
-});
-const joined = (...parts) => parts.filter((p) => typeof p === "string" && p !== "").join(" · ");
-
-/** The reply: the line every host shows, then the spec, which the terminal finds from the first brace. */
-const reply = (line, children) =>
-  `${line.replace(/[{}]/g, "")}\n\n${JSON.stringify({ layout: "stack", children })}`;
-
-function chart(label, points, yAxis) {
-  const values = points.filter((p) => finite(p.value));
-  if (values.length < 2) return null;
-  return {
-    component: "performance_chart",
-    props: { label, yAxis, series: [{ name: label, color: ACCENT, values }] },
-  };
-}
+import { card, chart, joined, multiple, reply, row } from "./spec.mjs";
 
 function fearLabel(value) {
   return value >= 55 ? "up" : value <= 45 ? "down" : undefined;
@@ -112,23 +88,24 @@ export async function market(env) {
 
 // Crypto's day closes at 00:00 UTC, on CoinMarketCap's daily quotes and on
 // TradingView, so the day's and each period's change run from those closes.
-function lastMidnight() {
-  const day = new Date();
-  day.setUTCHours(0, 0, 0, 0);
-  return day.toISOString();
-}
-const since = (now, then) => (finite(now) && finite(then) && then > 0 ? ((now - then) / then) * 100 : null);
+const DAY_MS = 86_400_000;
+const midnight = () => Math.floor(Date.now() / DAY_MS) * DAY_MS;
+const lastMidnight = () => new Date(midnight()).toISOString();
 
-/** Daily closes, oldest first, the last one today's 00:00 UTC: `[{name, value}]`. */
+/** Daily closes, oldest first: `[{at, name, value}]`. */
 function dailyCloses(body, id) {
   const kept = entry(body, id)?.quotes;
   return (Array.isArray(kept) ? kept : [])
-    .map((p) => ({ name: day(p?.timestamp), value: usd(p?.quote)?.price }))
-    .filter((p) => finite(p.value));
+    .map((p) => ({ at: timeOf(p?.timestamp), name: day(p?.timestamp), value: usd(p?.quote)?.price }))
+    .filter((p) => finite(p.value) && Number.isFinite(p.at));
 }
 
-/** The close `n` days before the last one, or null when the list is shorter. */
-const back = (closes, n) => (closes.length > n ? closes[closes.length - 1 - n].value : null);
+/**
+ * The close at 00:00 UTC `n` days before today's, by its date, or null when
+ * CoinMarketCap has no point that day. Today's own (n = 0) is published a
+ * little after midnight; until it is, the reply uses the rolling figures.
+ */
+const closeOn = (closes, n) => closes.find((c) => c.at === midnight() - n * DAY_MS)?.value ?? null;
 
 const COLUMNS = (today) =>
   [
@@ -150,20 +127,22 @@ export async function coins(env, symbols) {
   const history = ids.length > 0
     ? await get(env, "v3/cryptocurrency/quotes/historical", { id: ids.join(","), count: "31", interval: "daily", time_end: lastMidnight(), convert: "USD" })
     : null;
-  const rows = [];
-  const lines = [];
+  const listed = [];
   const missing = [];
   for (const symbol of symbols) {
     const found = quotes.get(symbol);
-    if (found == null) {
-      missing.push(symbol);
-      continue;
-    }
-    const { coin, usd: q } = found;
+    if (found == null) missing.push(symbol);
+    else listed.push({ ...found, closes: history == null ? [] : dailyCloses(history, found.coin.id) });
+  }
+  // The day's column is Today when any coin has today's close; a coin without one has nothing to show there.
+  const today = listed.some((l) => closeOn(l.closes, 0) != null);
+  const rows = [];
+  const lines = [];
+  for (const { coin, usd: q, closes } of listed) {
+    const closed = closeOn(closes, 0) != null;
     // A coin with no closes keeps CoinMarketCap's rolling figures.
-    const closes = history == null ? [] : dailyCloses(history, coin.id);
-    const from = (n, rolling) => (closes.length > 0 ? since(q.price, back(closes, n)) : rolling);
-    const d1 = from(0, q.percent_change_24h);
+    const from = (n, rolling) => (closed ? change(q.price, closeOn(closes, n)) : rolling);
+    const d1 = today ? from(0, null) : q.percent_change_24h;
     rows.push({
       coin: coin.symbol,
       price: price(q.price),
@@ -177,7 +156,7 @@ export async function coins(env, symbols) {
     lines.push(joined(`${coin.symbol} ${price(q.price)}`, pct(d1)));
   }
   const children = [];
-  if (rows.length > 0) children.push({ component: "data_table", props: { columns: COLUMNS(history != null), rows } });
+  if (rows.length > 0) children.push({ component: "data_table", props: { columns: COLUMNS(today), rows } });
   if (missing.length > 0) {
     const others = rows.length === 0 ? "" : rows.length === 1 ? " The other is listed above." : ` The other ${rows.length} are listed above.`;
     const names = missing.map((s) => `\`${s}\``).join(", ");
@@ -229,13 +208,6 @@ async function onChain(c, info) {
   const signal = AbortSignal.timeout(ON_CHAIN_MS);
   const [index, about] = await Promise.all([llamaIndex(signal), info]);
   return index == null ? null : fundamentals(match(index, c, firstURL(entry(about, c.id)?.urls?.website)), signal);
-}
-
-// Past 1,000x the revenue is too small for the figure to mean anything.
-function multiple(n) {
-  if (!finite(n) || n <= 0) return null;
-  if (n >= 1000) return "over 1,000x";
-  return `${n >= 10 ? n.toFixed(0) : n.toFixed(1)}x`;
 }
 
 /** The on-chain section: a line naming its source, then two columns of rows. */
@@ -299,9 +271,9 @@ export async function coin(env, symbol) {
   ]);
 
   const year = dailyCloses(history, id);
-  // With no closes, CoinMarketCap's rolling figures, labelled as such.
-  const closed = year.length > 0;
-  const from = (n, rolling) => (closed ? since(q.price, back(year, n)) : rolling);
+  // Without today's close, CoinMarketCap's rolling figures, labelled as such.
+  const closed = closeOn(year, 0) != null;
+  const from = (n, rolling) => (closed ? change(q.price, closeOn(year, n)) : rolling);
 
   // Four short cards, so a small coin's long price still fits its card.
   const d1 = from(0, q.percent_change_24h);
@@ -324,12 +296,12 @@ export async function coin(env, symbol) {
 
   const rows = [];
   // A coin listed less than a year ago has no 1y figures.
-  const yearAgo = back(year, 365);
+  const yearAgo = closeOn(year, 365);
   for (const [label, value] of [
     ["7d", from(7, q.percent_change_7d)],
     ["30d", from(30, q.percent_change_30d)],
     ["90d", from(90, q.percent_change_90d)],
-    ["1y", since(q.price, yearAgo)],
+    ["1y", change(q.price, yearAgo)],
   ]) {
     if (finite(value)) rows.push(row(label, pct(value, 1), direction(value)));
   }

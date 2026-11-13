@@ -1,14 +1,9 @@
 // /stock's reply: a plain line, then a spec the terminal draws from its
 // catalog. A section whose read failed is left out.
-import { count, day, direction, finite, money, pct, price } from "../../ticker/scripts/format.mjs";
+import { change, count, day, direction, finite, money, pct, price } from "../../ticker/scripts/format.mjs";
+import { card, chart, joined, markdown, multiple, reply, row } from "../../ticker/scripts/spec.mjs";
 import { newsMarkdown } from "../../ticker/scripts/news.mjs";
 import { NET_INCOME, REVENUE, sharesOutstanding, trailing } from "./sources.mjs";
-
-const ACCENT = "#1bc1cf";
-const card = (label, value, dir) => ({ component: "metric_card", props: { label, value, ...(dir ? { direction: dir } : {}) } });
-const row = (label, value) => ({ component: "labeled_output", props: { label, value } });
-const markdown = (content) => ({ component: "markdown", props: { content } });
-const joined = (...parts) => parts.filter((p) => typeof p === "string" && p !== "").join(" · ");
 
 // What a reader calls each form, for the ones worth listing.
 const FORMS = {
@@ -25,7 +20,6 @@ const MAX_FILINGS = 8;
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 const year = (end) => (typeof end === "string" ? end.slice(0, 4) : null);
-const multiple = (n) => (finite(n) && n > 0 ? `${n >= 10 ? n.toFixed(0) : n.toFixed(1)}x` : null);
 
 function filings(filed, cik) {
   const recent = filed?.filings?.recent;
@@ -42,7 +36,12 @@ function filings(filed, cik) {
   return lines.length > 0 ? `**Recent filings**\n\n${lines.join("\n")}` : null;
 }
 
-const change = (now, then) => (finite(now) && then > 0 ? ((now - then) / then) * 100 : null);
+/** True when a day's close moved by a split's ratio (half or less, or 1.7x or more) after `date`. */
+function splitSince(history, date) {
+  const since = history.filter((c) => c.at >= Date.parse(date));
+  return since.some((c, i) => i > 0 && (c.value / since[i - 1].value <= 0.5 || c.value / since[i - 1].value >= 1.7));
+}
+
 
 /** A company's name as people write it: "MICROSOFT CORP" is Microsoft. */
 export function plainName(title) {
@@ -60,7 +59,9 @@ export function stockCard({ company, filed, figures, who, market, history, sessi
   const shares = sharesOutstanding(figures);
   const revenue = trailing(figures, REVENUE);
   const income = trailing(figures, NET_INCOME);
-  const cap = market && shares ? market.price * shares.value : null;
+  // A split since the share count's date makes price times count wrong by its ratio until the next filing.
+  const split = shares != null && splitSince(history, shares.end);
+  const cap = market && shares && !split ? market.price * shares.value : null;
   // The last session close to close, as a quote shows a day's change, then the perp since.
   const sessionMove = session && change(session.close, session.before);
   const since = market && session ? change(market.price, session.close) : null;
@@ -74,13 +75,8 @@ export function stockCard({ company, filed, figures, who, market, history, sessi
     if (pct(since)) cards.push(card(`Since ${session.day} close`, pct(since), direction(since)));
     if (money(cap)) cards.push(card("Market cap", money(cap)));
     children.push({ layout: "grid", columns: cards.length, children: cards });
-    const points = history.slice(-30).map((c) => ({ name: day(new Date(c.at).toISOString()), value: c.value }));
-    if (points.length >= 2) {
-      children.push({
-        component: "performance_chart",
-        props: { label: "Perp price, 30 days", yAxis: true, series: [{ name: "Perp price, 30 days", color: ACCENT, values: points }] },
-      });
-    }
+    const priceChart = chart("Perp price, 30 days", history.slice(-30).map((c) => ({ name: day(new Date(c.at).toISOString()), value: c.value })), true);
+    if (priceChart) children.push(priceChart);
   }
 
   const rows = [];
@@ -99,7 +95,7 @@ export function stockCard({ company, filed, figures, who, market, history, sessi
   add(revenue && `Revenue, ${period(revenue)}`, revenue && money(revenue.value));
   add(income && `Net income, ${period(income)}`, income && money(income.value));
   add(income && `P/E, ${period(income)}`, income && multiple(cap / income.value));
-  add("Shares outstanding", shares && count(shares.value));
+  add("Shares outstanding", shares && !split && count(shares.value));
   if (market) {
     add("Perp volume, 24h", money(market.volume));
     add("Perp open interest", money(market.openInterest));
@@ -132,5 +128,5 @@ export function stockCard({ company, filed, figures, who, market, history, sessi
     pct(since) && `${pct(since)} since close`,
     who?.ceo && `CEO ${who.ceo.name}`,
   );
-  return `${line.replace(/[{}]/g, "")}\n\n${JSON.stringify({ layout: "stack", children })}`;
+  return reply(line, children);
 }

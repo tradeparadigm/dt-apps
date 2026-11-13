@@ -14,6 +14,8 @@ import tempfile
 from urllib.parse import quote
 
 HERE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parents[1]))
+from spec import by, split, valid, values  # noqa: E402
 SCRIPTS = HERE.parents[3] / "apps/market-data/skills/stock/scripts"
 ANSWERS = json.loads((HERE / "fixtures/stock-answers.json").read_text())
 NOW = "2026-11-13T12:00:00Z"
@@ -68,25 +70,6 @@ def run(script, typed, refused=(), answers=ANSWERS, cache=None, news=None):
     return result.returncode, result.stdout, calls, errors
 
 
-def split(out):
-    start = out.index("{")
-    return out[:start].strip(), json.loads(out[start:])
-
-
-def components(node):
-    if "component" in node:
-        return [node]
-    return [c for child in node["children"] for c in components(child)]
-
-
-def by(spec, name):
-    return [c["props"] for c in components(spec) if c["component"] == name]
-
-
-def values(spec, name):
-    return {p["label"]: p["value"] for p in by(spec, name)}
-
-
 def keys(calls):
     return sorted(c["key"] for c in calls)
 
@@ -129,6 +112,7 @@ check("the eight latest filings worth listing link to the SEC's archive", len(fi
 check("an insider trade is named as one", any(l.startswith("- [4](") and "Insider trade" in l for l in filings))
 check("the sources are linked", markdown[2] == "Sources: [SEC filings](https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=789019) · [Wikidata](http://www.wikidata.org/entity/Q2283)")
 check("a listed perp has no banner", by(spec, "alert_banner") == [])
+check("the company's spec is drawable", code == 0 and valid(spec))
 
 FEED = ("<rss><channel><item><title>Microsoft says Teams outage is fixed - Reuters</title>"
         "<link>https://news.google.com/rss/articles/abc</link><pubDate>Fri, 13 Nov 2026 10:00:00 GMT</pubDate>"
@@ -165,6 +149,28 @@ check("with no SEC record, no Wikidata item and no perp, the card still names th
       and [p["content"] for p in by(spec, "markdown")] == ["Sources: [SEC filings](https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=1067983)"])
 check("a stock trade.xyz lists no perp on says so", by(spec, "alert_banner") == [
     {"variant": "info", "message": "trade.xyz lists no perp on BRK-B, so there is no live price."}])
+
+for ticker, why in (("gold", "a commodity's market under a company's ticker"), ("snap", "a delisted market, its price frozen")):
+    _, out, _, _ = run("command.mjs", ticker)
+    _, spec = split(out)
+    check(f"{why} is no price for the company", by(spec, "metric_card") == []
+          and by(spec, "alert_banner")[0]["message"] == f"trade.xyz lists no perp on {ticker.upper()}, so there is no live price.")
+
+daily = ANSWERS["api.hyperliquid.xyz/info#candleSnapshot:1d"]
+split_answers = copy.deepcopy(ANSWERS)
+# A 2-for-1 split on the last day, after the share count's date of 2026-10-22.
+split_answers["api.hyperliquid.xyz/info#candleSnapshot:1d"][-1]["c"] = str(float(daily[-2]["c"]) / 2)
+_, out, _, _ = run("command.mjs", "msft", answers=split_answers)
+_, spec = split(out)
+rows = values(spec, "labeled_output")
+check("after a split since the share count, market cap, P/E and the share count are left out",
+      "Market cap" not in values(spec, "metric_card") and not any(k.startswith("P/E") for k in rows) and "Shares outstanding" not in rows
+      and rows.get("Net income, TTM") == "$143B")
+before = copy.deepcopy(ANSWERS)
+early = [c for c in before["api.hyperliquid.xyz/info#candleSnapshot:1d"] if c["t"] < 1792540800000]
+early[-1]["c"] = str(float(early[-2]["c"]) / 2)
+_, out, _, _ = run("command.mjs", "msft", answers=before)
+check("a split before the share count's date leaves market cap in", "Market cap" in values(split(out)[1], "metric_card"))
 
 code, out, _, _ = run("command.mjs", "msft", refused=["api.hyperliquid.xyz/info#metaAndAssetCtxs"])
 line, spec = split(out)
@@ -265,6 +271,8 @@ check("a row runs /stock with its ticker", rows[1] == {"id": "msft", "lead": {"t
 code, out, calls, _ = run("lookup.mjs", "ms", cache=cache)
 check("the exact ticker comes first, then tickers that start with it in the SEC's order, and the list is read once a day",
       [r["id"] for r in json.loads(out)["rows"]] == ["ms", "msft", "mstr"] and calls == [])
+code, out, calls, _ = run("lookup.mjs", "brk.b", cache=cache)
+check("a share class typed with a dot finds the SEC's dash", [r["id"] for r in json.loads(out)["rows"]] == ["brk-b"])
 code, out, calls, _ = run("lookup.mjs", "berk", cache=cache)
 check("a company's name matches too", [r["id"] for r in json.loads(out)["rows"]] == ["brk-b"])
 

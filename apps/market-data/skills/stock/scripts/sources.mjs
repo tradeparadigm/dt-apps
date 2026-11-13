@@ -4,7 +4,7 @@
 import { readList, writeList } from "../../ticker/scripts/cache.mjs";
 
 // The SEC refuses a request with no User-Agent and asks automated clients to name themselves.
-const AGENT = "DIME-Terminal-market-data/0.5";
+const AGENT = "DIME-Terminal-market-data";
 const TICKERS_MS = 24 * 3_600_000;
 
 async function get(url, init = {}, timeoutMs = 8_000) {
@@ -42,10 +42,8 @@ export const submissions = (cik) => get(`https://data.sec.gov/submissions/CIK${p
 export const facts = (cik) => get(`https://data.sec.gov/api/xbrl/companyfacts/CIK${padded(cik)}.json`);
 
 const DAY_MS = 86_400_000;
-const yearLong = (f) => {
-  const days = (Date.parse(f.end) - Date.parse(f.start)) / DAY_MS;
-  return days > 350 && days < 380;
-};
+const days = (f) => (Date.parse(f.end) - Date.parse(f.start)) / DAY_MS;
+const yearLong = (f) => days(f) > 350 && days(f) < 380;
 
 /**
  * The latest full fiscal year of a figure from an annual report, `{value, end}`,
@@ -63,7 +61,6 @@ export function annual(body, tags) {
   return best;
 }
 
-const days = (f) => (Date.parse(f.end) - Date.parse(f.start)) / DAY_MS;
 const near = (a, b, within) => Math.abs(Date.parse(a) - Date.parse(b)) <= within * DAY_MS;
 
 /**
@@ -192,12 +189,20 @@ export async function people(cik) {
 }
 
 const HYPERLIQUID = "https://api.hyperliquid.xyz/info";
+// trade.xyz's markets that are no company: commodities, currencies and indexes.
+// Several share a ticker with a listed company (CL is Colgate, GOLD is Gold.com),
+// whose card would otherwise show oil's or gold's price.
+const NOT_A_STOCK = new Set([
+  "GOLD", "SILVER", "COPPER", "PLATINUM", "PALLADIUM", "CL", "BRENTOIL", "NATGAS", "HO",
+  "EUR", "GBP", "JPY", "SP500", "XYZ100", "JP225", "KR200", "NIFTY",
+]);
 const info = (body) =>
   get(HYPERLIQUID, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 /**
  * trade.xyz's perp on the stock, `{price, volume, openInterest, funding}`;
- * false when it lists none, null when Hyperliquid could not be read.
+ * false when it lists none for the company (a delisted market's price is
+ * frozen), null when Hyperliquid could not be read.
  */
 export async function perp(ticker) {
   const body = await info({ type: "metaAndAssetCtxs", dex: "xyz" });
@@ -206,7 +211,7 @@ export async function perp(ticker) {
   if (!Array.isArray(universe) || !Array.isArray(contexts)) return null;
   const name = `xyz:${ticker.toUpperCase()}`;
   const i = universe.findIndex((m) => m?.name === name);
-  if (i === -1) return false;
+  if (i === -1 || universe[i]?.isDelisted === true || NOT_A_STOCK.has(ticker.toUpperCase())) return false;
   const ctx = contexts[i];
   const price = Number(ctx?.markPx);
   if (!Number.isFinite(price)) return null;
@@ -218,10 +223,13 @@ export async function perp(ticker) {
   };
 }
 
-/** The perp's daily closes for the last 30 days, oldest first, or none when it lists no perp. */
+/**
+ * The perp's daily closes for the last 200 days, oldest first, or none when it
+ * lists no perp: the chart's 30, and back past the share count's date to see a split.
+ */
 export async function closes(ticker) {
   const end = Date.now();
-  const body = await info({ type: "candleSnapshot", req: { coin: `xyz:${ticker.toUpperCase()}`, interval: "1d", startTime: end - 31 * DAY_MS, endTime: end } });
+  const body = await info({ type: "candleSnapshot", req: { coin: `xyz:${ticker.toUpperCase()}`, interval: "1d", startTime: end - 200 * DAY_MS, endTime: end } });
   if (!Array.isArray(body)) return [];
   return body.map((c) => ({ at: c?.t, value: Number(c?.c) })).filter((c) => Number.isFinite(c.at) && Number.isFinite(c.value));
 }

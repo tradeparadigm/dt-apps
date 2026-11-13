@@ -29,6 +29,16 @@
    "cik_str": 1679788,
    "ticker": "COIN",
    "title": "Coinbase Global, Inc."
+  },
+  "90": {
+   "cik_str": 1234567,
+   "ticker": "GOLD",
+   "title": "Gold.com, Inc."
+  },
+  "91": {
+   "cik_str": 1564408,
+   "ticker": "SNAP",
+   "title": "Snap Inc"
   }
  },
  "data.sec.gov/submissions/CIK0000789019.json": {
@@ -516,6 +526,18 @@
      "growthMode": "enabled",
      "lastFeeScaleChangeTime": "2025-11-23T17:37:10.033211662",
      "deployerFeeScale": "1.0"
+    },
+    {
+     "szDecimals": 4,
+     "name": "xyz:GOLD",
+     "maxLeverage": 25,
+     "marginTableId": 25
+    },
+    {
+     "szDecimals": 0,
+     "name": "xyz:SNAP",
+     "maxLeverage": 10,
+     "isDelisted": true
     }
    ]
   },
@@ -564,6 +586,36 @@
      "517.414"
     ],
     "dayBaseVlm": "37955.565"
+   },
+   {
+    "funding": "0.0000027686",
+    "openInterest": "133399.526",
+    "prevDayPx": "3900",
+    "dayNtlVlm": "70188947.7147700042",
+    "premium": "-0.0001707384",
+    "oraclePx": "3893.5",
+    "markPx": "3893.40",
+    "midPx": "398.185",
+    "impactPxs": [
+     "398.163",
+     "398.241"
+    ],
+    "dayBaseVlm": "178830.936"
+   },
+   {
+    "funding": "0.0000027686",
+    "openInterest": "133399.526",
+    "prevDayPx": "5.23",
+    "dayNtlVlm": "0.0",
+    "premium": "-0.0001707384",
+    "oraclePx": "5.23",
+    "markPx": "5.23",
+    "midPx": "398.185",
+    "impactPxs": [
+     "398.163",
+     "398.241"
+    ],
+    "dayBaseVlm": "178830.936"
    }
   ]
  ],
