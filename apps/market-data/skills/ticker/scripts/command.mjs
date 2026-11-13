@@ -1,5 +1,7 @@
-// /ticker: prints USD price and 24 hour change for each symbol, from CoinGecko.
+// /ticker: prints USD price and 24 hour change for each symbol, live, from
+// CoinMarketCap through DIME Terminal's relay, else from CoinGecko's public API.
 // The app_command tool passes everything the user typed as one argument.
+import { cmcQuotes } from "./cmc.mjs";
 import { SYMBOL, symbolWords } from "./symbols.mjs";
 
 const API = "https://api.coingecko.com/api/v3/simple/price";
@@ -12,6 +14,28 @@ if (symbols.length === 0) {
 if (!symbols.every((symbol) => SYMBOL.test(symbol))) {
   console.error("A symbol can hold only letters and digits. Type the coin's symbol, like btc.");
   process.exit(1);
+}
+
+// The chat renders the reply as markdown, which joins plain lines into one.
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumSignificantDigits: 7 });
+function print(quotes) {
+  for (const symbol of symbols) {
+    const quote = quotes.get(symbol);
+    const name = symbol.toUpperCase();
+    if (quote?.usd === undefined) {
+      console.log(`- ${name}: no price found`);
+      continue;
+    }
+    const change = quote.change;
+    const changeText = typeof change === "number" ? ` (${change >= 0 ? "+" : ""}${change.toFixed(2)}% 24h)` : "";
+    console.log(`- ${name} ${usd.format(quote.usd)}${changeText}`);
+  }
+}
+
+const cmc = await cmcQuotes(symbols, process.env);
+if (cmc != null) {
+  print(cmc);
+  process.exit(0);
 }
 
 const url = `${API}?${new URLSearchParams({
@@ -38,18 +62,8 @@ if (!response.ok) {
   process.exit(1);
 }
 // CoinGecko keys each quote by the symbol as it stores it (POL, stETH).
-const prices = Object.fromEntries(Object.entries(body).map(([key, quote]) => [key.toLowerCase(), quote]));
-
-// The chat renders the reply as markdown, which joins plain lines into one.
-const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumSignificantDigits: 7 });
-for (const symbol of symbols) {
-  const quote = prices[symbol];
-  const name = symbol.toUpperCase();
-  if (quote?.usd === undefined) {
-    console.log(`- ${name}: no price found`);
-    continue;
-  }
-  const change = quote.usd_24h_change;
-  const changeText = typeof change === "number" ? ` (${change >= 0 ? "+" : ""}${change.toFixed(2)}% 24h)` : "";
-  console.log(`- ${name} ${usd.format(quote.usd)}${changeText}`);
-}
+print(
+  new Map(
+    Object.entries(body).map(([key, quote]) => [key.toLowerCase(), { usd: quote.usd, change: quote.usd_24h_change }]),
+  ),
+);

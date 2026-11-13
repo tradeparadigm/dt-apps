@@ -4,6 +4,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { cmcDirectory } from "./cmc.mjs";
 import { SYMBOL, partialWord, symbolWords } from "./symbols.mjs";
 
 // The top 250 coins by market cap, read once and matched locally, so typing
@@ -52,6 +53,29 @@ if (!partial) {
 }
 if (!SYMBOL.test(partial)) {
   print([]);
+  process.exit(0);
+}
+
+// A symbol that starts with what was typed, then a name that does, each by
+// rank. /ticker prices a coin by its symbol, so one that cannot be typed as
+// one is left out, and so is a second coin with a symbol already listed.
+function printMatches(list) {
+  const order = (c) => (c.symbol.startsWith(partial) ? 0 : c.name.toLowerCase().startsWith(partial) ? 1 : 2);
+  const seen = new Set();
+  print(
+    list
+      .map((c, i) => ({ ...c, i }))
+      .filter((c) => order(c) < 2 && SYMBOL.test(c.symbol) && !seen.has(c.symbol) && seen.add(c.symbol))
+      .sort((a, b) => order(a) - order(b) || a.i - b.i)
+      .map((c) => row(c.symbol, c.name, c.rank)),
+  );
+}
+
+// Every coin CoinMarketCap tracks, through DIME Terminal's relay; CoinGecko's
+// top 250 on an agent without it.
+const directory = await cmcDirectory(process.env);
+if (directory != null) {
+  printMatches(directory);
   process.exit(0);
 }
 
@@ -106,14 +130,4 @@ if (fetched) {
   } catch {}
 }
 
-// A symbol that starts with what was typed, then a name that does, each by
-// market cap. /ticker prices a coin by its symbol, so one that cannot be typed
-// as one is left out, and so is a second coin with a symbol already listed.
-const order = (c) => (c.symbol.startsWith(partial) ? 0 : c.name.toLowerCase().startsWith(partial) ? 1 : 2);
-const seen = new Set();
-const rows = coins
-  .map((c, i) => ({ ...c, i }))
-  .filter((c) => order(c) < 2 && SYMBOL.test(c.symbol) && !seen.has(c.symbol) && seen.add(c.symbol))
-  .sort((a, b) => order(a) - order(b) || a.i - b.i)
-  .map((c) => row(c.symbol, c.name, c.rank));
-print(rows);
+printMatches(coins);

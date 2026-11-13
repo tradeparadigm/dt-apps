@@ -1,6 +1,7 @@
 # Market Data. Owns the price and reference data sources an agent reads, and
-# later joins them. /ticker reads CoinGecko's public API, keyless unless a Demo
-# key is enrolled.
+# later joins them. /ticker reads CoinMarketCap through DIME Terminal's relay
+# (the platform's key, held by LiteLLM), else CoinGecko's public API, keyless
+# unless a Demo key is enrolled.
 
 schema_version: 1
 
@@ -19,9 +20,10 @@ description: |
   Type `/ticker btc eth` to get each coin's USD price and 24 hour change.
   As you type a symbol, the terminal suggests the coins it could be.
 
-  `/ticker` reads CoinGecko's public API. It works with no key, but keyless
-  calls share a rate limit with everyone on the same network. Add a free
-  CoinGecko Demo key for a limit of your own.
+  `/ticker` reads live prices from CoinMarketCap on DIME Terminal's own key.
+  Where that is not available it reads CoinGecko's public API, which works
+  with no key but shares a rate limit with everyone on the same network. Add
+  a free CoinGecko Demo key for a limit of your own there.
 
 developer: Paradigm
 developer_url: https://www.paradigm.co
