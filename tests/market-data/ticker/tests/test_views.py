@@ -349,6 +349,16 @@ code, spec, source, llama = on_chain("okb", answers=with_coin(3897, "OKB", "okb"
 check("a chain DefiLlama gives no symbol matches by slug", source == ["On-chain, from [DefiLlama](https://defillama.com/chain/X%20Layer)"])
 code, spec, source, llama = on_chain("other", answers=with_coin(38002, "OTHER", "fakecoin", "Other", 1e7))
 check("a chain whose symbol is another coin's does not match by slug", source == [])
+code, spec, source, llama = on_chain("zora", answers=with_coin(35931, "ZORA", "zora", "ZORA", 5e7))
+check("a chain with no symbol whose gas is another coin's leaves the coin to its protocol",
+      source == ["On-chain, from [DefiLlama](https://defillama.com/protocol/zora-protocol)"])
+code, spec, source, llama = on_chain("sym", answers=with_coin(38003, "SYM", "symcoin", "Sym", 1e7))
+check("a chain with the coin's symbol matches by slug", source == ["On-chain, from [DefiLlama](https://defillama.com/chain/Sym%20Chain)"])
+code, spec, source, llama = on_chain("twx", answers=with_coin(38004, "TWX", "twinsite", "Twin", 1e7, website="https://twin.site"))
+check("a protocol on the coin's website with another symbol does not match", source == [] and llama == INDEX)
+noslug = with_coin(38005, "NOS", None, "No Slug", 1e7)
+code, spec, source, llama = on_chain("nos", answers=noslug)
+check("a coin with no slug matches nothing by slug", source == [] and llama == INDEX)
 
 code, spec, source, llama = on_chain("pepe")
 check("a coin DefiLlama does not track has no section and reads only the index", source == [] and llama == INDEX)
