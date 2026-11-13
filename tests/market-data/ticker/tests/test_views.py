@@ -161,8 +161,8 @@ check("the history asked for is a year of days", any("quotes/historical?id=1&cou
 check("a coin with no contract asks for no on-chain check", not any("/dex/" in u for u in urls))
 check("one coin's spec is drawable", code == 0 and valid(spec))
 check("one coin's line", line == "Bitcoin (BTC) $74,018 · −0.97% 24h · rank #1")
-check("one coin's cards", values(spec, "metric_card") == {
-    "Bitcoin · BTC · #1": "$74,018 · −0.97%", "Market cap": "$1.46T · 58.4% of market", "24h volume": "$38.2B · −6.4%"})
+check("one coin's four cards", spec["children"][0]["columns"] == 4 and values(spec, "metric_card") == {
+    "BTC · #1": "$74,018", "24h": "−0.97%", "Market cap · share": "$1.46T · 58.4%", "24h volume": "$38.2B · −6.4%"})
 chart = by(spec, "performance_chart")
 check("the last 30 days of price are charted with an axis", len(chart) == 1 and chart[0]["yAxis"] is True
       and [p["value"] for p in chart[0]["series"][0]["values"]][:2] == [84000, 83670] and len(chart[0]["series"][0]["values"]) == 30)
@@ -180,6 +180,14 @@ check("a token reads its contract's check",
       sum("/dex/" in u for u in urls) == 1 and any("security/detail?platformName=ethereum&address=0x" in u for u in urls))
 check("a token's check is a banner naming what it flagged", by(spec, "alert_banner") == [
     {"variant": "info", "message": "Contract check: safe · flagged: Blacklist Restrictions Found · buy tax 0%, sell tax 0%"}])
+
+history = ANSWERS["v3/cryptocurrency/quotes/historical"]["data"]
+history["24478"] = history["1"]
+code, out, _ = ticker("pepe")
+_, spec = split(out)
+chart = by(spec, "performance_chart")
+check("a sub-dollar price is charted with no axis", len(chart) == 1 and chart[0]["yAxis"] is False)
+del history["24478"]
 
 year = ANSWERS["v3/cryptocurrency/quotes/historical"]["data"]["1"]["quotes"]
 ANSWERS["v3/cryptocurrency/quotes/historical"]["data"]["1"]["quotes"] = year[-100:]

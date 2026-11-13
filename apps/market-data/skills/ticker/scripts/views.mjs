@@ -208,23 +208,27 @@ export async function coin(env, symbol) {
     token && chain ? get(env, "v1/dex/security/detail", { platformName: chain, address: token }) : null,
   ]);
 
-  const head = joined(c.name, c.symbol, finite(c.cmc_rank) ? `#${c.cmc_rank}` : null);
+  // Four short cards, so a small coin's long price still fits its card.
   const d1 = q.percent_change_24h;
-  const cards = [card(head, joined(price(q.price), pct(d1)), direction(d1))];
+  const cards = [
+    card(joined(c.symbol, finite(c.cmc_rank) ? `#${c.cmc_rank}` : null), price(q.price), direction(d1)),
+  ];
+  if (finite(d1)) cards.push(card("24h", pct(d1), direction(d1)));
   const cap = money(q.market_cap);
   if (cap) {
-    const share = finite(q.market_cap_dominance) ? `${q.market_cap_dominance.toFixed(1)}% of market` : null;
-    cards.push(card("Market cap", joined(cap, share)));
+    const share = finite(q.market_cap_dominance) ? `${q.market_cap_dominance.toFixed(1)}%` : null;
+    cards.push(card(share ? "Market cap · share" : "Market cap", joined(cap, share)));
   }
   const vol = money(q.volume_24h);
   if (vol) cards.push(card("24h volume", joined(vol, pct(q.volume_change_24h, 1)), direction(q.volume_change_24h)));
-  const children = [{ layout: "grid", columns: 3, children: cards }];
+  const children = [{ layout: "grid", columns: cards.length, children: cards }];
 
   const kept = entry(history, id)?.quotes;
   const year = (Array.isArray(kept) ? kept : [])
     .map((p) => ({ name: day(p?.timestamp), value: usd(p?.quote)?.price }))
     .filter((p) => finite(p.value));
-  const priceChart = chart("Price, 30 days", year.slice(-30), true);
+  // The chart's axis writes dollars to three digits, which a sub-dollar price outgrows.
+  const priceChart = chart("Price, 30 days", year.slice(-30), q.price >= 1);
   if (priceChart) children.push(priceChart);
 
   const rows = [];
