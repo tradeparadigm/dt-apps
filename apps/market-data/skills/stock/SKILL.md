@@ -15,8 +15,8 @@ is read live on each run.
 
 `/stock msft` shows one company:
 
-- its price from trade.xyz's perp on Hyperliquid, with 24h change, a 30-day
-  chart, the perp's volume, open interest and funding, and market cap and P/E
+- its price from trade.xyz's perp on Hyperliquid, with the last session's
+  change (4pm New York close to close) and its move since, a 30-day chart, the perp's volume, open interest and funding, and market cap and P/E
   worked out from the SEC's share count and net income. A stock trade.xyz
   lists no perp on has no price.
 - its CEO and chair (with the year each started), board, founding year,

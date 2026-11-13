@@ -29,7 +29,7 @@ globalThis.fetch = async (url, init = {}) => {
   if (u.hostname === "api.hyperliquid.xyz") {
     const body = JSON.parse(init.body);
     key += "#" + body.type;
-    if (body.type === "candleSnapshot" && body.req.coin !== "xyz:MSFT") key += ":none";
+    if (body.type === "candleSnapshot") key += ":" + body.req.interval + (body.req.coin === "xyz:MSFT" ? "" : ":none");
   }
   console.error("URL " + JSON.stringify({ key, agent: init.headers?.["User-Agent"] ?? null }));
   if (refused.includes(key) || !(key in answers)) return new Response("{}", { status: 404 });
@@ -90,16 +90,18 @@ def keys(calls):
 FULL = sorted([
     "www.sec.gov/files/company_tickers.json", "data.sec.gov/submissions/CIK0000789019.json",
     "data.sec.gov/api/xbrl/companyfacts/CIK0000789019.json", "query.wikidata.org/sparql",
-    "api.hyperliquid.xyz/info#metaAndAssetCtxs", "api.hyperliquid.xyz/info#candleSnapshot"])
+    "api.hyperliquid.xyz/info#metaAndAssetCtxs", "api.hyperliquid.xyz/info#candleSnapshot:1d",
+    "api.hyperliquid.xyz/info#candleSnapshot:1h"])
 
 # One company in full
 code, out, calls, _ = run("command.mjs", "msft")
 line, spec = split(out)
-check("one company reads its list, its SEC record and figures, Wikidata, the perp and its closes", keys(calls) == FULL)
+check("one company reads its list, its SEC record and figures, Wikidata, the perp, its daily and its hourly closes", keys(calls) == FULL)
 check("every request names the client", all(c["agent"] for c in calls))
-check("the line reads on a host without components", line == "Microsoft (MSFT) · $517.51 perp · −0.69% 24h · CEO Satya Nadella")
-check("price, change, market cap and P/E are cards", values(spec, "metric_card") == {
-    "MSFT · perp": "$517.51", "24h": "−0.69%", "Market cap": "$3.84T", "P/E": "29x"})
+check("the line reads on a host without components", line == "Microsoft (MSFT) · $517.51 perp · +0.40% Thu · −1.02% since close · CEO Satya Nadella")
+check("the last session is 4pm New York close to close, Wed $520.72 to Thu $522.82, and the perp moves on from Thu's close",
+      values(spec, "metric_card") == {"MSFT · perp": "$517.51", "Thu session": "+0.40%", "Since Thu close": "−1.02%",
+                                      "Market cap": "$3.84T", "P/E": "29x"})
 chart = by(spec, "performance_chart")
 check("the perp's daily closes are charted, at most 30", len(chart) == 1 and 2 <= len(chart[0]["series"][0]["values"]) <= 30)
 rows = values(spec, "labeled_output")
@@ -152,12 +154,28 @@ line, spec = split(out)
 rows = values(spec, "labeled_output")
 check("with Wikidata unreadable the people are left out, the rest kept",
       "CEO" not in rows and not any("Board" in p["content"] for p in by(spec, "markdown")) and rows.get("Industry") == "Services-Prepackaged Software"
-      and line == "Microsoft Corp (MSFT) · $517.51 perp · −0.69% 24h".replace("Microsoft Corp", "MICROSOFT CORP"))
+      and line == "MICROSOFT CORP (MSFT) · $517.51 perp · +0.40% Thu · −1.02% since close")
 
 code, out, _, _ = run("command.mjs", "msft", refused=["data.sec.gov/api/xbrl/companyfacts/CIK0000789019.json"])
 _, spec = split(out)
 check("with no SEC figures there is no market cap or P/E, and the price stays",
-      values(spec, "metric_card") == {"MSFT · perp": "$517.51", "24h": "−0.69%"})
+      values(spec, "metric_card") == {"MSFT · perp": "$517.51", "Thu session": "+0.40%", "Since Thu close": "−1.02%"})
+
+code, out, _, _ = run("command.mjs", "msft", refused=["api.hyperliquid.xyz/info#candleSnapshot:1h"])
+check("with the hourly closes unreadable the price stands alone", values(split(out)[1], "metric_card") == {
+    "MSFT · perp": "$517.51", "Market cap": "$3.84T", "P/E": "29x"})
+
+weekend = copy.deepcopy(ANSWERS)
+weekend["api.hyperliquid.xyz/info#candleSnapshot:1h"] = [
+    c for c in weekend["api.hyperliquid.xyz/info#candleSnapshot:1h"] if c["t"] + 3_600_000 != 1794517200000]
+_, out, _, _ = run("command.mjs", "msft", answers=weekend)
+check("with Thursday's close missing, the last session is Wednesday's", "Wed session" in values(split(out)[1], "metric_card"))
+
+monday = copy.deepcopy(ANSWERS)
+monday["api.hyperliquid.xyz/info#candleSnapshot:1h"] = [
+    c for c in monday["api.hyperliquid.xyz/info#candleSnapshot:1h"] if c["t"] < 1794254400000]
+_, out, _, _ = run("command.mjs", "msft", answers=monday)
+check("the perp's 4pm on a Saturday or Sunday is no session", not any("session" in k for k in values(split(out)[1], "metric_card")))
 
 code, out, _, errors = run("command.mjs", "msft", refused=["www.sec.gov/files/company_tickers.json"])
 check("with the SEC's list unreadable and none cached, it says so", code == 1 and out == "" and "could not be read" in " ".join(errors))

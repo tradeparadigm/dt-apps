@@ -1,7 +1,7 @@
 // /stock: one US-listed company in full, from the SEC, Wikidata and
 // trade.xyz's perp on Hyperliquid, all read live. The app_command tool passes
 // everything the user typed as one argument.
-import { closes, companies, facts, people, perp, submissions } from "./sources.mjs";
+import { closes, companies, facts, people, perp, sessions, submissions } from "./sources.mjs";
 import { stockCard } from "./view.mjs";
 
 export const TICKER = /^[a-z][a-z0-9.-]{0,9}$/;
@@ -29,11 +29,12 @@ if (company == null) {
   process.exit(0);
 }
 
-const [filed, figures, who, market, history] = await Promise.all([
+const [filed, figures, who, market, history, session] = await Promise.all([
   submissions(company.cik),
   facts(company.cik),
   people(company.cik),
   perp(ticker),
   closes(ticker),
+  sessions(ticker),
 ]);
-console.log(stockCard({ company, filed, figures, who, market, history }));
+console.log(stockCard({ company, filed, figures, who, market, history, session }));

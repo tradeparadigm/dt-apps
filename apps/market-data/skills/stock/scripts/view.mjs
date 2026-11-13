@@ -41,20 +41,26 @@ function filings(filed, cik) {
   return lines.length > 0 ? `**Recent filings**\n\n${lines.join("\n")}` : null;
 }
 
-export function stockCard({ company, filed, figures, who, market, history }) {
+const change = (now, then) => (finite(now) && then > 0 ? ((now - then) / then) * 100 : null);
+
+export function stockCard({ company, filed, figures, who, market, history, session }) {
   const symbol = company.ticker.toUpperCase();
   const name = who?.name ?? company.name;
   const shares = sharesOutstanding(figures);
   const revenue = annual(figures, REVENUE);
   const income = annual(figures, NET_INCOME);
   const cap = market && shares ? market.price * shares.value : null;
+  // The last session close to close, as a quote shows a day's change, then the perp since.
+  const sessionMove = session && change(session.close, session.before);
+  const since = market && session ? change(market.price, session.close) : null;
 
   const children = [];
   if (market) {
     const cards = [
-      card(`${symbol} · perp`, price(market.price), direction(market.change)),
-      card("24h", pct(market.change) ?? "–", direction(market.change)),
+      card(`${symbol} · perp`, price(market.price), direction(since ?? sessionMove)),
     ];
+    if (pct(sessionMove)) cards.push(card(`${session.day} session`, pct(sessionMove), direction(sessionMove)));
+    if (pct(since)) cards.push(card(`Since ${session.day} close`, pct(since), direction(since)));
     if (money(cap)) cards.push(card("Market cap", money(cap)));
     if (multiple(cap / income?.value)) cards.push(card("P/E", multiple(cap / income.value)));
     children.push({ layout: "grid", columns: cards.length, children: cards });
@@ -108,7 +114,8 @@ export function stockCard({ company, filed, figures, who, market, history }) {
   const line = joined(
     `${name} (${symbol})`,
     market && `${price(market.price)} perp`,
-    market && pct(market.change) && `${pct(market.change)} 24h`,
+    pct(sessionMove) && `${pct(sessionMove)} ${session.day}`,
+    pct(since) && `${pct(since)} since close`,
     who?.ceo && `CEO ${who.ceo.name}`,
   );
   return `${line.replace(/[{}]/g, "")}\n\n${JSON.stringify({ layout: "stack", children })}`;

@@ -164,7 +164,7 @@ const info = (body) =>
   get(HYPERLIQUID, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 /**
- * trade.xyz's perp on the stock, `{price, change, volume, openInterest, funding}`;
+ * trade.xyz's perp on the stock, `{price, volume, openInterest, funding}`;
  * false when it lists none, null when Hyperliquid could not be read.
  */
 export async function perp(ticker) {
@@ -178,10 +178,8 @@ export async function perp(ticker) {
   const ctx = contexts[i];
   const price = Number(ctx?.markPx);
   if (!Number.isFinite(price)) return null;
-  const before = Number(ctx.prevDayPx);
   return {
     price,
-    change: before > 0 ? ((price - before) / before) * 100 : null,
     volume: Number(ctx.dayNtlVlm),
     openInterest: Number(ctx.openInterest) * price,
     funding: Number(ctx.funding),
@@ -194,4 +192,33 @@ export async function closes(ticker) {
   const body = await info({ type: "candleSnapshot", req: { coin: `xyz:${ticker.toUpperCase()}`, interval: "1d", startTime: end - 31 * DAY_MS, endTime: end } });
   if (!Array.isArray(body)) return [];
   return body.map((c) => ({ at: c?.t, value: Number(c?.c) })).filter((c) => Number.isFinite(c.at) && Number.isFinite(c.value));
+}
+
+const NEW_YORK = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York",
+  weekday: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+/**
+ * The perp at the last two US closes, `{day, close, before}`, from its hourly
+ * candles: the one ending 4pm New York time on a weekday. The perp trades on
+ * through a market holiday, so a holiday counts as a session.
+ */
+export async function sessions(ticker) {
+  const end = Date.now();
+  const body = await info({ type: "candleSnapshot", req: { coin: `xyz:${ticker.toUpperCase()}`, interval: "1h", startTime: end - 6 * DAY_MS, endTime: end } });
+  if (!Array.isArray(body)) return null;
+  const closes = [];
+  for (const c of body) {
+    const at = Number(c?.t) + 3_600_000;
+    const value = Number(c?.c);
+    if (!Number.isFinite(at) || !Number.isFinite(value) || at > end) continue;
+    const p = Object.fromEntries(NEW_YORK.formatToParts(at).map((x) => [x.type, x.value]));
+    if (p.hour === "16" && p.minute === "00" && p.weekday !== "Sat" && p.weekday !== "Sun") closes.push({ day: p.weekday, value });
+  }
+  const [before, last] = closes.slice(-2);
+  return last && before ? { day: last.day, close: last.value, before: before.value } : null;
 }
