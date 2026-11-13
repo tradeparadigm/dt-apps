@@ -29,9 +29,10 @@ is read live on each run.
   day.
 
 Every change runs from CoinMarketCap's daily closes at 00:00 UTC, where
-crypto's day closes on TradingView too. With no closes to read, the reply
-shows CoinMarketCap's rolling 24h and periods, and labels the day's change
-24h.
+crypto's day closes on TradingView too. Until CoinMarketCap publishes
+today's 00:00 close, a little after midnight, the reply shows its rolling 24h
+and periods and labels the day's change 24h. A coin in a table with no close
+today has no Today figure.
 
 The reply is a plain line, then a component spec the terminal draws (its
 `features.generativeUi`). A section whose data cannot be read is left out.
