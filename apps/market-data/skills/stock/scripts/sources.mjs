@@ -1,11 +1,11 @@
 // /stock's sources, all keyless: SEC EDGAR for the company, its financials and
 // filings, Wikidata for its people, and Hyperliquid's trade.xyz perp for a
-// price. Only the SEC's list of tickers is cached; every figure is read live.
+// price. Only the SEC's list of tickers and Hyperliquid's perp categories are
+// cached, each for a day; every figure is read live.
 import { readList, writeList } from "../../ticker/scripts/cache.mjs";
 
 // The SEC refuses a request with no User-Agent and asks automated clients to name themselves.
 const AGENT = "DIME-Terminal-market-data";
-const TICKERS_MS = 24 * 3_600_000;
 
 async function get(url, init = {}, timeoutMs = 8_000) {
   try {
@@ -20,9 +20,12 @@ async function get(url, init = {}, timeoutMs = 8_000) {
   }
 }
 
+/** The SEC's ticker for what was typed: lowercase, no `$`, and a share class's dot as its dash (BRK-B). */
+export const tickerOf = (typed) => String(typed ?? "").trim().toLowerCase().replace(/^\$/, "").replace(".", "-");
+
 /** Every company the SEC lists with a ticker: `[{ticker, name, cik}]`, lowercase tickers. */
 export async function companies(timeoutMs) {
-  const { fresh, stale } = readList("sec-tickers.json", TICKERS_MS);
+  const { fresh, stale } = readList("sec-tickers.json", DAY_MS);
   if (fresh) return fresh;
   const body = await get("https://www.sec.gov/files/company_tickers.json", {}, timeoutMs);
   if (body == null || typeof body !== "object") return stale ?? null;
@@ -195,34 +198,41 @@ const info = (body) =>
 
 /**
  * Each perp's category as Hyperliquid files it (stocks, commodities, fx,
- * indices, preipo), read at most once a day: `[[name, category]]`, or null.
+ * indices, preipo): `[[name, category]]`, or null. Read at most once a day,
+ * and again when `name` is listed but missing from the day's copy.
  */
-async function categories() {
-  const { fresh, stale } = readList("perp-categories.json", TICKERS_MS);
-  if (fresh) return fresh;
+async function categories(name) {
+  const { fresh, stale } = readList("perp-categories.json", DAY_MS);
+  if (fresh && (name == null || fresh.some(([n]) => n === name))) return fresh;
   const body = await info({ type: "perpCategories" });
-  if (!Array.isArray(body)) return stale ?? null;
-  const list = body.filter((c) => Array.isArray(c) && typeof c[0] === "string" && typeof c[1] === "string");
+  const list = Array.isArray(body) ? body.filter((c) => Array.isArray(c) && typeof c[0] === "string" && typeof c[1] === "string") : [];
+  // An answer with no category in it is a failed read, never a day of "no perp".
+  if (list.length === 0) return fresh ?? stale ?? null;
   writeList("perp-categories.json", list);
   return list;
 }
 
+// A company's perp: a listed stock, or one trading before its IPO.
+const COMPANY = new Set(["stocks", "preipo"]);
+
 /**
  * trade.xyz's perp on the stock, `{price, volume, openInterest, funding}`;
  * false when it lists none for the company, null when Hyperliquid could not
- * be read. A perp counts only when Hyperliquid files it under stocks, since
+ * be read. A perp counts only when Hyperliquid files it as a company's (stocks or preipo), since
  * commodities share tickers with companies (CL is crude and Colgate, GOLD is
  * gold and Gold.com), and only while it is listed: a delisted price is frozen.
  */
 export async function perp(ticker) {
-  const [body, filed] = await Promise.all([info({ type: "metaAndAssetCtxs", dex: "xyz" }), categories()]);
+  const name = `xyz:${ticker.toUpperCase()}`;
+  const body = await info({ type: "metaAndAssetCtxs", dex: "xyz" });
   const universe = body?.[0]?.universe;
   const contexts = body?.[1];
-  if (!Array.isArray(universe) || !Array.isArray(contexts) || filed == null) return null;
-  const name = `xyz:${ticker.toUpperCase()}`;
+  if (!Array.isArray(universe) || !Array.isArray(contexts)) return null;
   const i = universe.findIndex((m) => m?.name === name);
-  const stock = filed.some(([n, category]) => n === name && category === "stocks");
-  if (i === -1 || universe[i]?.isDelisted === true || !stock) return false;
+  if (i === -1 || universe[i]?.isDelisted === true) return false;
+  const filed = await categories(name);
+  if (filed == null) return null;
+  if (!filed.some(([n, category]) => n === name && COMPANY.has(category))) return false;
   const ctx = contexts[i];
   const price = Number(ctx?.markPx);
   if (!Number.isFinite(price)) return null;

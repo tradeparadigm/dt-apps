@@ -11,6 +11,7 @@ import pathlib
 import subprocess
 import sys
 import tempfile
+from datetime import datetime
 from urllib.parse import quote
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -144,20 +145,50 @@ check("a perp filed as no stock gives the company no price, and its 4pm closes n
 _, out, _, _ = run("command.mjs", "msft", refused=["api.hyperliquid.xyz/info#perpCategories"])
 check("with Hyperliquid's categories unreadable, a perp can't be told from a commodity, so it reads as no price",
       by(split(out)[1], "metric_card") == [] and "could not be read" in by(split(out)[1], "alert_banner")[0]["message"])
+preipo = copy.deepcopy(ANSWERS)
+preipo["api.hyperliquid.xyz/info#perpCategories"] = [["xyz:MSFT", "preipo"]]
+_, out, _, _ = run("command.mjs", "msft", answers=preipo)
+check("a perp trading before the company's IPO is the company's price", "MSFT · perp" in values(split(out)[1], "metric_card"))
+
+def seeded(cache, rows, age_hours=1):
+    """A day's cached category list, written as cache.mjs writes it."""
+    folder = pathlib.Path(cache) / "market-data-ticker-lookup"
+    folder.mkdir(parents=True, exist_ok=True)
+    at = int(datetime.fromisoformat(NOW.replace("Z", "+00:00")).timestamp() * 1000) - age_hours * 3_600_000
+    (folder / "perp-categories.json").write_text(json.dumps({"at": at, "coins": rows}))
+    return cache
+
+cache = seeded(tempfile.mkdtemp(), [["xyz:NVDA", "stocks"]])
+_, out, calls, _ = run("command.mjs", "msft", cache=cache)
+check("a perp listed since the day's categories were cached reads them again, and shows its price",
+      "api.hyperliquid.xyz/info#perpCategories" in keys(calls) and "MSFT · perp" in values(split(out)[1], "metric_card"))
+cache = seeded(tempfile.mkdtemp(), [["xyz:MSFT", "stocks"]], age_hours=30)
+_, out, calls, _ = run("command.mjs", "msft", cache=cache, refused=["api.hyperliquid.xyz/info#perpCategories"])
+check("with the categories unreadable, the day-old copy answers", "MSFT · perp" in values(split(out)[1], "metric_card"))
+for answer, why in (([], "an empty answer"), ([{"name": "xyz:MSFT", "category": "stocks"}], "an answer of another shape")):
+    reshaped = copy.deepcopy(ANSWERS)
+    reshaped["api.hyperliquid.xyz/info#perpCategories"] = answer
+    cache = tempfile.mkdtemp()
+    _, out, _, _ = run("command.mjs", "msft", cache=cache, answers=reshaped)
+    _, _, calls, _ = run("command.mjs", "msft", cache=cache)
+    check(f"{why} is a failed read, never cached for a day", "could not be read" in by(split(out)[1], "alert_banner")[0]["message"]
+          and "api.hyperliquid.xyz/info#perpCategories" in keys(calls))
+
 cats_cache = tempfile.mkdtemp()
 run("command.mjs", "msft", cache=cats_cache)
 _, out, calls, _ = run("command.mjs", "msft", cache=cats_cache)
 check("the categories are read once a day", "api.hyperliquid.xyz/info#perpCategories" not in keys(calls)
       and "MSFT · perp" in values(split(out)[1], "metric_card"))
 
-foreign = copy.deepcopy(ANSWERS)
-for f in foreign["data.sec.gov/api/xbrl/companyfacts/CIK0000789019.json"]["facts"]["dei"]["EntityCommonStockSharesOutstanding"]["units"]["shares"]:
-    f["form"] = "20-F"
-_, out, _, _ = run("command.mjs", "msft", answers=foreign)
-_, spec = split(out)
-check("a foreign filer's ordinary shares give no market cap, P/E or share count, since the perp trades a depositary share",
-      "Market cap" not in values(spec, "metric_card") and "Shares outstanding" not in values(spec, "labeled_output")
-      and not any(k.startswith("P/E") for k in values(spec, "labeled_output")))
+for form in ("20-F", "40-F", "6-K"):
+    foreign = copy.deepcopy(ANSWERS)
+    for f in foreign["data.sec.gov/api/xbrl/companyfacts/CIK0000789019.json"]["facts"]["dei"]["EntityCommonStockSharesOutstanding"]["units"]["shares"]:
+        f["form"] = form
+    _, out, _, _ = run("command.mjs", "msft", answers=foreign)
+    _, spec = split(out)
+    check(f"a {form} filer's count of ordinary shares stands, with no market cap or P/E, since the perp may trade a depositary share of several",
+          "Market cap" not in values(spec, "metric_card") and values(spec, "labeled_output").get("Shares outstanding") == "7.43B"
+          and not any(k.startswith("P/E") for k in values(spec, "labeled_output")))
 short = copy.deepcopy(ANSWERS)
 short["api.hyperliquid.xyz/info#candleSnapshot:1d"] = [c for c in short["api.hyperliquid.xyz/info#candleSnapshot:1d"] if c["t"] > 1792800000000]
 _, out, _, _ = run("command.mjs", "msft", answers=short)

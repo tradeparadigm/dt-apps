@@ -1,14 +1,14 @@
 // /stock's suggestions: the US-listed companies whose ticker or name starts
 // with what was typed. The terminal runs this through app_command.lookup as the
 // user types and shows each row it prints; picking one runs /stock with it.
-import { companies } from "./sources.mjs";
+import { companies, tickerOf } from "./sources.mjs";
 
 const MAX_ROWS = 10;
 const POPULAR = ["nvda", "msft", "aapl", "amzn", "googl", "meta", "tsla", "coin"];
 
 const typed = (process.argv[2] ?? "").trim().toLowerCase().replace(/^\$/, "");
-// The SEC writes a share class with a dash (BRK-B), as /stock reads a dot; a name keeps its dots.
-const ticker = typed.replace(".", "-");
+// A name keeps its dots; a ticker reads as /stock reads it.
+const ticker = tickerOf(typed);
 
 // Under the 3 s app_command.lookup gives a script.
 const list = await companies(2_800);

@@ -1,7 +1,7 @@
 // /stock: one US-listed company in full, from the SEC, Wikidata and
 // trade.xyz's perp on Hyperliquid, all read live. The app_command tool passes
 // everything the user typed as one argument.
-import { closes, companies, facts, people, perp, sessions, submissions } from "./sources.mjs";
+import { closes, companies, facts, people, perp, sessions, submissions, tickerOf } from "./sources.mjs";
 import { stockCard } from "./view.mjs";
 
 const TICKER = /^[a-z][a-z0-9.-]{0,9}$/;
@@ -21,8 +21,7 @@ if (list == null) {
   console.error("The SEC's list of companies could not be read. Try again in a minute.");
   process.exit(1);
 }
-// The SEC writes a share class with a dash (BRK-B); people type a dot too.
-const ticker = typed.replace(".", "-");
+const ticker = tickerOf(typed);
 const company = list.find((c) => c.ticker === ticker);
 if (company == null) {
   console.log(`No US-listed company found for \`${typed}\`.`);
