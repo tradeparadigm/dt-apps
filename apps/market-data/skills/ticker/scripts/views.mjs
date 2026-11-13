@@ -6,31 +6,7 @@
 import { MARKET_PATH, cmcQuotes, get, usd } from "./cmc.mjs";
 import { count, day, direction, finite, money, pct, price, pts, timeOf } from "./format.mjs";
 import { fundamentals, llamaIndex, match, slugOf } from "./llama.mjs";
-
-const ACCENT = "#1bc1cf";
-
-const card = (label, value, dir) => ({
-  component: "metric_card",
-  props: { label, value, ...(dir ? { direction: dir } : {}) },
-});
-const row = (label, value, dir) => ({
-  component: "labeled_output",
-  props: { label, value, ...(dir ? { direction: dir } : {}) },
-});
-const joined = (...parts) => parts.filter((p) => typeof p === "string" && p !== "").join(" · ");
-
-/** The reply: the line every host shows, then the spec, which the terminal finds from the first brace. */
-const reply = (line, children) =>
-  `${line.replace(/[{}]/g, "")}\n\n${JSON.stringify({ layout: "stack", children })}`;
-
-function chart(label, points, yAxis) {
-  const values = points.filter((p) => finite(p.value));
-  if (values.length < 2) return null;
-  return {
-    component: "performance_chart",
-    props: { label, yAxis, series: [{ name: label, color: ACCENT, values }] },
-  };
-}
+import { card, chart, joined, multiple, reply, row } from "./spec.mjs";
 
 function fearLabel(value) {
   return value >= 55 ? "up" : value <= 45 ? "down" : undefined;
@@ -228,13 +204,6 @@ async function onChain(c, info) {
   const signal = AbortSignal.timeout(ON_CHAIN_MS);
   const [index, about] = await Promise.all([llamaIndex(signal), info]);
   return index == null ? null : fundamentals(match(index, c, firstURL(entry(about, c.id)?.urls?.website)), signal);
-}
-
-// Past 1,000x the revenue is too small for the figure to mean anything.
-function multiple(n) {
-  if (!finite(n) || n <= 0) return null;
-  if (n >= 1000) return "over 1,000x";
-  return `${n >= 10 ? n.toFixed(0) : n.toFixed(1)}x`;
 }
 
 /** The on-chain section: a line naming its source, then two columns of rows. */

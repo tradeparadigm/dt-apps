@@ -13,6 +13,8 @@ import tempfile
 from urllib.parse import unquote
 
 HERE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parents[1]))
+from spec import by, components, split, tones, valid, values  # noqa: E402
 SCRIPT = HERE.parents[3] / "apps/market-data/skills/ticker/scripts/command.mjs"
 ANSWERS = json.loads((HERE / "fixtures/cmc-answers.json").read_text())
 LLAMA = json.loads((HERE / "fixtures/llama-answers.json").read_text())
@@ -44,16 +46,6 @@ globalThis.fetch = async (url, init = {}) => {
 
 JEV = "http://127.0.0.1:8091/api/jev"
 
-# What each catalog component requires, as its reader in the terminal does.
-REQUIRED = {
-    "metric_card": {"label": str, "value": str},
-    "labeled_output": {"label": str, "value": str},
-    "data_table": {"columns": list, "rows": list},
-    "performance_chart": {"label": str},
-    "markdown": {"content": str},
-    "alert_banner": {"variant": str, "message": str},
-}
-
 passed = 0
 failed = []
 
@@ -79,46 +71,6 @@ def ticker(typed, refused=(), answers=ANSWERS, stderr=False, llama=LLAMA, cache=
     if stderr:
         return result.returncode, result.stdout, result.stderr
     return result.returncode, result.stdout, urls
-
-
-def split(out):
-    """The plain line and the spec, found as the terminal finds it: from the first brace."""
-    start = out.index("{")
-    return out[:start].strip(), json.loads(out[start:])
-
-
-def valid(node):
-    """A layout of layouts and components, each with the props its reader requires."""
-    if "component" not in node:
-        return node.get("layout") in ("stack", "grid") and all(valid(c) for c in node["children"])
-    props = node.get("props", {})
-    need = REQUIRED.get(node["component"])
-    if need is None or any(not isinstance(props.get(k), t) or props.get(k) == "" for k, t in need.items()):
-        return False
-    if node["component"] == "performance_chart":
-        series = props.get("series") or [{"values": props.get("values")}]
-        return all(isinstance(p["value"], (int, float)) for s in series for p in s["values"])
-    if node["component"] == "data_table":
-        return all(isinstance(c.get("key"), str) and isinstance(c.get("header"), str) for c in props["columns"])
-    return True
-
-
-def components(node):
-    if "component" in node:
-        return [node]
-    return [c for child in node["children"] for c in components(child)]
-
-
-def by(spec, name):
-    return [c["props"] for c in components(spec) if c["component"] == name]
-
-
-def values(spec, name):
-    return {p["label"]: p["value"] for p in by(spec, name)}
-
-
-def tones(spec, name):
-    return {p["label"]: p.get("direction") for p in by(spec, name)}
 
 
 # The market
@@ -365,6 +317,16 @@ code, spec, source, llama = on_chain("okb", answers=with_coin(3897, "OKB", "okb"
 check("a chain DefiLlama gives no symbol matches by slug", source == ["On-chain, from [DefiLlama](https://defillama.com/chain/X%20Layer)"])
 code, spec, source, llama = on_chain("other", answers=with_coin(38002, "OTHER", "fakecoin", "Other", 1e7))
 check("a chain whose symbol is another coin's does not match by slug", source == [])
+code, spec, source, llama = on_chain("zora", answers=with_coin(35931, "ZORA", "zora", "ZORA", 5e7))
+check("a chain with no symbol whose gas is another coin's leaves the coin to its protocol",
+      source == ["On-chain, from [DefiLlama](https://defillama.com/protocol/zora-protocol)"])
+code, spec, source, llama = on_chain("sym", answers=with_coin(38003, "SYM", "symcoin", "Sym", 1e7))
+check("a chain with the coin's symbol matches by slug", source == ["On-chain, from [DefiLlama](https://defillama.com/chain/Sym%20Chain)"])
+code, spec, source, llama = on_chain("twx", answers=with_coin(38004, "TWX", "twinsite", "Twin", 1e7, website="https://twin.site"))
+check("a protocol on the coin's website with another symbol does not match", source == [] and llama == INDEX)
+noslug = with_coin(38005, "NOS", None, "No Slug", 1e7)
+code, spec, source, llama = on_chain("nos", answers=noslug)
+check("a coin with no slug matches nothing by slug", source == [] and llama == INDEX)
 
 code, spec, source, llama = on_chain("pepe")
 check("a coin DefiLlama does not track has no section and reads only the index", source == [] and llama == INDEX)

@@ -4,7 +4,7 @@
 import { closes, companies, facts, people, perp, sessions, submissions } from "./sources.mjs";
 import { stockCard } from "./view.mjs";
 
-export const TICKER = /^[a-z][a-z0-9.-]{0,9}$/;
+const TICKER = /^[a-z][a-z0-9.-]{0,9}$/;
 
 const typed = (process.argv[2] ?? "").trim().toLowerCase().replace(/^\$/, "");
 if (typed === "") {
