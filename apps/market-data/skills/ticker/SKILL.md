@@ -16,10 +16,10 @@ is read live on each run.
 - `/ticker` shows the market: total cap and volume, Fear & Greed, BTC and ETH
   dominance, the altcoin season index, the top-100 and top-20 indexes, and 30
   days of Fear & Greed.
-- `/ticker btc eth sol` shows one table row per coin: price, 24h, 7d and 30d
-  change, rank, market cap and volume.
-- `/ticker btc` shows one coin: price, market cap and volume, 30 days of
-  price, 7d to 1y change, its high over the last year, supply, when it
+- `/ticker btc eth sol` shows one table row per coin: price, the change today
+  (since 00:00 UTC), over 7d and over 30d, rank, market cap and volume.
+- `/ticker btc` shows one coin: price, its change today, market cap and
+  volume, 30 days of price, 7d to 1y change, its high over the last year, supply, when it
   launched, a line about it with its links, and for a token its contract
   check. Where DefiLlama tracks the coin it adds on-chain figures from
   DefiLlama's free API: for a chain its TVL, stablecoins, DEX volume,
@@ -27,6 +27,12 @@ is read live on each run.
   for a stablecoin its supply and chains. Which chain, protocol or
   stablecoin a coin is comes from DefiLlama's index, read at most once a
   day.
+
+Every change runs from CoinMarketCap's daily closes at 00:00 UTC, where
+crypto's day closes on TradingView too. Until CoinMarketCap publishes
+today's 00:00 close, a little after midnight, the reply shows its rolling 24h
+and periods and labels the day's change 24h. A coin in a table with no close
+today has no Today figure.
 
 The reply is a plain line, then a component spec the terminal draws (its
 `features.generativeUi`). A section whose data cannot be read is left out.

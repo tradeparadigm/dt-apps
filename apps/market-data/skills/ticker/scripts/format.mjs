@@ -28,6 +28,9 @@ export function pct(n, digits = 2) {
   return `${n < 0 && Number(text) !== 0 ? "−" : "+"}${text}%`;
 }
 
+/** The percent change from `then` to `now`, or null without both. */
+export const change = (now, then) => (finite(now) && finite(then) && then > 0 ? ((now - then) / then) * 100 : null);
+
 /** `+0.2 pts`: a change in a share that is itself a percent. */
 export function pts(n) {
   if (!finite(n)) return null;
