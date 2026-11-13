@@ -190,13 +190,22 @@ function onChainBanner(security) {
   };
 }
 
-/** DefiLlama's figures for a coin, or null when it tracks none or cannot be read. */
-async function onChain(c) {
-  const index = await llamaIndex();
-  return index == null ? null : fundamentals(match(index, c));
+// The whole on-chain section's time, so a slow DefiLlama holds the card no longer.
+const ON_CHAIN_MS = 5_000;
+
+/** DefiLlama's figures for a coin, or null when it tracks none or cannot be read in time. */
+async function onChain(c, info) {
+  const signal = AbortSignal.timeout(ON_CHAIN_MS);
+  const [index, about] = await Promise.all([llamaIndex(signal), info]);
+  return index == null ? null : fundamentals(match(index, c, firstURL(entry(about, c.id)?.urls?.website)), signal);
 }
 
-const multiple = (n) => (finite(n) && n > 0 ? `${n >= 10 ? n.toFixed(0) : n.toFixed(1)}x` : null);
+// Past 1,000x the revenue is too small for the figure to mean anything.
+function multiple(n) {
+  if (!finite(n) || n <= 0) return null;
+  if (n >= 1000) return "over 1,000x";
+  return `${n >= 10 ? n.toFixed(0) : n.toFixed(1)}x`;
+}
 
 /** The on-chain section: a line naming its source, then two columns of rows. */
 function onChainSection(f, marketCap) {
@@ -217,6 +226,8 @@ function onChainSection(f, marketCap) {
     add(`Stablecoins on ${ch.name}`, money(ch.stablecoins));
     add("DEX volume, 24h", money(ch.dexVolume));
     add("Fees, 30d", money(ch.fees30d));
+    add("Revenue, 1y", money(ch.revenue1y));
+    add("Mkt cap ÷ revenue", multiple(marketCap / ch.revenue1y));
     page = `https://defillama.com/chain/${encodeURIComponent(ch.name)}`;
   }
   if (f?.protocol) {
@@ -247,11 +258,12 @@ export async function coin(env, symbol) {
   const token = c.platform?.token_address;
   const chain = c.platform?.slug;
   // A year of daily quotes, the most the plan serves: the chart, the 1y change and the year's high.
+  const profile = get(env, "v2/cryptocurrency/info", { id });
   const [history, info, security, llama] = await Promise.all([
     get(env, "v3/cryptocurrency/quotes/historical", { id, count: "365", interval: "1d", convert: "USD" }),
-    get(env, "v2/cryptocurrency/info", { id }),
+    profile,
     token && chain ? get(env, "v1/dex/security/detail", { platformName: chain, address: token }) : null,
-    onChain(c),
+    onChain(c, profile),
   ]);
 
   // Four short cards, so a small coin's long price still fits its card.

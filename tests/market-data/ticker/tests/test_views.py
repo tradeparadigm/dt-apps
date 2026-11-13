@@ -17,13 +17,19 @@ SCRIPT = HERE.parents[3] / "apps/market-data/skills/ticker/scripts/command.mjs"
 ANSWERS = json.loads((HERE / "fixtures/cmc-answers.json").read_text())
 LLAMA = json.loads((HERE / "fixtures/llama-answers.json").read_text())
 
+# A hung read holds an interval open, as a real socket keeps node running.
 STUB = """
 const answers = JSON.parse(process.env.ANSWERS);
 const refused = JSON.parse(process.env.REFUSED);
 const llama = JSON.parse(process.env.LLAMA);
-globalThis.fetch = async (url) => {
+const hang = process.env.HANG === "1";
+globalThis.fetch = async (url, init = {}) => {
   console.error("URL " + url);
   const u = new URL(url);
+  if (u.hostname.endsWith("llama.fi") && hang) {
+    const socket = setInterval(() => {}, 1000);
+    return new Promise((_, reject) => init.signal?.addEventListener("abort", () => { clearInterval(socket); reject(init.signal.reason); }));
+  }
   if (u.hostname.endsWith("llama.fi")) {
     const type = u.searchParams.get("dataType");
     const key = u.hostname + decodeURIComponent(u.pathname) + (type ? `?dataType=${type}` : "");
@@ -60,13 +66,14 @@ def check(name, cond):
         failed.append(name)
 
 
-def ticker(typed, refused=(), answers=ANSWERS, stderr=False, llama=LLAMA, cache=None):
+def ticker(typed, refused=(), answers=ANSWERS, stderr=False, llama=LLAMA, cache=None, hang=False):
     """Each run starts with an empty cache unless it is handed one."""
     result = subprocess.run(
         ["node", "--import", "data:text/javascript," + STUB, str(SCRIPT), typed],
         capture_output=True, text=True, timeout=30,
         env={"PATH": "/usr/bin:/bin:/usr/local/bin", "TERMINAL_JEV_URL": JEV, "TMPDIR": cache or tempfile.mkdtemp(),
-             "ANSWERS": json.dumps(answers), "REFUSED": json.dumps(list(refused)), "LLAMA": json.dumps(llama)},
+             "ANSWERS": json.dumps(answers), "REFUSED": json.dumps(list(refused)), "LLAMA": json.dumps(llama),
+             "HANG": "1" if hang else ""},
     )
     urls = [line[4:] for line in result.stderr.splitlines() if line.startswith("URL ")]
     if stderr:
@@ -183,7 +190,8 @@ check("the last 30 days of price are charted with an axis", len(chart) == 1 and 
 check("performance, the year's high and supply are rows", values(spec, "labeled_output") == {
     "7d": "+3.1%", "30d": "−12.4%", "90d": "−21.0%", "1y": "+15.7%", "1-year high": "$126,080 · 41% below",
     "Circulating": "19.9M BTC", "Max supply": "21M BTC", "Launched": "2009",
-    "TVL on Bitcoin": "$3.61B", "DEX volume, 24h": "$815K", "Fees, 30d": "$1.31M"})
+    "TVL on Bitcoin": "$3.61B", "DEX volume, 24h": "$815K", "Fees, 30d": "$1.31M", "Revenue, 1y": "$376K",
+    "Mkt cap ÷ revenue": "over 1,000x"})
 check("the rows are two columns", [c for c in spec["children"] if c.get("layout") == "grid" and c.get("columns") == 2] != [])
 check("the on-chain rows name their source, then the profile is the first sentence and its links", by(spec, "markdown") == [
     {"content": "On-chain, from [DefiLlama](https://defillama.com/chain/Bitcoin)"},
@@ -250,8 +258,8 @@ for order in ("as listed", "reversed"):
     check(f"a shared symbol shows its better-ranked coin ({order})", code == 0 and split(out)[0].startswith("Pepe (PEPE)"))
 
 # On-chain, from DefiLlama
-def with_coin(cid, symbol, slug, name, cap, tags=None):
-    """The quotes answer with one more coin, priced like BTC."""
+def with_coin(cid, symbol, slug, name, cap, tags=None, website=None):
+    """The quotes answer with one more coin, priced like BTC, and its website in its profile."""
     answers = copy.deepcopy(ANSWERS)
     coin = copy.deepcopy(answers["v3/cryptocurrency/quotes/latest"]["data"][0])
     coin.update({"id": cid, "symbol": symbol, "slug": slug, "name": name, "cmc_rank": 20, "platform": None})
@@ -259,14 +267,14 @@ def with_coin(cid, symbol, slug, name, cap, tags=None):
     if tags is not None:
         coin["tags"] = tags
     answers["v3/cryptocurrency/quotes/latest"]["data"].append(coin)
+    if website:
+        answers["v2/cryptocurrency/info"]["data"][str(cid)] = {"urls": {"website": [website]}}
     return answers
 
 
 def on_chain(typed, **kw):
     code, out, urls = ticker(typed, **kw)
     _, spec = split(out)
-    rows = {p["label"]: p["value"] for c in spec["children"] if c.get("layout") == "grid" and c["columns"] == 2
-            for p in (x["props"] for x in c["children"]) if any("DefiLlama" in m["content"] for m in by(spec, "markdown"))}
     source = [m["content"] for m in by(spec, "markdown") if "DefiLlama" in m["content"]]
     llama = sorted(unquote(u.split("llama.fi")[1].split("?")[0]) for u in urls if "llama.fi" in u)
     return code, spec, source, llama
@@ -275,8 +283,8 @@ def on_chain(typed, **kw):
 INDEX = ["/config", "/stablecoins", "/v2/chains"]
 
 code, spec, source, llama = on_chain("btc")
-check("a chain's coin reads its chain, never the protocol of its name with no fees",
-      llama == sorted(INDEX + ["/v2/chains", "/stablecoinchains", "/overview/dexs/Bitcoin", "/overview/fees/Bitcoin"]))
+check("a chain's coin reads its chain, never the protocol of its name",
+      llama == sorted(INDEX + ["/v2/chains", "/stablecoinchains", "/overview/dexs/Bitcoin", "/overview/fees/Bitcoin", "/overview/fees/Bitcoin"]))
 
 code, spec, source, llama = on_chain("aave", answers=with_coin(7278, "AAVE", "aave", "Aave", 1.7e9))
 check("a protocol's token shows TVL, fees, revenue and its multiple", code == 0 and valid(spec) and {
@@ -287,10 +295,18 @@ check("a protocol with no chain reads no chain figures", not any(u.startswith(("
 
 code, spec, source, llama = on_chain("hype", answers=with_coin(32196, "HYPE", "hyperliquid", "Hyperliquid", 1.69e10))
 rows = values(spec, "labeled_output")
-check("a coin that is both a chain and a protocol shows the chain's TVL and the protocol's fees", all(rows.get(k) == v for k, v in {
+check("a coin that is both a chain and a protocol shows the chain, its revenue and the multiple on it", all(rows.get(k) == v for k, v in {
     "TVL on Hyperliquid L1": "$2.3B", "Stablecoins on Hyperliquid L1": "$6.35B", "DEX volume, 24h": "$269M",
-    "Fees, 30d": "$89.6M", "Revenue, 1y": "$680M", "Mkt cap ÷ revenue": "25x"}.items()) and "TVL" not in rows)
-check("the chain's own fees are not read beside the protocol's", "/overview/fees/Hyperliquid L1" not in llama)
+    "Fees, 30d": "$162M", "Revenue, 1y": "$723M", "Mkt cap ÷ revenue": "23x"}.items()) and "TVL" not in rows)
+check("the protocol of a chain's coin is not read", not any(u.startswith(("/summary/", "/tvl/")) for u in llama))
+
+code, spec, source, llama = on_chain("arb", answers=with_coin(11841, "ARB", "arbitrum", "Arbitrum", 1.2e9))
+rows = values(spec, "labeled_output")
+check("a chain's coin shows the chain's fees, never its foundation's", rows.get("Fees, 30d") == "$21.3M" and rows.get("TVL on Arbitrum") == "$1.34B"
+      and source == ["On-chain, from [DefiLlama](https://defillama.com/chain/Arbitrum)"])
+
+code, spec, source, llama = on_chain("lunc", answers=with_coin(4172, "LUNC", "terra-luna", "Terra Classic", 3e8))
+check("of two chains sharing a coin's id, the one with its slug is shown", "TVL on Terra Classic" in values(spec, "labeled_output"))
 
 code, spec, source, llama = on_chain("bnb", answers=with_coin(1839, "BNB", "bnb", "BNB", 9e10))
 check("of two chains sharing a coin, the one holding more is shown",
@@ -303,11 +319,28 @@ check("a stablecoin shows its supply, its month's change and its chains",
       rows.get("Supply") == "$175B" and rows.get("Supply, 30d") == "−4.7%" and rows.get("Chains") == "3"
       and source == ["On-chain, from [DefiLlama](https://defillama.com/stablecoin/tether)"])
 
+busd = with_coin(4687, "BUSD", "binance-usd", "BUSD", 3.4e7, tags=[{"slug": "stablecoin"}])
+code, spec, source, llama = on_chain("busd", answers=busd)
+check("of stablecoins sharing a symbol, the one with the coin's slug is shown, linked by DefiLlama's slug of its name",
+      values(spec, "labeled_output").get("Supply") == "$34.3M" and source == ["On-chain, from [DefiLlama](https://defillama.com/stablecoin/binance-usd)"])
+busd["v3/cryptocurrency/quotes/latest"]["data"][-1]["slug"] = "busd"
+code, spec, source, llama = on_chain("busd", answers=busd)
+check("with no slug match, a stablecoin matches by symbol", values(spec, "labeled_output").get("Supply") == "$233M")
+
 code, spec, source, llama = on_chain("usdt", answers=with_coin(825, "USDT", "tether", "Tether", 1.75e11, tags=[]))
 check("a coin CoinMarketCap does not tag a stablecoin is not read as one", source == [] and "Supply" not in values(spec, "labeled_output"))
 
-code, spec, source, llama = on_chain("arb", answers=with_coin(11841, "ARB", "arbitrum", "Arbitrum", 1.2e9))
+code, spec, source, llama = on_chain("btc", llama={**LLAMA, "api.llama.fi/v2/chains": [c for c in LLAMA["api.llama.fi/v2/chains"] if c["name"] != "Bitcoin"]})
 check("a protocol with no fee data is not shown", source == [] and llama == INDEX)
+
+morpho = with_coin(34104, "MORPHO", "morpho", "Morpho", 1e9, website="https://morpho.org/")
+code, spec, source, llama = on_chain("morpho", answers=morpho)
+check("a protocol with no CoinMarketCap id matches by slug, symbol and website",
+      source == ["On-chain, from [DefiLlama](https://defillama.com/protocol/morpho)"] and values(spec, "labeled_output").get("TVL") == "$10.6B")
+code, spec, source, llama = on_chain("kite", answers=with_coin(38828, "KITE", "kite", "Kite", 5e8, website="https://gokite.ai/"))
+check("a slug and symbol on another project's website do not match", source == [] and llama == INDEX)
+code, spec, source, llama = on_chain("morpho", answers=with_coin(34104, "MORPHO", "morpho", "Morpho", 1e9))
+check("with no website to compare, a slug does not match a protocol", source == [])
 
 code, spec, source, llama = on_chain("pepe")
 check("a coin DefiLlama does not track has no section and reads only the index", source == [] and llama == INDEX)
@@ -332,6 +365,15 @@ aged["at"] -= 25 * 3_600_000
 index.write_text(json.dumps(aged))
 code, spec, source, llama = on_chain("btc", cache=cache, refused=["api.llama.fi/config"])
 check("a failed refresh of a day-old index answers from the old one", "/config" in llama and source != [])
+code, spec, source, llama = on_chain("btc", cache=cache, refused=["api.llama.fi/config"])
+check("after a failed refresh the old index serves another day, with no new attempt", "/config" not in llama and source != [])
+
+import time
+started = time.monotonic()
+code, spec, source, llama = on_chain("btc", hang=True)
+took = time.monotonic() - started
+check("a DefiLlama that never answers holds the card about 5 s, and the card is drawn without it",
+      code == 0 and valid(spec) and source == [] and 4.5 < took < 8)
 
 print(f"{passed} passed, {len(failed)} failed")
 for name in failed:
