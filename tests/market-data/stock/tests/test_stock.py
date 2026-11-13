@@ -110,7 +110,7 @@ check("the company's people and facts are rows", {k: rows.get(k) for k in (
 check("revenue and net income are the latest full year, past an older tag and a later quarter",
       rows.get("Revenue, FY2026") == "$332B" and rows.get("Net income, FY2026") == "$134B" and rows.get("Shares outstanding") == "7.43B")
 check("the perp's volume, open interest and funding are rows",
-      rows.get("Perp volume, 24h") == "$19.8M" and rows.get("Perp open interest") == "$28.8M" and rows.get("Funding, 1h") == "+0.0001%")
+      rows.get("Perp volume, 24h") == "$19.8M" and rows.get("Perp open interest") == "$28.8M" and rows.get("Funding, annualized") == "+1.3%")
 markdown = [p["content"] for p in by(spec, "markdown")]
 check("the board is one line, by name", markdown[0].startswith("**Board**: Catherine MacGregor, Charlie Scharf,") and "Satya Nadella" in markdown[0])
 filings = [l for l in markdown[1].splitlines() if l.startswith("- ")]

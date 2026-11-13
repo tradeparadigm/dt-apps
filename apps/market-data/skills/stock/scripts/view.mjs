@@ -85,7 +85,8 @@ export function stockCard({ company, filed, figures, who, market, history }) {
   if (market) {
     add("Perp volume, 24h", money(market.volume));
     add("Perp open interest", money(market.openInterest));
-    add("Funding, 1h", finite(market.funding) ? pct(market.funding * 100, 4) : null);
+    // Hyperliquid quotes funding per hour.
+    add("Funding, annualized", finite(market.funding) ? pct(market.funding * 24 * 365 * 100, 1) : null);
   }
   if (rows.length > 0) children.push({ layout: "grid", columns: 2, children: rows });
 
