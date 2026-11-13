@@ -321,7 +321,8 @@ check("a stablecoin shows its supply, its month's change and its chains",
 
 busd = with_coin(4687, "BUSD", "binance-usd", "BUSD", 3.4e7, tags=[{"slug": "stablecoin"}])
 code, spec, source, llama = on_chain("busd", answers=busd)
-check("of stablecoins sharing a symbol, the one with the coin's slug is shown", values(spec, "labeled_output").get("Supply") == "$34.3M")
+check("of stablecoins sharing a symbol, the one with the coin's slug is shown, linked by DefiLlama's slug of its name",
+      values(spec, "labeled_output").get("Supply") == "$34.3M" and source == ["On-chain, from [DefiLlama](https://defillama.com/stablecoin/binance-usd)"])
 busd["v3/cryptocurrency/quotes/latest"]["data"][-1]["slug"] = "busd"
 code, spec, source, llama = on_chain("busd", answers=busd)
 check("with no slug match, a stablecoin matches by symbol", values(spec, "labeled_output").get("Supply") == "$233M")
