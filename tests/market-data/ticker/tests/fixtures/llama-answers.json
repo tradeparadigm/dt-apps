@@ -54,12 +54,45 @@
     "dimensions": null
    },
    {
-    "name": "Arbitrum Foundation Grants",
+    "name": "Arbitrum Nitro",
     "cmcId": null,
     "gecko_id": null,
     "parentProtocol": "parent#arbitrum-foundation",
     "category": "Foundation",
-    "dimensions": null
+    "dimensions": {
+     "fees": {
+      "genuineSpikes": [],
+      "adapter": "x"
+     }
+    }
+   },
+   {
+    "name": "Lets Get HAI",
+    "cmcId": null,
+    "gecko_id": "kite",
+    "symbol": "KITE",
+    "url": "https://www.letsgethai.com",
+    "parentProtocol": null,
+    "category": "CDP",
+    "dimensions": {
+     "fees": {
+      "genuineSpikes": [],
+      "adapter": "x"
+     }
+    }
+   },
+   {
+    "name": "Morpho Blue",
+    "cmcId": null,
+    "gecko_id": null,
+    "parentProtocol": "parent#morpho",
+    "category": "Lending",
+    "dimensions": {
+     "fees": {
+      "genuineSpikes": [],
+      "adapter": "x"
+     }
+    }
    }
   ],
   "parentProtocols": [
@@ -80,6 +113,14 @@
     "name": "Arbitrum Foundation",
     "cmcId": "11841",
     "gecko_id": "arbitrum"
+   },
+   {
+    "id": "parent#morpho",
+    "name": "Morpho",
+    "cmcId": null,
+    "gecko_id": "morpho",
+    "symbol": "MORPHO",
+    "url": "https://app.morpho.org"
    }
   ]
  },
@@ -111,6 +152,27 @@
    "gecko_id": "binancecoin",
    "tokenSymbol": "BNB",
    "tvl": 4757455795.5
+  },
+  {
+   "name": "Arbitrum",
+   "cmcId": "11841",
+   "gecko_id": "arbitrum",
+   "tokenSymbol": "ARB",
+   "tvl": 1343715442
+  },
+  {
+   "name": "Flare",
+   "cmcId": "4172",
+   "gecko_id": "flare-networks",
+   "tokenSymbol": "FLR",
+   "tvl": 142000000
+  },
+  {
+   "name": "Terra Classic",
+   "cmcId": "4172",
+   "gecko_id": "terra-luna",
+   "tokenSymbol": "LUNC",
+   "tvl": 727000
   }
  ],
  "stablecoins.llama.fi/stablecoins": {
@@ -130,6 +192,37 @@
     },
     "circulatingPrevMonth": {
      "peggedUSD": 183950000000.0
+    }
+   },
+   {
+    "id": "200",
+    "name": "Binance Peg BUSD",
+    "symbol": "BUSD",
+    "gecko_id": null,
+    "chains": [
+     "BSC"
+    ],
+    "circulating": {
+     "peggedUSD": 233000000
+    },
+    "circulatingPrevMonth": {
+     "peggedUSD": 233000000
+    }
+   },
+   {
+    "id": "4",
+    "name": "Binance USD",
+    "symbol": "BUSD",
+    "gecko_id": "binance-usd",
+    "chains": [
+     "Ethereum",
+     "BSC"
+    ],
+    "circulating": {
+     "peggedUSD": 34300000
+    },
+    "circulatingPrevMonth": {
+     "peggedUSD": 34300000
     }
    }
   ]
@@ -157,13 +250,6 @@
  "api.llama.fi/overview/dexs/BSC": {
   "total24h": 1020000000
  },
- "api.llama.fi/overview/fees/Bitcoin": {
-  "total24h": 46906.7,
-  "total30d": 1308371.4
- },
- "api.llama.fi/overview/fees/BSC": {
-  "total30d": 52000000
- },
  "api.llama.fi/tvl/aave": 15639508702.67,
  "api.llama.fi/summary/fees/aave?dataType=dailyFees": {
   "total24h": 1356454,
@@ -185,7 +271,43 @@
   "total30d": 68675995,
   "total1y": 680008987
  },
- "api.llama.fi/overview/fees/Hyperliquid L1": {
+ "api.llama.fi/overview/fees/Bitcoin?dataType=dailyFees": {
+  "total24h": 46906.7,
+  "total30d": 1308371.4
+ },
+ "api.llama.fi/overview/fees/BSC?dataType=dailyFees": {
+  "total30d": 52000000
+ },
+ "api.llama.fi/overview/fees/Hyperliquid L1?dataType=dailyFees": {
   "total30d": 162304819.4
+ },
+ "api.llama.fi/overview/fees/Bitcoin?dataType=dailyRevenue": {
+  "total30d": 31000,
+  "total1y": 376004
+ },
+ "api.llama.fi/overview/fees/BSC?dataType=dailyRevenue": {
+  "total1y": 180000000
+ },
+ "api.llama.fi/overview/fees/Hyperliquid L1?dataType=dailyRevenue": {
+  "total1y": 723000000
+ },
+ "api.llama.fi/overview/fees/Arbitrum?dataType=dailyFees": {
+  "total30d": 21251390
+ },
+ "api.llama.fi/overview/fees/Arbitrum?dataType=dailyRevenue": {
+  "total1y": 82500000
+ },
+ "api.llama.fi/overview/dexs/Arbitrum": {
+  "total24h": 201000000
+ },
+ "api.llama.fi/overview/fees/Terra Classic?dataType=dailyFees": {
+  "total30d": 489
+ },
+ "api.llama.fi/tvl/morpho": 10600000000,
+ "api.llama.fi/summary/fees/morpho?dataType=dailyFees": {
+  "total30d": 29000000
+ },
+ "api.llama.fi/summary/fees/morpho?dataType=dailyRevenue": {
+  "total1y": 0
  }
 }
