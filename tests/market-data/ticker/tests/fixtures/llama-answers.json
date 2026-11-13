@@ -93,6 +93,36 @@
       "adapter": "x"
      }
     }
+   },
+   {
+    "name": "Lighter",
+    "cmcId": null,
+    "gecko_id": "lighter",
+    "symbol": "LIT",
+    "url": "https://app.lighter.xyz",
+    "parentProtocol": null,
+    "category": "Derivatives",
+    "dimensions": {
+     "fees": {
+      "genuineSpikes": [],
+      "adapter": "x"
+     }
+    }
+   },
+   {
+    "name": "No Site",
+    "cmcId": null,
+    "gecko_id": "nosite",
+    "symbol": "NOS",
+    "url": "",
+    "parentProtocol": null,
+    "category": "Dexs",
+    "dimensions": {
+     "fees": {
+      "genuineSpikes": [],
+      "adapter": "x"
+     }
+    }
    }
   ],
   "parentProtocols": [
@@ -173,6 +203,20 @@
    "gecko_id": "terra-luna",
    "tokenSymbol": "LUNC",
    "tvl": 727000
+  },
+  {
+   "name": "X Layer",
+   "cmcId": null,
+   "gecko_id": "okb",
+   "tokenSymbol": null,
+   "tvl": 211000000
+  },
+  {
+   "name": "Fake Chain",
+   "cmcId": null,
+   "gecko_id": "fakecoin",
+   "tokenSymbol": "FAKE",
+   "tvl": 5000000
   }
  ],
  "stablecoins.llama.fi/stablecoins": {
@@ -309,5 +353,9 @@
  },
  "api.llama.fi/summary/fees/morpho?dataType=dailyRevenue": {
   "total1y": 0
- }
+ },
+ "api.llama.fi/overview/dexs/X Layer": {
+  "total24h": 12000000
+ },
+ "api.llama.fi/tvl/lighter": 1200000000
 }
