@@ -1,12 +1,12 @@
 // /stock's suggestions: the US-listed companies whose ticker or name starts
 // with what was typed. The terminal runs this through app_command.lookup as the
 // user types and shows each row it prints; picking one runs /stock with it.
-import { companies, tickerOf } from "./sources.mjs";
+import { companies, tickerOf, typedText } from "./sources.mjs";
 
 const MAX_ROWS = 10;
 const POPULAR = ["nvda", "msft", "aapl", "amzn", "googl", "meta", "tsla", "coin"];
 
-const typed = (process.argv[2] ?? "").trim().toLowerCase().replace(/^\$/, "");
+const typed = typedText(process.argv[2]);
 // A name keeps its dots; a ticker reads as /stock reads it.
 const ticker = tickerOf(typed);
 

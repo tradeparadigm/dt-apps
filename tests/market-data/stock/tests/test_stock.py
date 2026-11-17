@@ -162,6 +162,15 @@ cache = seeded(tempfile.mkdtemp(), [["xyz:NVDA", "stocks"]])
 _, out, calls, _ = run("command.mjs", "msft", cache=cache)
 check("a perp listed since the day's categories were cached reads them again, and shows its price",
       "api.hyperliquid.xyz/info#perpCategories" in keys(calls) and "MSFT · perp" in values(split(out)[1], "metric_card"))
+cache = seeded(tempfile.mkdtemp(), [["xyz:NVDA", "stocks"]])
+_, out, _, _ = run("command.mjs", "msft", cache=cache, refused=["api.hyperliquid.xyz/info#perpCategories"])
+check("a perp listed since the day's categories, with them unreadable, reads as could not be read, never as no perp",
+      by(split(out)[1], "metric_card") == [] and "could not be read" in by(split(out)[1], "alert_banner")[0]["message"])
+filed_not_listed = copy.deepcopy(ANSWERS)
+filed_not_listed["api.hyperliquid.xyz/info#perpCategories"].append(["xyz:BRK-B", "stocks"])
+_, out, calls, _ = run("command.mjs", "brk.b", answers=filed_not_listed)
+check("a market Hyperliquid files but does not list is no perp, without reading the categories",
+      "trade.xyz lists no perp" in by(split(out)[1], "alert_banner")[0]["message"] and "api.hyperliquid.xyz/info#perpCategories" not in keys(calls))
 cache = seeded(tempfile.mkdtemp(), [["xyz:MSFT", "stocks"]], age_hours=30)
 _, out, calls, _ = run("command.mjs", "msft", cache=cache, refused=["api.hyperliquid.xyz/info#perpCategories"])
 check("with the categories unreadable, the day-old copy answers", "MSFT · perp" in values(split(out)[1], "metric_card"))
@@ -186,8 +195,9 @@ for form in ("20-F", "40-F", "6-K"):
         f["form"] = form
     _, out, _, _ = run("command.mjs", "msft", answers=foreign)
     _, spec = split(out)
-    check(f"a {form} filer's count of ordinary shares stands, with no market cap or P/E, since the perp may trade a depositary share of several",
-          "Market cap" not in values(spec, "metric_card") and values(spec, "labeled_output").get("Shares outstanding") == "7.43B"
+    check(f"a {form} filer's count reads as ordinary shares, with no market cap or P/E, since the perp may trade a depositary share of several",
+          "Market cap" not in values(spec, "metric_card") and values(spec, "labeled_output").get("Ordinary shares outstanding") == "7.43B"
+          and "Shares outstanding" not in values(spec, "labeled_output")
           and not any(k.startswith("P/E") for k in values(spec, "labeled_output")))
 short = copy.deepcopy(ANSWERS)
 short["api.hyperliquid.xyz/info#candleSnapshot:1d"] = [c for c in short["api.hyperliquid.xyz/info#candleSnapshot:1d"] if c["t"] > 1792800000000]

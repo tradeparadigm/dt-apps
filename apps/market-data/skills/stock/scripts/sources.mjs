@@ -20,8 +20,11 @@ async function get(url, init = {}, timeoutMs = 8_000) {
   }
 }
 
-/** The SEC's ticker for what was typed: lowercase, no `$`, and a share class's dot as its dash (BRK-B). */
-export const tickerOf = (typed) => String(typed ?? "").trim().toLowerCase().replace(/^\$/, "").replace(".", "-");
+/** What was typed after `/stock`, trimmed, lowercased and without a leading `$`. */
+export const typedText = (raw) => String(raw ?? "").trim().toLowerCase().replace(/^\$/, "");
+
+/** The SEC's ticker for typed text: a share class's dot as its dash (BRK-B). */
+export const tickerOf = (typed) => typed.replace(".", "-");
 
 /** Every company the SEC lists with a ticker: `[{ticker, name, cik}]`, lowercase tickers. */
 export async function companies(timeoutMs) {
@@ -206,8 +209,12 @@ async function categories(name) {
   if (fresh && (name == null || fresh.some(([n]) => n === name))) return fresh;
   const body = await info({ type: "perpCategories" });
   const list = Array.isArray(body) ? body.filter((c) => Array.isArray(c) && typeof c[0] === "string" && typeof c[1] === "string") : [];
-  // An answer with no category in it is a failed read, never a day of "no perp".
-  if (list.length === 0) return fresh ?? stale ?? null;
+  // An answer with no category in it is a failed read, never a day of "no perp":
+  // a copy answers only when it files the name asked about.
+  if (list.length === 0) {
+    const copy = fresh ?? stale ?? null;
+    return copy && (name == null || copy.some(([n]) => n === name)) ? copy : null;
+  }
   writeList("perp-categories.json", list);
   return list;
 }
