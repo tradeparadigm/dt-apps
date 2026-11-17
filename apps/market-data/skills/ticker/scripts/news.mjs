@@ -61,9 +61,11 @@ export async function headlines(name, symbol) {
   // The name in any case; the symbol only as a capitalised word, since "SUI" is news and "sui" is Latin.
   // A company's first word too, for "Meta" in news of Meta Platforms; the quoted search already names it in full.
   // A headline says "Merck".
-  // A partnership's last word is a founder's name the press uses alone ("Lilly", "Gallagher").
+  // A name's first word stands for it ("Meta"); where that word is too short to,
+  // a partnership's last word does, a founder's name the press uses alone ("Lilly").
   const words = base.split(/\s+/);
-  const short = [words[0], ...(PARTNERS.test(name) && words.length > 1 ? [words.at(-1)] : [])].filter((w) => w.length >= 4);
+  const stand = words[0].length >= 4 ? words[0] : PARTNERS.test(name) && words.length > 1 ? words.at(-1) : null;
+  const short = stand && stand.length >= 4 ? [stand] : [];
   const byName = new RegExp([escape(base), ...short.map((w) => `\\b${escape(w)}\\b`)].join("|"), "i");
   const bySymbol = new RegExp(`\\b${escape(symbol.toUpperCase())}\\b`);
   const seen = new Set();

@@ -106,6 +106,10 @@ check("a one-word partnership is searched as \"& Co\" or \"& Company\", written 
 lilly = "<rss><channel>" + item("Lilly wins China approval for its pill", "Reuters", 2) + item("Bank of America cuts rates", "WSJ", 2) + "</channel></rss>"
 out, _ = news("Eli Lilly & Co", "LLY", feed=lilly)
 check("a partnership's last word names it in a headline", [i["title"] for i in out["list"]] == ["Lilly wins China approval for its pill"])
+out, _ = news("JPMorgan Chase & Co", "JPM", feed="<rss><channel>" + item("Chase Elliott wins at Talladega", "AP", 2)
+              + item("JPMorgan raises its dividend", "Reuters", 2) + "</channel></rss>")
+check("a partnership whose first word names it never matches on its last word alone",
+      [i["title"] for i in out["list"]] == ["JPMorgan raises its dividend"])
 out, _ = news("Bank of America", "BAC", feed="<rss><channel>" + item("America votes", "AP", 2) + "</channel></rss>")
 check("a company's last word alone names no company", out["list"] == [])
 
