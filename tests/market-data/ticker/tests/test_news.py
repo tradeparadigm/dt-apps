@@ -97,11 +97,11 @@ check("the symbol counts only in capitals", [i["title"] for i in out["list"]] ==
 
 lilly = "<rss><channel>" + item("Eli Lilly raises its outlook", "Reuters", 2) + item("Eli Manning signs on", "ESPN", 2) + "</channel></rss>"
 out, urls = news("Eli Lilly & Co", "LLY", feed=lilly)
-check("a partnership is searched as \"& Co\" or \"& Company\", and matched in a headline by its name alone",
-      parse_qs(urlparse(urls[0]).query)["q"] == ['("Eli Lilly & Co" OR "Eli Lilly & Company") LLY when:2d']
+check("a partnership with a name of two words or more is searched by that name alone, and matched by it",
+      parse_qs(urlparse(urls[0]).query)["q"] == ['"Eli Lilly" LLY when:2d']
       and [i["title"] for i in out["list"]] == ["Eli Lilly raises its outlook"])
 out, urls = news("Kkr & Co.", "KKR", feed="<rss><channel>" + item("Kkr closes a fund", "FT", 2) + "</channel></rss>")
-check("a partnership written with a dot reads the same, and its name is matched without the tail",
+check("a one-word partnership is searched as \"& Co\" or \"& Company\", written with a dot or not, and matched without the tail",
       parse_qs(urlparse(urls[0]).query)["q"] == ['("Kkr & Co" OR "Kkr & Company") KKR when:2d'] and [i["title"] for i in out["list"]] == ["Kkr closes a fund"])
 lilly = "<rss><channel>" + item("Lilly wins China approval for its pill", "Reuters", 2) + item("Bank of America cuts rates", "WSJ", 2) + "</channel></rss>"
 out, _ = news("Eli Lilly & Co", "LLY", feed=lilly)

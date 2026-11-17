@@ -46,7 +46,8 @@ const story = (title) => title.toLowerCase().replace(/[^a-z0-9 ]/g, "").split(/\
 export async function headlines(name, symbol) {
   // "Merck & Co" tells the company from Merck KGaA, and outlets also write "& Company".
   const base = name.replace(PARTNERS, "");
-  const quoted = PARTNERS.test(name) ? `("${base} & Co" OR "${base} & Company")` : `"${name}"`;
+  // A one-word name needs its tail to tell it apart (Merck & Co from Merck KGaA); a longer one does not.
+  const quoted = PARTNERS.test(name) && !/\s/.test(base) ? `("${base} & Co" OR "${base} & Company")` : `"${base}"`;
   const terms = `${quoted} ${symbol.toUpperCase()}`;
   const url = `${SEARCH}?${new URLSearchParams({ q: `${terms} when:2d`, hl: "en-US", gl: "US", ceid: "US:en" })}`;
   let xml;
