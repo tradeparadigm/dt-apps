@@ -87,8 +87,7 @@ export function stockCard({ company, filed, figures, who, market, history, sessi
   add(revenue && `Revenue, ${period(revenue)}`, revenue && money(revenue.value));
   add(income && `Net income, ${period(income)}`, income && money(income.value));
   add(income && `P/E, ${period(income)}`, income && multiple(cap / income.value));
-  // A foreign filer counts ordinary shares, where the perp may trade a depositary share of several.
-  add(shares?.foreign ? "Ordinary shares outstanding" : "Shares outstanding", shares && !split && count(shares.value));
+  add("Shares outstanding", shares && !split && count(shares.value));
   if (market) {
     add("Perp volume, 24h", money(market.volume));
     add("Perp open interest", money(market.openInterest));

@@ -195,9 +195,8 @@ for form in ("20-F", "40-F", "6-K"):
         f["form"] = form
     _, out, _, _ = run("command.mjs", "msft", answers=foreign)
     _, spec = split(out)
-    check(f"a {form} filer's count reads as ordinary shares, with no market cap or P/E, since the perp may trade a depositary share of several",
-          "Market cap" not in values(spec, "metric_card") and values(spec, "labeled_output").get("Ordinary shares outstanding") == "7.43B"
-          and "Shares outstanding" not in values(spec, "labeled_output")
+    check(f"a {form} filer's count of ordinary shares stands, with no market cap or P/E, since the perp may trade a depositary share of several",
+          "Market cap" not in values(spec, "metric_card") and values(spec, "labeled_output").get("Shares outstanding") == "7.43B"
           and not any(k.startswith("P/E") for k in values(spec, "labeled_output")))
 short = copy.deepcopy(ANSWERS)
 short["api.hyperliquid.xyz/info#candleSnapshot:1d"] = [c for c in short["api.hyperliquid.xyz/info#candleSnapshot:1d"] if c["t"] > 1792800000000]
