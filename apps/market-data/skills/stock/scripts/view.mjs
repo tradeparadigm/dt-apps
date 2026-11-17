@@ -1,6 +1,6 @@
 // /stock's reply: a plain line, then a spec the terminal draws from its
 // catalog. A section whose read failed is left out.
-import { count, day, direction, finite, money, pct, price } from "../../ticker/scripts/format.mjs";
+import { change, count, day, direction, finite, money, pct, price } from "../../ticker/scripts/format.mjs";
 import { card, chart, joined, markdown, multiple, reply, row } from "../../ticker/scripts/spec.mjs";
 import { NET_INCOME, REVENUE, sharesOutstanding, trailing } from "./sources.mjs";
 
@@ -41,7 +41,6 @@ function splitSince(history, date) {
   return since.some((c, i) => i > 0 && (c.value / since[i - 1].value <= 0.5 || c.value / since[i - 1].value >= 1.7));
 }
 
-const change = (now, then) => (finite(now) && then > 0 ? ((now - then) / then) * 100 : null);
 
 export function stockCard({ company, filed, figures, who, market, history, session }) {
   const symbol = company.ticker.toUpperCase();
