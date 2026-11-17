@@ -129,8 +129,8 @@ names = subprocess.run(["node", "--input-type=module", "-e",
     "'Arthur J. Gallagher & Co.', 'AbbVie Inc.', 'PROCTER & GAMBLE Co', 'Stran & Company, Inc.'].map(plainName)))"],
     capture_output=True, text=True).stdout
 check("a company's SEC name loses its legal form but keeps \"& Co\", and capitals become a name",
-      json.loads(names) == ["Microsoft", "Meta Platforms", "Asml", "Coinbase Global", "Berkshire Hathaway", "Eli Lilly & Co", "Merck & Co",
-                        "Wells Fargo & Co", "Arthur J. Gallagher & Co", "AbbVie", "Procter & Gamble", "Stran & Co"])
+      json.loads(names) == ["Microsoft", "Meta Platforms", "Asml", "Coinbase Global", "Berkshire Hathaway", "Eli Lilly & Co", "Merck & Co.",
+                        "Wells Fargo & Company", "Arthur J. Gallagher & Co.", "AbbVie", "Procter & Gamble", "Stran & Company"])
 
 # What the user typed
 code, out, calls, _ = run("command.mjs", "")

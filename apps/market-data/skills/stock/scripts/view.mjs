@@ -48,11 +48,8 @@ export function plainName(title) {
   let name = String(title).replace(/\/[a-z]{2}\/?$/i, "").trim();
   for (let before = ""; before !== name; ) {
     before = name;
-    // "& Co" stays, written one way: it tells Merck & Co from Merck KGaA, and KKR & Co from a cricket team.
-    if (PARTNERS.test(name)) {
-      name = name.replace(PARTNERS, " & Co");
-      break;
-    }
+    // "& Co" or "& Company" stays: it tells Merck & Co from Merck KGaA, and KKR & Co from a cricket team.
+    if (PARTNERS.test(name)) break;
     name = name.replace(/[,.]?\s+(inc|corp|corporation|co|company|ltd|plc|holdings?|group|n\.?v|s\.?a|ag|se)\.?$/i, "").trim();
   }
   const letters = name.replace(PARTNERS, "");

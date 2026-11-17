@@ -101,7 +101,13 @@ check("a partnership is searched as \"& Co\" or \"& Company\", and matched in a 
       parse_qs(urlparse(urls[0]).query)["q"] == ['("Eli Lilly & Co" OR "Eli Lilly & Company") LLY when:2d']
       and [i["title"] for i in out["list"]] == ["Eli Lilly raises its outlook"])
 out, urls = news("Kkr & Co.", "KKR", feed="<rss><channel>" + item("Kkr closes a fund", "FT", 2) + "</channel></rss>")
-check("a partnership written with a dot reads the same", parse_qs(urlparse(urls[0]).query)["q"] == ['("Kkr & Co" OR "Kkr & Company") KKR when:2d'])
+check("a partnership written with a dot reads the same, and its name is matched without the tail",
+      parse_qs(urlparse(urls[0]).query)["q"] == ['("Kkr & Co" OR "Kkr & Company") KKR when:2d'] and [i["title"] for i in out["list"]] == ["Kkr closes a fund"])
+lilly = "<rss><channel>" + item("Lilly wins China approval for its pill", "Reuters", 2) + item("Bank of America cuts rates", "WSJ", 2) + "</channel></rss>"
+out, _ = news("Eli Lilly & Co", "LLY", feed=lilly)
+check("a partnership's last word names it in a headline", [i["title"] for i in out["list"]] == ["Lilly wins China approval for its pill"])
+out, _ = news("Bank of America", "BAC", feed="<rss><channel>" + item("America votes", "AP", 2) + "</channel></rss>")
+check("a company's last word alone names no company", out["list"] == [])
 
 meta = "<rss><channel>" + item("Meta sells $1B of bonds", "Reuters", 2) + item("Platforms are changing", "Wired", 2) + "</channel></rss>"
 out, _ = news("Meta Platforms", "META", feed=meta)
