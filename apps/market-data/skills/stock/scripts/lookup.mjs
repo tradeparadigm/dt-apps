@@ -1,13 +1,14 @@
 // /stock's suggestions: the US-listed companies whose ticker or name starts
 // with what was typed. The terminal runs this through app_command.lookup as the
 // user types and shows each row it prints; picking one runs /stock with it.
-import { companies } from "./sources.mjs";
+import { companies, tickerOf, typedText } from "./sources.mjs";
 
 const MAX_ROWS = 10;
 const POPULAR = ["nvda", "msft", "aapl", "amzn", "googl", "meta", "tsla", "coin"];
 
-// The SEC writes a share class with a dash (BRK-B), as /stock reads a dot.
-const typed = (process.argv[2] ?? "").trim().toLowerCase().replace(/^\$/, "").replace(".", "-");
+const typed = typedText(process.argv[2]);
+// A name keeps its dots; a ticker reads as /stock reads it.
+const ticker = tickerOf(typed);
 
 // Under the 3 s app_command.lookup gives a script.
 const list = await companies(2_800);
@@ -29,8 +30,8 @@ const seen = new Set();
 const matches = typed === ""
   ? POPULAR.map((t) => list.find((c) => c.ticker === t)).filter(Boolean)
   : [
-      ...list.filter((c) => c.ticker === typed),
-      ...list.filter((c) => c.ticker.startsWith(typed)),
+      ...list.filter((c) => c.ticker === ticker),
+      ...list.filter((c) => c.ticker.startsWith(ticker)),
       ...list.filter((c) => c.name.toLowerCase().startsWith(typed)),
     ].filter((c) => !seen.has(c.ticker) && seen.add(c.ticker));
 process.stdout.write(`${JSON.stringify({ rows: matches.slice(0, MAX_ROWS).map(row) })}\n`);
