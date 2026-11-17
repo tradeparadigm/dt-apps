@@ -3,12 +3,13 @@
 # (the platform's key, held by LiteLLM), else CoinGecko's public API, keyless
 # unless a Demo key is enrolled. A coin's on-chain figures come from
 # DefiLlama's free API, which needs no key. /stock reads SEC EDGAR, Wikidata
-# and trade.xyz's perps on Hyperliquid, all keyless.
+# and trade.xyz's perps on Hyperliquid, all keyless. Both read headlines from
+# Google News' RSS search, keyless.
 
 schema_version: 1
 
 id: market-data
-version: 0.6.0
+version: 0.7.0
 name: Market Data
 blurb: Live crypto and stock market data from slash commands, with no model turn.
 
@@ -27,6 +28,9 @@ description: |
   Type `/stock msft` for a US-listed company: its price from trade.xyz's
   perp on Hyperliquid, its CEO and board, its latest financials and its SEC
   filings.
+
+  `/stock` and `/ticker` for one coin also show up to five headlines from
+  the last two days, from Google News.
 
   `/ticker` reads live data from CoinMarketCap on DIME Terminal's own key.
   Where that is not available it reads prices alone from CoinGecko's public API, which works
