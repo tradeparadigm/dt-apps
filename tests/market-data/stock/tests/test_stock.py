@@ -11,6 +11,7 @@ import pathlib
 import subprocess
 import sys
 import tempfile
+from datetime import datetime
 from urllib.parse import quote
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -78,7 +79,7 @@ FULL = sorted([
     "www.sec.gov/files/company_tickers.json", "data.sec.gov/submissions/CIK0000789019.json",
     "data.sec.gov/api/xbrl/companyfacts/CIK0000789019.json", "query.wikidata.org/sparql",
     "api.hyperliquid.xyz/info#metaAndAssetCtxs", "api.hyperliquid.xyz/info#candleSnapshot:1d",
-    "api.hyperliquid.xyz/info#candleSnapshot:1h"])
+    "api.hyperliquid.xyz/info#candleSnapshot:1h", "api.hyperliquid.xyz/info#perpCategories"])
 
 # One company in full
 code, out, calls, _ = run("command.mjs", "msft")
@@ -152,11 +153,83 @@ check("with no SEC record, no Wikidata item and no perp, the card still names th
 check("a stock trade.xyz lists no perp on says so", by(spec, "alert_banner") == [
     {"variant": "info", "message": "trade.xyz lists no perp on BRK-B, so there is no live price."}])
 
-for ticker, why in (("gold", "a commodity's market under a company's ticker"), ("snap", "a delisted market, its price frozen")):
+for ticker, why in (("gold", "a market Hyperliquid files as a commodity, under a company's ticker"), ("snap", "a delisted market, its price frozen")):
     _, out, _, _ = run("command.mjs", ticker)
     _, spec = split(out)
     check(f"{why} is no price for the company", by(spec, "metric_card") == []
           and by(spec, "alert_banner")[0]["message"] == f"trade.xyz lists no perp on {ticker.upper()}, so there is no live price.")
+    check(f"{why}: its session move is no move of the company's", "Thu" not in split(out)[0])
+
+filed_as_commodity = copy.deepcopy(ANSWERS)
+filed_as_commodity["api.hyperliquid.xyz/info#perpCategories"] = [["xyz:MSFT", "commodities"]]
+_, out, _, _ = run("command.mjs", "msft", answers=filed_as_commodity)
+line, spec = split(out)
+check("a perp filed as no stock gives the company no price, and its 4pm closes no session move",
+      by(spec, "metric_card") == [] and "Thu" not in line and "since close" not in line)
+
+_, out, _, _ = run("command.mjs", "msft", refused=["api.hyperliquid.xyz/info#perpCategories"])
+check("with Hyperliquid's categories unreadable, a perp can't be told from a commodity, so it reads as no price",
+      by(split(out)[1], "metric_card") == [] and "could not be read" in by(split(out)[1], "alert_banner")[0]["message"])
+preipo = copy.deepcopy(ANSWERS)
+preipo["api.hyperliquid.xyz/info#perpCategories"] = [["xyz:MSFT", "preipo"]]
+_, out, _, _ = run("command.mjs", "msft", answers=preipo)
+check("a perp trading before the company's IPO is the company's price", "MSFT · perp" in values(split(out)[1], "metric_card"))
+
+def seeded(cache, rows, age_hours=1):
+    """A day's cached category list, written as cache.mjs writes it."""
+    folder = pathlib.Path(cache) / "market-data-ticker-lookup"
+    folder.mkdir(parents=True, exist_ok=True)
+    at = int(datetime.fromisoformat(NOW.replace("Z", "+00:00")).timestamp() * 1000) - age_hours * 3_600_000
+    (folder / "perp-categories.json").write_text(json.dumps({"at": at, "coins": rows}))
+    return cache
+
+cache = seeded(tempfile.mkdtemp(), [["xyz:NVDA", "stocks"]])
+_, out, calls, _ = run("command.mjs", "msft", cache=cache)
+check("a perp listed since the day's categories were cached reads them again, and shows its price",
+      "api.hyperliquid.xyz/info#perpCategories" in keys(calls) and "MSFT · perp" in values(split(out)[1], "metric_card"))
+cache = seeded(tempfile.mkdtemp(), [["xyz:NVDA", "stocks"]])
+_, out, _, _ = run("command.mjs", "msft", cache=cache, refused=["api.hyperliquid.xyz/info#perpCategories"])
+check("a perp listed since the day's categories, with them unreadable, reads as could not be read, never as no perp",
+      by(split(out)[1], "metric_card") == [] and "could not be read" in by(split(out)[1], "alert_banner")[0]["message"])
+filed_not_listed = copy.deepcopy(ANSWERS)
+filed_not_listed["api.hyperliquid.xyz/info#perpCategories"].append(["xyz:BRK-B", "stocks"])
+_, out, calls, _ = run("command.mjs", "brk.b", answers=filed_not_listed)
+check("a market Hyperliquid files but does not list is no perp, without reading the categories",
+      "trade.xyz lists no perp" in by(split(out)[1], "alert_banner")[0]["message"] and "api.hyperliquid.xyz/info#perpCategories" not in keys(calls))
+cache = seeded(tempfile.mkdtemp(), [["xyz:MSFT", "stocks"]], age_hours=30)
+_, out, calls, _ = run("command.mjs", "msft", cache=cache, refused=["api.hyperliquid.xyz/info#perpCategories"])
+check("with the categories unreadable, the day-old copy answers", "MSFT · perp" in values(split(out)[1], "metric_card"))
+for answer, why in (([], "an empty answer"), ([{"name": "xyz:MSFT", "category": "stocks"}], "an answer of another shape")):
+    reshaped = copy.deepcopy(ANSWERS)
+    reshaped["api.hyperliquid.xyz/info#perpCategories"] = answer
+    cache = tempfile.mkdtemp()
+    _, out, _, _ = run("command.mjs", "msft", cache=cache, answers=reshaped)
+    _, _, calls, _ = run("command.mjs", "msft", cache=cache)
+    check(f"{why} is a failed read, never cached for a day", "could not be read" in by(split(out)[1], "alert_banner")[0]["message"]
+          and "api.hyperliquid.xyz/info#perpCategories" in keys(calls))
+
+cats_cache = tempfile.mkdtemp()
+run("command.mjs", "msft", cache=cats_cache)
+_, out, calls, _ = run("command.mjs", "msft", cache=cats_cache)
+check("the categories are read once a day", "api.hyperliquid.xyz/info#perpCategories" not in keys(calls)
+      and "MSFT · perp" in values(split(out)[1], "metric_card"))
+
+for form in ("20-F", "40-F", "6-K"):
+    foreign = copy.deepcopy(ANSWERS)
+    for f in foreign["data.sec.gov/api/xbrl/companyfacts/CIK0000789019.json"]["facts"]["dei"]["EntityCommonStockSharesOutstanding"]["units"]["shares"]:
+        f["form"] = form
+    _, out, _, _ = run("command.mjs", "msft", answers=foreign)
+    _, spec = split(out)
+    check(f"a {form} filer's count of ordinary shares stands, with no market cap or P/E, since the perp may trade a depositary share of several",
+          "Market cap" not in values(spec, "metric_card") and values(spec, "labeled_output").get("Shares outstanding") == "7.43B"
+          and not any(k.startswith("P/E") for k in values(spec, "labeled_output")))
+short = copy.deepcopy(ANSWERS)
+short["api.hyperliquid.xyz/info#candleSnapshot:1d"] = [c for c in short["api.hyperliquid.xyz/info#candleSnapshot:1d"] if c["t"] > 1792800000000]
+_, out, _, _ = run("command.mjs", "msft", answers=short)
+check("with no closes back to the share count's date, a split can't be ruled out, so market cap is left out",
+      "Market cap" not in values(split(out)[1], "metric_card") and "Shares outstanding" in values(split(out)[1], "labeled_output"))
+
+
 
 daily = ANSWERS["api.hyperliquid.xyz/info#candleSnapshot:1d"]
 split_answers = copy.deepcopy(ANSWERS)
@@ -275,6 +348,8 @@ check("the exact ticker comes first, then tickers that start with it in the SEC'
       [r["id"] for r in json.loads(out)["rows"]] == ["ms", "msft", "mstr"] and calls == [])
 code, out, calls, _ = run("lookup.mjs", "brk.b", cache=cache)
 check("a share class typed with a dot finds the SEC's dash", [r["id"] for r in json.loads(out)["rows"]] == ["brk-b"])
+code, out, calls, _ = run("lookup.mjs", "coinbase global, inc.", cache=cache)
+check("a name typed with its dot still finds the company", [r["id"] for r in json.loads(out)["rows"]] == ["coin"])
 code, out, calls, _ = run("lookup.mjs", "berk", cache=cache)
 check("a company's name matches too", [r["id"] for r in json.loads(out)["rows"]] == ["brk-b"])
 

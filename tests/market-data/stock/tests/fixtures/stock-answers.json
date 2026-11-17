@@ -1757,5 +1757,31 @@
    "T": 1794556799999,
    "c": "515.91"
   }
+ ],
+ "api.hyperliquid.xyz/info#perpCategories": [
+  [
+   "xyz:MSFT",
+   "stocks"
+  ],
+  [
+   "xyz:NVDA",
+   "stocks"
+  ],
+  [
+   "xyz:TSLA",
+   "stocks"
+  ],
+  [
+   "xyz:GOLD",
+   "commodities"
+  ],
+  [
+   "xyz:SNAP",
+   "stocks"
+  ],
+  [
+   "flx:COIN",
+   "stocks"
+  ]
  ]
 }

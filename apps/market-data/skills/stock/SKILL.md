@@ -18,7 +18,12 @@ is read live on each run.
 - its price from trade.xyz's perp on Hyperliquid, with the last session's
   change (4pm New York close to close) and its move since, a 30-day chart, the perp's volume, open interest and funding, and market cap and P/E
   worked out from the SEC's share count and net income. A stock trade.xyz
-  lists no perp on has no price.
+  lists no perp on has no price. A perp counts when Hyperliquid
+  files it as a stock or pre-IPO, never a commodity or index under the same
+  ticker, and only while it is listed. Market cap is left out for a company
+  filing 20-F, 40-F or 6-K (its count is of ordinary shares, the perp trades a
+  depositary share), after a split since the share count's date, and when the
+  perp's closes don't reach back to that date.
 - its CEO and chair (with the year each started), board, founding year,
   headquarters and headcount, from Wikidata, found by the company's SEC CIK.
 - its industry, exchange, fiscal year end, and its latest annual revenue, net
