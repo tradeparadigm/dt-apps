@@ -21,6 +21,7 @@ blurb: Trade Binance spot and USD-M futures without your agent seeing the API ke
 # installed app an update that changes no skill text.
 access: read-write
 maturity: beta
+is_exchange: true
 
 description: |
   Binance is a centralised exchange. This app covers **spot** trading and

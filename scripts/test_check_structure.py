@@ -549,6 +549,26 @@ class TestSeveralSkills(unittest.TestCase):
         self.assertIn("no skills/", out)
 
 
+class TestIsExchange(unittest.TestCase):
+    """The venue holds an account's positions, open orders and balances: what
+    DIME Terminal's Positions pane offers to track through the agent. A key
+    the consumer knows, so the checker knows it too, a boolean like
+    default_install."""
+
+    def test_is_exchange_is_accepted(self):
+        for value in ("true", "false"):
+            with self.subTest(value=value):
+                code, out = check(append(f"is_exchange: {value}\n"))
+                self.assertEqual(code, 0, out)
+
+    def test_a_value_the_consumer_cannot_decode_is_refused(self):
+        for bad in ("banana", "1", '"true"'):
+            with self.subTest(value=bad):
+                code, out = check(append(f"is_exchange: {bad}\n"))
+                self.assertNotEqual(code, 0, out)
+                self.assertIn("is_exchange", out)
+
+
 class TestDefaultInstall(unittest.TestCase):
     """A key the consumer knows, so the checker has to know it too.
 

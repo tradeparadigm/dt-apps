@@ -24,6 +24,7 @@ blurb: Trade Bybit perpetuals, futures and options with a secret your agent neve
 # installed app an update that changes no skill text.
 access: read-write
 maturity: stable
+is_exchange: true
 
 description: |
   Bybit is a centralised exchange with perpetuals, futures, options and spot

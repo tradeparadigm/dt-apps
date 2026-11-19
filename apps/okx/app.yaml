@@ -40,6 +40,7 @@ blurb: Trade spot, perpetuals and options on OKX without your agent seeing any o
 # installed app an update that changes no skill text.
 access: read-write
 maturity: beta
+is_exchange: true
 
 description: |
   OKX is a centralised exchange offering spot, margin, perpetual swaps, futures
