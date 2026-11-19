@@ -7,7 +7,7 @@
 schema_version: 1
 
 id: binance
-version: 1.1.0
+version: 1.2.0
 name: Binance
 blurb: Trade Binance spot and USD-M futures without your agent seeing the API key or secret.
 
@@ -74,6 +74,12 @@ environments:
 exclusive_credential_types: false
 
 credential_types:
+  # /fapi/v1/openAlgoOrders is read-only: since 2025-12-09 Binance keeps every
+  # USD-M stop, take-profit and trailing order in its Algo Service, and
+  # /fapi/v1/openOrders no longer lists them. posman's adapter reads it
+  # (skills/binance-api/posman/account). A credential enrolled before 1.2.0 has
+  # the routes of its day, so for it this read fails until it is enrolled again.
+  #
   # Binance's signature does not cover the API key, so unlike Bybit the key stays
   # sealed. Its routes are the signed set plus the futures listenKey, which takes
   # the key alone and is how a private futures stream is opened.
@@ -108,6 +114,7 @@ credential_types:
       - path: /fapi/v1/batchOrders
       - path: /fapi/v1/openOrder
       - path: /fapi/v1/openOrders
+      - path: /fapi/v1/openAlgoOrders
       - path: /fapi/v1/allOpenOrders
       - path: /fapi/v1/allOrders
       - path: /fapi/v1/countdownCancelAll
@@ -168,6 +175,7 @@ credential_types:
       - path: /fapi/v1/batchOrders
       - path: /fapi/v1/openOrder
       - path: /fapi/v1/openOrders
+      - path: /fapi/v1/openAlgoOrders
       - path: /fapi/v1/allOpenOrders
       - path: /fapi/v1/allOrders
       - path: /fapi/v1/countdownCancelAll
