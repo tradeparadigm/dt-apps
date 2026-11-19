@@ -1,28 +1,42 @@
-# Derive (v2, formerly Lyra).
+# Derive (v3 API, formerly Lyra).
 #
 # The venue that shows an ETHEREUM WALLET KEY as the credential. Derive has no
 # API key and no shared secret: every private call is authenticated by a
 # secp256k1 signature the caller produces, and the venue recovers the signing
 # address from it rather than being told who signed.
 #
-# ONE KEY, TWO DIGESTS, and the skill teaches both. A private REST call signs
-# the millisecond timestamp under EIP-191; an order or transfer signs an
-# EIP-712 action hash. The proxy sees neither shape — the agent computes the
-# keccak digest and hands over 32 bytes, which is Derive's own model rather
-# than something invented here: their signing library calls unsafe_sign_hash
-# on exactly that.
+# THE LYRA HOSTS ARE RETIRED. api.lyra.finance answers 503 and
+# api-demo.lyra.finance 530 on every path (6 Nov 2026), and Derive no longer
+# reads the X-Lyra* headers: a call carrying only those is refused as "Missing
+# timestamp in header". The API is api.derive.xyz under a /v3 base path, and
+# the base is not optional: /public/get_time without it is a 404.
+#
+# ONE KEY, TWO DIGESTS. A private REST call signs the millisecond timestamp
+# under EIP-191; an order or transfer also signs an EIP-712 action hash. The
+# proxy sees neither shape — the client computes the keccak digest and hands
+# over 32 bytes, which is Derive's own model rather than something invented
+# here: their signing library calls unsafe_sign_hash on exactly that. One
+# request carries one digest, though, and an order needs both signatures in
+# the same request, so this credential reads and does not trade.
 #
 # A WILDCARD ROUTE, WHICH IS USUALLY THE WRONG ANSWER. The rule that matches a
 # request is also the rule that REQUIRES its placeholder, so a wildcard over a
 # venue's whole API turns its public endpoints into refusals. Derive is the
 # case where it is right: public and private are separate path prefixes, and
-# nothing under /private is callable unsigned — verified against the live API,
-# where /public/get_time answers 200 with no headers and /private/get_account
-# answers 401. Enumerating the eighty-odd private endpoints would add no
-# narrowing and would need a pull request here every time Derive adds one.
+# nothing under /v3/private is callable unsigned — verified against the live
+# API, where /v3/public/get_time answers with no headers and
+# /v3/private/get_account answers -32602 "Missing timestamp in header" (as HTTP
+# 200: Derive's errors are). Enumerating the eighty-odd private endpoints would
+# add no narrowing and would need a pull request here every time Derive adds
+# one.
+#
+# THE ROUTE CARRIES THE /v3. A rule for /private/* never matches
+# /v3/private/get_positions, so the proxy forwards the placeholder as plain
+# text and Derive answers 14014 "Signature not formatted correctly", with no
+# 403 from the proxy to read. Before 1.1.0 the route said /private/*.
 schema_version: 1
 id: derive
-version: 1.0.3
+version: 1.1.0
 name: Derive
 blurb: Trade onchain options and perps on Derive with a wallet key your agent never holds.
 
@@ -58,10 +72,10 @@ icon:
 environments:
   - id: mainnet
     label: Mainnet
-    host: api.lyra.finance
+    host: api.derive.xyz
   - id: testnet
     label: Testnet
-    host: api-demo.lyra.finance
+    host: testnet.api.derive.xyz
 exclusive_credential_types: true
 credential_types:
   - id: wallet-key
@@ -79,16 +93,16 @@ credential_types:
         label: Subaccount id
         placeholder: "12345"
     routes:
-      - path: /private/*
+      - path: /v3/private/*
         methods: [POST]
     delivery:
       mode: sign
       scheme: secp256k1
       encoding: hex
       match_headers:
-        - X-LyraSignature
+        - X-DeriveSignature
       match_body: true
     summary: >-
       Sets: signing credential, secp256k1, r||s||v as hex, substituted into
-      the X-LyraSignature header and the request body, on POST to /private/*
-      only. No public endpoint is touched.
+      the X-DeriveSignature header and the request body, on POST to
+      /v3/private/* only. No public endpoint is touched.
