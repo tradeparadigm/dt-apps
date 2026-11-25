@@ -9,7 +9,7 @@
 schema_version: 1
 
 id: market-data
-version: 0.7.0
+version: 0.7.1
 name: Market Data
 blurb: Live crypto and stock market data from slash commands, with no model turn.
 
