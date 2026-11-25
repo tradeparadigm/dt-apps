@@ -4,8 +4,8 @@
 // cached, each for a day; every figure is read live.
 import { readList, writeList } from "../../ticker/scripts/cache.mjs";
 
-// The SEC refuses a request with no User-Agent and asks automated clients to name themselves.
-const AGENT = "DIME-Terminal-market-data";
+// The SEC refuses (403) a User-Agent without a name and a contact email.
+const AGENT = "DIME Terminal market-data support@dimeterminal.ai";
 
 async function get(url, init = {}, timeoutMs = 8_000) {
   try {
