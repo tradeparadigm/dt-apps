@@ -16,6 +16,9 @@ blurb: Live crypto and stock market data from slash commands, with no model turn
 access: read-only
 maturity: beta
 
+# Every account gets this without asking. Uninstalling keeps it uninstalled.
+default_install: true
+
 description: |
   Market Data gives you commands that fetch prices directly and answer in the
   chat without using your model.
@@ -39,6 +42,10 @@ description: |
 
 developer: Paradigm
 developer_url: https://www.paradigm.co
+tint: "#22c55e"
+icon:
+  path: "M2.8 11h1.6v11.5h-1.6zM2.2 13.5h2.8a1.4 1.4 0 0 1 1.4 1.4v3.7a1.4 1.4 0 0 1 -1.4 1.4h-2.8a1.4 1.4 0 0 1 -1.4 -1.4v-3.7a1.4 1.4 0 0 1 1.4 -1.4zM11.2 5.5h1.6v13h-1.6zM10.6 8h2.8a1.4 1.4 0 0 1 1.4 1.4v4.2a1.4 1.4 0 0 1 -1.4 1.4h-2.8a1.4 1.4 0 0 1 -1.4 -1.4v-4.2a1.4 1.4 0 0 1 1.4 -1.4zM19.6 1h1.6v12.5h-1.6zM19 3h2.8a1.4 1.4 0 0 1 1.4 1.4v4.2a1.4 1.4 0 0 1 -1.4 1.4h-2.8a1.4 1.4 0 0 1 -1.4 -1.4v-4.2a1.4 1.4 0 0 1 1.4 -1.4z"
+  view_box: "0 0 24 24"
 
 environments:
   - id: coingecko
