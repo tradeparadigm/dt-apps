@@ -1,0 +1,3261 @@
+{
+ "v3/cryptocurrency/quotes/latest": {
+  "data": [
+   {
+    "id": 1,
+    "name": "Bitcoin",
+    "symbol": "BTC",
+    "slug": "bitcoin",
+    "platform": null,
+    "cmc_rank": 1,
+    "circulating_supply": 19940000,
+    "max_supply": 21000000,
+    "quote": [
+     {
+      "symbol": "USD",
+      "price": 74018.2,
+      "volume_24h": 38200000000.0,
+      "volume_change_24h": -6.4,
+      "percent_change_24h": -0.97,
+      "percent_change_7d": 3.1,
+      "percent_change_30d": -12.4,
+      "percent_change_90d": -21.0,
+      "market_cap": 1460000000000.0,
+      "market_cap_dominance": 58.4
+     }
+    ]
+   },
+   {
+    "id": 1027,
+    "name": "Ethereum",
+    "symbol": "ETH",
+    "slug": "ethereum",
+    "platform": null,
+    "cmc_rank": 2,
+    "circulating_supply": 120700000.0,
+    "max_supply": null,
+    "quote": [
+     {
+      "symbol": "USD",
+      "price": 2066.38,
+      "volume_24h": 17600000000.0,
+      "percent_change_24h": -2.17,
+      "percent_change_7d": 1.4,
+      "percent_change_30d": -18.0,
+      "market_cap": 249000000000.0
+     }
+    ]
+   },
+   {
+    "id": 99,
+    "name": "Fake Pepe",
+    "symbol": "PEPE",
+    "cmc_rank": 4054,
+    "quote": [
+     {
+      "symbol": "USD",
+      "price": 0.5,
+      "percent_change_24h": 9
+     }
+    ]
+   },
+   {
+    "id": 24478,
+    "name": "Pepe",
+    "symbol": "PEPE",
+    "slug": "pepe",
+    "cmc_rank": 40,
+    "platform": {
+     "id": 1027,
+     "slug": "ethereum",
+     "name": "Ethereum",
+     "symbol": "ETH",
+     "token_address": "0x000000000000000000000000000000000000beef"
+    },
+    "circulating_supply": 420690000000000.0,
+    "max_supply": 420690000000000.0,
+    "quote": [
+     {
+      "symbol": "USD",
+      "price": 1.23e-05,
+      "volume_24h": 600000000.0,
+      "percent_change_24h": 2,
+      "percent_change_7d": 5,
+      "percent_change_30d": -20,
+      "market_cap": 5200000000.0
+     }
+    ]
+   }
+  ]
+ },
+ "v1/global-metrics/quotes/latest": {
+  "data": {
+   "btc_dominance": 58.41,
+   "btc_dominance_yesterday": 58.71,
+   "eth_dominance": 11.92,
+   "eth_dominance_yesterday": 11.72,
+   "quote": {
+    "USD": {
+     "total_market_cap": 2610000000000.0,
+     "total_volume_24h": 98400000000.0,
+     "total_market_cap_yesterday_percentage_change": 1.2,
+     "total_volume_24h_yesterday_percentage_change": -8.1
+    }
+   }
+  }
+ },
+ "v3/fear-and-greed/latest": {
+  "data": {
+   "value": 62,
+   "value_classification": "Greed"
+  }
+ },
+ "v3/fear-and-greed/historical": {
+  "data": [
+   {
+    "timestamp": "1763000000",
+    "value": 62,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762913600",
+    "value": 61,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762827200",
+    "value": 60,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762740800",
+    "value": 59,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762654400",
+    "value": 58,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762568000",
+    "value": 57,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762481600",
+    "value": 56,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762395200",
+    "value": 62,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762308800",
+    "value": 61,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762222400",
+    "value": 60,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762136000",
+    "value": 59,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1762049600",
+    "value": 58,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761963200",
+    "value": 57,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761876800",
+    "value": 56,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761790400",
+    "value": 62,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761704000",
+    "value": 61,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761617600",
+    "value": 60,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761531200",
+    "value": 59,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761444800",
+    "value": 58,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761358400",
+    "value": 57,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761272000",
+    "value": 56,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761185600",
+    "value": 62,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761099200",
+    "value": 61,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1761012800",
+    "value": 60,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1760926400",
+    "value": 59,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1760840000",
+    "value": 58,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1760753600",
+    "value": 57,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1760667200",
+    "value": 56,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1760580800",
+    "value": 62,
+    "value_classification": "Greed"
+   },
+   {
+    "timestamp": "1760494400",
+    "value": 61,
+    "value_classification": "Greed"
+   }
+  ]
+ },
+ "v1/altcoin-season-index/latest": {
+  "data": {
+   "altcoin_index": 34
+  }
+ },
+ "v3/index/cmc100-latest": {
+  "data": {
+   "value": 162.43,
+   "value_24h_percentage_change": 0.9
+  }
+ },
+ "v3/index/cmc20-latest": {
+  "data": {
+   "value": 1288.2,
+   "value_24h_percentage_change": 1.1
+  }
+ },
+ "v3/cryptocurrency/quotes/historical": {
+  "data": {
+   "1": {
+    "id": 1,
+    "symbol": "BTC",
+    "quotes": [
+     {
+      "timestamp": "2024-11-14T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 64000
+       }
+      }
+     },
+     {
+      "timestamp": "2024-11-15T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 64170
+       }
+      }
+     },
+     {
+      "timestamp": "2024-11-16T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 64340
+       }
+      }
+     },
+     {
+      "timestamp": "2024-11-17T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 64510
+       }
+      }
+     },
+     {
+      "timestamp": "2024-11-18T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 64680
+       }
+      }
+     },
+     {
+      "timestamp": "2024-11-19T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 64850
+       }
+      }
+     },
+     {
+      "timestamp": "2024-11-20T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 65020
+       }
+      }
+     },
+     {
+      "timestamp": "2024-11-21T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 65190
+       }
+      }
+     },
+     {
+      "timestamp": "2024-11-22T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 65360
+       }
+      }
+     },
+     {
+      "timestamp": "2024-11-23T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 65530
+       }
+      }
+     },
+     {
+      "timestamp": "2024-11-24T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 65700
+       }
+      }
+     },
+     {
+      "timestamp": "2024-11-25T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 65870
+       }
+      }
+     },
+     {
+      "timestamp": "2024-11-26T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 66040
+       }
+      }
+     },
+     {
+      "timestamp": "2024-11-27T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 66210
+       }
+      }
+     },
+     {
+      "timestamp": "2024-11-28T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 66380
+       }
+      }
+     },
+     {
+      "timestamp": "2024-11-29T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 66550
+       }
+      }
+     },
+     {
+      "timestamp": "2024-11-30T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 66720
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-01T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 66890
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-02T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 67060
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-03T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 67230
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-04T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 67400
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-05T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 67570
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-06T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 67740
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-07T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 67910
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-08T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 68080
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-09T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 68250
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-10T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 68420
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-11T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 68590
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-12T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 68760
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-13T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 68930
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-14T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 69100
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-15T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 69270
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-16T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 69440
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-17T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 69610
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-18T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 69780
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-19T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 69950
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-20T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 70120
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-21T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 70290
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-22T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 70460
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-23T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 70630
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-24T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 70800
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-25T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 70970
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-26T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 71140
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-27T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 71310
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-28T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 71480
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-29T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 71650
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-30T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 71820
+       }
+      }
+     },
+     {
+      "timestamp": "2024-12-31T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 71990
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-01T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 72160
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-02T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 72330
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-03T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 72500
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-04T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 72670
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-05T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 72840
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-06T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 73010
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-07T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 73180
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-08T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 73350
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-09T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 73520
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-10T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 73690
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-11T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 73860
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-12T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 74030
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-13T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 74200
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-14T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 74370
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-15T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 74540
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-16T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 74710
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-17T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 74880
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-18T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 75050
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-19T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 75220
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-20T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 75390
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-21T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 75560
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-22T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 75730
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-23T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 75900
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-24T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 76070
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-25T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 76240
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-26T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 76410
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-27T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 76580
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-28T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 76750
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-29T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 76920
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-30T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 77090
+       }
+      }
+     },
+     {
+      "timestamp": "2025-01-31T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 77260
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-01T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 77430
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-02T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 77600
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-03T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 77770
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-04T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 77940
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-05T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 78110
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-06T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 78280
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-07T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 78450
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-08T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 78620
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-09T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 78790
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-10T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 78960
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-11T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 79130
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-12T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 79300
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-13T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 79470
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-14T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 79640
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-15T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 79810
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-16T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 79980
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-17T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 80150
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-18T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 80320
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-19T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 80490
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-20T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 80660
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-21T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 80830
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-22T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 81000
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-23T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 81170
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-24T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 81340
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-25T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 81510
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-26T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 81680
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-27T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 81850
+       }
+      }
+     },
+     {
+      "timestamp": "2025-02-28T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 82020
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-01T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 82190
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-02T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 82360
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-03T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 82530
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-04T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 82700
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-05T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 82870
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-06T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 83040
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-07T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 83210
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-08T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 83380
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-09T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 83550
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-10T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 83720
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-11T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 83890
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-12T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 84060
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-13T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 84230
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-14T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 84400
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-15T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 84570
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-16T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 84740
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-17T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 84910
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-18T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 85080
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-19T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 85250
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-20T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 85420
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-21T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 85590
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-22T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 85760
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-23T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 85930
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-24T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 86100
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-25T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 86270
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-26T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 86440
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-27T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 86610
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-28T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 86780
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-29T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 86950
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-30T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 87120
+       }
+      }
+     },
+     {
+      "timestamp": "2025-03-31T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 87290
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-01T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 87460
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-02T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 87630
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-03T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 87800
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-04T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 87970
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-05T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 88140
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-06T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 88310
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-07T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 88480
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-08T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 88650
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-09T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 88820
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-10T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 88990
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-11T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 89160
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-12T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 89330
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-13T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 89500
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-14T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 89670
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-15T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 89840
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-16T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 90010
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-17T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 90180
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-18T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 90350
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-19T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 90520
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-20T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 90690
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-21T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 90860
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-22T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 91030
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-23T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 91200
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-24T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 91370
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-25T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 91540
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-26T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 91710
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-27T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 91880
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-28T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 92050
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-29T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 92220
+       }
+      }
+     },
+     {
+      "timestamp": "2025-04-30T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 92390
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-01T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 92560
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-02T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 92730
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-03T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 92900
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-04T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 93070
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-05T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 93240
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-06T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 93410
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-07T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 93580
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-08T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 93750
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-09T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 93920
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-10T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 94090
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-11T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 94260
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-12T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 94430
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-13T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 94600
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-14T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 94770
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-15T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 94940
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-16T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 95110
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-17T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 95280
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-18T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 95450
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-19T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 95620
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-20T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 95790
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-21T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 95960
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-22T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 96130
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-23T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 96300
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-24T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 96470
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-25T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 96640
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-26T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 96810
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-27T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 96980
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-28T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 97150
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-29T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 97320
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-30T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 97490
+       }
+      }
+     },
+     {
+      "timestamp": "2025-05-31T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 97660
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-01T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 97830
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-02T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 126080
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-03T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 98170
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-04T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 98340
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-05T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 98510
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-06T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 98680
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-07T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 98850
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-08T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 99020
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-09T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 99190
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-10T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 99360
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-11T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 99530
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-12T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 99700
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-13T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 99870
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-14T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 100040
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-15T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 100210
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-16T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 100380
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-17T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 100550
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-18T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 100720
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-19T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 100890
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-20T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 101060
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-21T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 101230
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-22T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 101400
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-23T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 101570
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-24T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 101740
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-25T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 101910
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-26T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 102080
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-27T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 102250
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-28T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 102420
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-29T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 102590
+       }
+      }
+     },
+     {
+      "timestamp": "2025-06-30T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 102760
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-01T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 102930
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-02T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 103100
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-03T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 103270
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-04T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 103440
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-05T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 103610
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-06T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 103780
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-07T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 103950
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-08T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 104120
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-09T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 104290
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-10T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 104460
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-11T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 104630
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-12T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 104800
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-13T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 104970
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-14T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 105140
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-15T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 105310
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-16T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 105480
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-17T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 105650
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-18T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 105820
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-19T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 105990
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-20T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 106160
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-21T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 106330
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-22T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 106500
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-23T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 106670
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-24T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 106840
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-25T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 107010
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-26T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 107180
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-27T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 107350
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-28T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 107520
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-29T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 107690
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-30T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 107860
+       }
+      }
+     },
+     {
+      "timestamp": "2025-07-31T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 108030
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-01T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 108200
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-02T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 108370
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-03T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 108540
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-04T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 108710
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-05T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 108880
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-06T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 109050
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-07T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 109220
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-08T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 109390
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-09T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 109560
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-10T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 109730
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-11T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 109900
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-12T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 110070
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-13T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 110240
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-14T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 110410
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-15T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 110580
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-16T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 110750
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-17T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 110920
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-18T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 111090
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-19T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 111260
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-20T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 111430
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-21T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 111600
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-22T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 111770
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-23T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 111940
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-24T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 112110
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-25T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 112280
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-26T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 112450
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-27T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 112620
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-28T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 112790
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-29T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 112960
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-30T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 113130
+       }
+      }
+     },
+     {
+      "timestamp": "2025-08-31T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 113300
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-01T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 113470
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-02T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 113640
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-03T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 113810
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-04T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 113980
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-05T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 114150
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-06T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 114320
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-07T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 114490
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-08T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 114660
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-09T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 114830
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-10T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 115000
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-11T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 115170
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-12T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 115340
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-13T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 115510
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-14T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 115680
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-15T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 115850
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-16T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 116020
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-17T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 116190
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-18T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 116360
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-19T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 116530
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-20T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 116700
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-21T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 116870
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-22T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 117040
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-23T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 117210
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-24T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 117380
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-25T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 117550
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-26T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 117720
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-27T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 117890
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-28T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 118060
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-29T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 118230
+       }
+      }
+     },
+     {
+      "timestamp": "2025-09-30T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 118400
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-01T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 118570
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-02T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 118740
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-03T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 118910
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-04T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 119080
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-05T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 119250
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-06T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 119420
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-07T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 119590
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-08T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 119760
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-09T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 119930
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-10T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 120100
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-11T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 120270
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-12T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 120440
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-13T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 120610
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-14T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 120780
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-15T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 84000
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-16T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 83670
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-17T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 83340
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-18T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 83010
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-19T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 82680
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-20T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 82350
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-21T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 82020
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-22T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 81690
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-23T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 81360
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-24T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 81030
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-25T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 80700
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-26T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 80370
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-27T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 80040
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-28T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 79710
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-29T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 79380
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-30T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 79050
+       }
+      }
+     },
+     {
+      "timestamp": "2025-10-31T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 78720
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-01T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 78390
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-02T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 78060
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-03T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 77730
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-04T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 77400
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-05T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 77070
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-06T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 76740
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-07T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 76410
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-08T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 76080
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-09T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 75750
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-10T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 75420
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-11T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 75090
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-12T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 74760
+       }
+      }
+     },
+     {
+      "timestamp": "2025-11-13T00:40:00.000Z",
+      "quote": {
+       "USD": {
+        "price": 74430
+       }
+      }
+     }
+    ]
+   }
+  }
+ },
+ "v2/cryptocurrency/info": {
+  "data": {
+   "1": {
+    "id": 1,
+    "date_launched": "2009-01-03T00:00:00.000Z",
+    "description": "Bitcoin (BTC) is a decentralized digital currency with a fixed supply. It runs on a proof of work network.",
+    "urls": {
+     "website": [
+      "https://bitcoin.org/"
+     ],
+     "twitter": [],
+     "explorer": [
+      "https://mempool.space/"
+     ]
+    }
+   }
+  }
+ },
+ "v1/dex/security/detail": {
+  "data": [
+   {
+    "platformName": "Ethereum",
+    "securityLevel": "safe",
+    "extra": {
+     "buyTax": "0",
+     "sellTax": "0"
+    },
+    "securityItems": [
+     {
+      "code": "Blacklist Restrictions Found",
+      "riskyLevel": "y",
+      "isHit": true
+     },
+     {
+      "code": "Honeypot Not Found",
+      "riskyLevel": "g",
+      "isHit": false
+     },
+     {
+      "code": "Mint Function Found",
+      "riskyLevel": "r",
+      "isHit": false
+     }
+    ]
+   }
+  ]
+ }
+}

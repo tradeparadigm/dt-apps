@@ -1,23 +1,44 @@
-// /ticker: prints USD price and 24 hour change for each symbol, from CoinGecko.
-// The app_command tool passes everything the user typed as one argument.
+// /ticker: the market with no symbols, a table for several coins, a full card
+// for one, all read live through DIME Terminal's relay. Where the relay cannot
+// answer, prices alone from CoinGecko's public API. The app_command tool
+// passes everything the user typed as one argument.
+import { MARKET_PATH, QUOTES_PATH, relayAbsent } from "./cmc.mjs";
+import { price as formatPrice, pct } from "./format.mjs";
+import { SYMBOL, symbolWords } from "./symbols.mjs";
+import { coin, coins, market } from "./views.mjs";
+
 const API = "https://api.coingecko.com/api/v3/simple/price";
 
-const symbols = [
-  ...new Set(
-    (process.argv[2] ?? "")
-      .toLowerCase()
-      .split(/[\s,]+/)
-      .map((symbol) => symbol.replace(/^\$/, ""))
-      .filter(Boolean),
-  ),
-];
-if (symbols.length === 0) {
-  console.log("Usage: /ticker <symbol> [symbol ...]");
-  process.exit(0);
-}
-if (!symbols.every((symbol) => /^[a-z0-9]+$/.test(symbol))) {
+const symbols = [...new Set(symbolWords(process.argv[2]))];
+if (!symbols.every((symbol) => SYMBOL.test(symbol))) {
   console.error("A symbol can hold only letters and digits. Type the coin's symbol, like btc.");
   process.exit(1);
+}
+
+const view = symbols.length === 0 ? await market(process.env) : symbols.length === 1 ? await coin(process.env, symbols[0]) : await coins(process.env, symbols);
+if (view != null) {
+  console.log(view);
+  process.exit(0);
+}
+const relayed = !relayAbsent(process.env, symbols.length === 0 ? MARKET_PATH : QUOTES_PATH);
+if (symbols.length === 0) {
+  console.error(relayed ? "The market overview could not be read. Try again in a minute." : "The market overview isn't available on this agent. Type /ticker btc for a price.");
+  process.exit(1);
+}
+
+// The chat renders the reply as markdown, which joins plain lines into one.
+function print(quotes) {
+  for (const symbol of symbols) {
+    const quote = quotes.get(symbol);
+    const name = symbol.toUpperCase();
+    if (quote?.usd === undefined) {
+      console.log(`- ${name}: no price found`);
+      continue;
+    }
+    const change = pct(quote.change);
+    console.log(`- ${name} ${formatPrice(quote.usd)}${change ? ` (${change.replace("−", "-")} 24h)` : ""}`);
+  }
+  if (!relayed) console.log("\nMore detail isn't available on this agent.");
 }
 
 const url = `${API}?${new URLSearchParams({
@@ -44,18 +65,8 @@ if (!response.ok) {
   process.exit(1);
 }
 // CoinGecko keys each quote by the symbol as it stores it (POL, stETH).
-const prices = Object.fromEntries(Object.entries(body).map(([key, quote]) => [key.toLowerCase(), quote]));
-
-// The chat renders the reply as markdown, which joins plain lines into one.
-const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumSignificantDigits: 7 });
-for (const symbol of symbols) {
-  const quote = prices[symbol];
-  const name = symbol.toUpperCase();
-  if (quote?.usd === undefined) {
-    console.log(`- ${name}: no price found`);
-    continue;
-  }
-  const change = quote.usd_24h_change;
-  const changeText = typeof change === "number" ? ` (${change >= 0 ? "+" : ""}${change.toFixed(2)}% 24h)` : "";
-  console.log(`- ${name} ${usd.format(quote.usd)}${changeText}`);
-}
+print(
+  new Map(
+    Object.entries(body).map(([key, quote]) => [key.toLowerCase(), { usd: quote.usd, change: quote.usd_24h_change }]),
+  ),
+);
