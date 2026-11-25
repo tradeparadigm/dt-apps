@@ -5,6 +5,7 @@
 // first read fails, for the caller's fallback.
 import { MARKET_PATH, cmcQuotes, get, usd } from "./cmc.mjs";
 import { count, day, direction, finite, money, pct, price, pts, timeOf } from "./format.mjs";
+import { fundamentals, llamaIndex, match, slugOf } from "./llama.mjs";
 
 const ACCENT = "#1bc1cf";
 
@@ -189,6 +190,61 @@ function onChainBanner(security) {
   };
 }
 
+// The whole on-chain section's time, so a slow DefiLlama holds the card no longer.
+const ON_CHAIN_MS = 5_000;
+
+/** DefiLlama's figures for a coin, or null when it tracks none or cannot be read in time. */
+async function onChain(c, info) {
+  const signal = AbortSignal.timeout(ON_CHAIN_MS);
+  const [index, about] = await Promise.all([llamaIndex(signal), info]);
+  return index == null ? null : fundamentals(match(index, c, firstURL(entry(about, c.id)?.urls?.website)), signal);
+}
+
+// Past 1,000x the revenue is too small for the figure to mean anything.
+function multiple(n) {
+  if (!finite(n) || n <= 0) return null;
+  if (n >= 1000) return "over 1,000x";
+  return `${n >= 10 ? n.toFixed(0) : n.toFixed(1)}x`;
+}
+
+/** The on-chain section: a line naming its source, then two columns of rows. */
+function onChainSection(f, marketCap) {
+  const rows = [];
+  let page = null;
+  const add = (label, value, dir) => value && rows.push(row(label, value, dir));
+  if (f?.stable) {
+    const s = f.stable;
+    const change = s.monthAgo > 0 ? ((s.supply - s.monthAgo) / s.monthAgo) * 100 : null;
+    add("Supply", money(s.supply));
+    add("Supply, 30d", pct(change, 1), direction(change));
+    add("Chains", finite(s.chains) ? String(s.chains) : null);
+    page = `https://defillama.com/stablecoin/${slugOf(s.name)}`;
+  }
+  if (f?.chain) {
+    const ch = f.chain;
+    add(`TVL on ${ch.name}`, money(ch.tvl));
+    add(`Stablecoins on ${ch.name}`, money(ch.stablecoins));
+    add("DEX volume, 24h", money(ch.dexVolume));
+    add("Fees, 30d", money(ch.fees30d));
+    add("Revenue, 1y", money(ch.revenue1y));
+    add("Mkt cap ÷ revenue", multiple(marketCap / ch.revenue1y));
+    page = `https://defillama.com/chain/${encodeURIComponent(ch.name)}`;
+  }
+  if (f?.protocol) {
+    const p = f.protocol;
+    add("TVL", money(p.tvl));
+    add("Fees, 30d", money(p.fees30d));
+    add("Revenue, 1y", money(p.revenue1y));
+    add("Mkt cap ÷ revenue", multiple(marketCap / p.revenue1y));
+    page = `https://defillama.com/protocol/${p.slug}`;
+  }
+  if (rows.length === 0) return [];
+  return [
+    { component: "markdown", props: { content: `On-chain, from [DefiLlama](${page})` } },
+    { layout: "grid", columns: 2, children: rows },
+  ];
+}
+
 /** A keyed answer's entry for one coin: `data[id]`, or `data` itself. */
 const entry = (body, id) => body?.data?.[id] ?? body?.data?.[String(id)] ?? body?.data;
 
@@ -202,10 +258,12 @@ export async function coin(env, symbol) {
   const token = c.platform?.token_address;
   const chain = c.platform?.slug;
   // A year of daily quotes, the most the plan serves: the chart, the 1y change and the year's high.
-  const [history, info, security] = await Promise.all([
+  const profile = get(env, "v2/cryptocurrency/info", { id });
+  const [history, info, security, llama] = await Promise.all([
     get(env, "v3/cryptocurrency/quotes/historical", { id, count: "365", interval: "1d", convert: "USD" }),
-    get(env, "v2/cryptocurrency/info", { id }),
+    profile,
     token && chain ? get(env, "v1/dex/security/detail", { platformName: chain, address: token }) : null,
+    onChain(c, profile),
   ]);
 
   // Four short cards, so a small coin's long price still fits its card.
@@ -254,6 +312,7 @@ export async function coin(env, symbol) {
   const launched = String(about?.date_launched ?? "").slice(0, 4);
   if (/^\d{4}$/.test(launched)) rows.push(row("Launched", launched));
   if (rows.length > 0) children.push({ layout: "grid", columns: 2, children: rows });
+  children.push(...onChainSection(llama, q.market_cap));
 
   const sentence = firstSentence(about?.description);
   const links = [
